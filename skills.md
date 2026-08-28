@@ -12,7 +12,9 @@ this repo — confirmed live, they report `disabled` from inside this directory.
 
 ## Installed here, beyond the baseline
 
-~113 tokens/message on top of the ~1,070 baseline. Two of the four are free.
+~367 tokens/message on top of the ~1,070 baseline. `task-observer` alone is
+254 of that — more than the other four combined, of which `playwright` is free
+and `grill-me` near-free.
 
 | Name | Kind | Always-on | Why this project |
 | --- | --- | --- | --- |
@@ -20,6 +22,7 @@ this repo — confirmed live, they report `disabled` from inside this directory.
 | frontend-design | Plugin | 54 | There is a real UI — a mobile-first ranked list with a drill-down sparkline. That *is* the Phase 1 deliverable. |
 | web-design-guidelines | Skill | 46 | Audits the built UI against interface guidelines; framework-agnostic, so it works on vanilla HTML/CSS. Complements `frontend-design` (design vs. audit), doesn't duplicate it. |
 | grill-me | Skill | 13 | Manual-invoke only, so near-free. `plan.md` still has open Phase 0 questions and is heading into external review; an adversarial interview is the current need. The Projects-root install does **not** cover this repo. |
+| task-observer | Skill | — | Installed 2026-08-28 from a separate session. Monitors task execution and proposes improvements to other skills. Still `unvetted` in the catalogue — it rewrites skills unattended, so review its `SKILL.md` before relying on it. |
 
 ## Deliberately skipped
 
@@ -39,7 +42,6 @@ this repo — confirmed live, they report `disabled` from inside this directory.
 | feature-dev | Plugin | 2 | Overlaps `superpowers`; this is a small solo build |
 | notion | Plugin | 2 | Docs live in this repo |
 | pr-review-toolkit | Plugin | 2 | Solo repo, no PR workflow |
-| task-observer | Plugin | 2 | Not vetted; rewrites skills unattended |
 | skill-creator | Plugin | 3 | Not authoring a skill here |
 | learning-output-style | Plugin | 3 | Output style, not workflow-relevant |
 | example-skills | Plugin | 4 | 12 unrelated bundled skills, all-or-nothing |
