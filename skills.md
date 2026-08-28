@@ -17,58 +17,86 @@ all listed below.
 **Recommend column:** ✅ Yes = install (or already have it) · ⏳ Later = real fit, but only once a
 specific phase needs it · ❌ No = not applicable to this project.
 
+**Origin column** — where the thing actually comes from, resolved by `readlink` on each install
+rather than trusting `npx skills ls`, which reports both hand-authored and Claude-Code-bundled
+skills as "local":
+
+- **Mine** — hand-authored by me, versioned in [`~/Projects/claude-skills`](../claude-skills/)
+  (pushed to `darrensy19/Claude-skills`) and symlinked into `~/.claude/skills/`.
+- **Public** — third-party: a marketplace plugin, or an `npx skills` install from someone else's
+  repo. All 24 plugins are public.
+- **Bundled** — ships inside Claude Code itself; a real directory with no lock entry, nothing to
+  install or remove.
+
 ## Full catalogue
 
-| Name | Type | Description | Installed | Recommend |
-| --- | --- | --- | --- | --- |
-| [claude-mem](../claude-plugins-reference/claude-mem.md) | Plugin | Persists context across sessions | Global | ✅ Yes |
-| [security-guidance](../claude-plugins-reference/security-guidance.md) | Plugin | Flags injection/XSS/secrets on edits and commits | Global | ✅ Yes |
-| [context7](../claude-plugins-reference/context7.md) | Plugin | Up-to-date library docs on demand | Global | ✅ Yes |
-| [code-review](../claude-plugins-reference/code-review.md) | Plugin | Catches logic bugs before they ship | Global | ✅ Yes |
-| [code-simplifier](../claude-plugins-reference/code-simplifier.md) | Plugin | Cleanup pass on recently-changed code | Global | ✅ Yes |
-| [claude-md-management](../claude-plugins-reference/claude-md-management.md) | Plugin | Keeps project memory/docs current | Global | ✅ Yes |
-| [superpowers](../claude-plugins-reference/superpowers.md) | Plugin | TDD, debugging, planning discipline | Global | ✅ Yes |
-| [find-skills](../claude-skills-reference/find-skills.md) | Skill | Discover other agent skills | Global | ✅ Yes |
-| [close](../claude-skills-reference/close.md) | Skill | Session wrap-up (manual `/close`) | Global | ✅ Yes |
-| [git-guardrails-claude-code](../claude-skills-reference/git-guardrails-claude-code.md) | Skill | Blocks destructive git commands | Global | ✅ Yes |
-| [managing-claude-tooling](../claude-skills-reference/managing-claude-tooling.md) | Skill | Installs/removes tooling, syncs tracking docs | Global | ✅ Yes |
-| [analyze-session-tokens](../claude-skills-reference/analyze-session-tokens.md) | Skill | Audits token/context efficiency of a past session | Global | ✅ Yes |
-| [loose-ends](../claude-skills-reference/loose-ends.md) | Skill | Scans conversation for unresolved items | Global | ✅ Yes |
-| [playwright](../claude-plugins-reference/playwright.md) | Plugin | Browser automation / E2E testing | **Not yet** | ✅ Yes |
-| [frontend-design](../claude-plugins-reference/frontend-design.md) | Plugin | Distinctive, non-generic UI design | **Not yet** | ✅ Yes |
-| [web-design-guidelines](../claude-skills-reference/web-design-guidelines.md) | Skill | Audits web UI against interface guidelines | **Not yet** | ✅ Yes |
-| [grill-me](../claude-skills-reference/grill-me.md) | Skill | Adversarial interview to sharpen a plan/design | **Not yet** | ✅ Yes |
-| [jupyter-notebook](../claude-skills-reference/jupyter-notebook.md) | Skill | Scaffolds/edits Jupyter notebooks | Not yet | ⏳ Later (Phase 3) |
-| [just-scrape](../claude-skills-reference/just-scrape.md) | Skill | Web scraping/crawling via ScrapeGraph | Not yet | ⏳ Later (Phase 0, if needed) |
-| [firecrawl](../claude-plugins-reference/firecrawl.md) | Plugin | Web scraping/crawling/monitoring | Not yet | ⏳ Later (Phase 0, last resort) |
-| [writing-guidelines](../claude-skills-reference/writing-guidelines.md) | Skill | Audits docs/prose | Not yet | ⏳ Later (optional) |
-| [claude-code-setup](../claude-plugins-reference/claude-code-setup.md) | Plugin | One-time automation audit at kickoff | Not yet | ⏳ Later (optional, now or never) |
-| [document-skills](../claude-plugins-reference/document-skills.md) | Plugin | Word/Excel/PowerPoint/PDF editing | Not yet | ❌ No |
-| [figma](../claude-plugins-reference/figma.md) | Plugin | Read/push Figma designs | Not yet | ❌ No |
-| [impeccable](../claude-plugins-reference/impeccable.md) | Plugin | Frontend polish/anti-pattern audit | Not yet | ❌ No |
-| [typescript-lsp](../claude-plugins-reference/typescript-lsp.md) | Plugin | TypeScript/JS language server | Not yet | ❌ No |
-| [claude-api](../claude-plugins-reference/claude-api.md) | Plugin | Claude/Anthropic API reference | Not yet | ❌ No |
-| [mattpocock-skills](../claude-plugins-reference/mattpocock-skills.md) | Plugin | Ticket/spec-driven engineering | Not yet | ❌ No |
-| [feature-dev](../claude-plugins-reference/feature-dev.md) | Plugin | Explore/architect/review agent split | Not yet | ❌ No |
-| [notion](../claude-plugins-reference/notion.md) | Plugin | Notion docs/tasks/knowledge base | Not yet | ❌ No |
-| [pr-review-toolkit](../claude-plugins-reference/pr-review-toolkit.md) | Plugin | Deeper multi-agent PR review | Not yet | ❌ No |
-| [task-observer](../claude-plugins-reference/task-observer.md) | Plugin | Meta-improvement of other skills (unvetted) | Not yet | ❌ No |
-| [skill-creator](../claude-plugins-reference/skill-creator.md) | Plugin | Author/benchmark a new Claude Code skill | Not yet | ❌ No |
-| [learning-output-style](../claude-plugins-reference/learning-output-style.md) | Plugin | Teaching / "★ Insight" output style | Not yet | ❌ No |
-| [example-skills](../claude-plugins-reference/example-skills.md) | Plugin | 12 unrelated bundled skills, all-or-nothing | Not yet | ❌ No |
-| [grill-with-docs](../claude-skills-reference/grill-with-docs.md) | Skill | Same interview as `grill-me`, plus ADRs + glossary | Not yet | ❌ No |
-| [improve-codebase-architecture](../claude-skills-reference/improve-codebase-architecture.md) | Skill | Scans for architecture improvements | Not yet | ❌ No |
-| [hyperframes](../claude-skills-reference/hyperframes.md) | Skill | Video/animation from HTML | Not yet | ❌ No |
-| [mlflow-onboarding](../claude-skills-reference/mlflow-onboarding.md) | Skill | One-time MLflow onboarding | Not yet | ❌ No |
-| [deploy-to-vercel](../claude-skills-reference/deploy-to-vercel.md) | Skill | Deploy to Vercel | Not yet | ❌ No |
-| [vercel-cli-with-tokens](../claude-skills-reference/vercel-cli-with-tokens.md) | Skill | Vercel CLI token auth | Not yet | ❌ No |
-| [vercel-composition-patterns](../claude-skills-reference/vercel-composition-patterns.md) | Skill | React composition patterns | Not yet | ❌ No |
-| [vercel-optimize](../claude-skills-reference/vercel-optimize.md) | Skill | Vercel cost/performance optimization | Not yet | ❌ No |
-| [vercel-react-best-practices](../claude-skills-reference/vercel-react-best-practices.md) | Skill | React/Next.js performance guidelines | Not yet | ❌ No |
-| [vercel-react-native-skills](../claude-skills-reference/vercel-react-native-skills.md) | Skill | React Native / Expo best practices | Not yet | ❌ No |
-| [vercel-react-view-transitions](../claude-skills-reference/vercel-react-view-transitions.md) | Skill | React View Transition API | Not yet | ❌ No |
+| Name | Type | Description | Installed | Origin | Recommend |
+| --- | --- | --- | --- | --- | --- |
+| [claude-mem](../claude-plugins-reference/claude-mem.md) | Plugin | Persists context across sessions | Global | Public | ✅ Yes |
+| [security-guidance](../claude-plugins-reference/security-guidance.md) | Plugin | Flags injection/XSS/secrets on edits and commits | Global | Public | ✅ Yes |
+| [context7](../claude-plugins-reference/context7.md) | Plugin | Up-to-date library docs on demand | Global | Public | ✅ Yes |
+| [code-review](../claude-plugins-reference/code-review.md) | Plugin | Catches logic bugs before they ship | Global | Public | ✅ Yes |
+| [code-simplifier](../claude-plugins-reference/code-simplifier.md) | Plugin | Cleanup pass on recently-changed code | Global | Public | ✅ Yes |
+| [claude-md-management](../claude-plugins-reference/claude-md-management.md) | Plugin | Keeps project memory/docs current | Global | Public | ✅ Yes |
+| [superpowers](../claude-plugins-reference/superpowers.md) | Plugin | TDD, debugging, planning discipline | Global | Public | ✅ Yes |
+| [close](../claude-skills-reference/close.md) | Skill | Session wrap-up (manual `/close`) | Global | **Mine** | ✅ Yes |
+| [managing-claude-tooling](../claude-skills-reference/managing-claude-tooling.md) | Skill | Installs/removes tooling, syncs tracking docs | Global | **Mine** | ✅ Yes |
+| [analyze-session-tokens](../claude-skills-reference/analyze-session-tokens.md) | Skill | Audits token/context efficiency of a past session | Global | **Mine** | ✅ Yes |
+| [loose-ends](../claude-skills-reference/loose-ends.md) | Skill | Scans conversation for unresolved items | Global | **Mine** | ✅ Yes |
+| [find-skills](../claude-skills-reference/find-skills.md) | Skill | Discover other agent skills | Global | Bundled | ✅ Yes |
+| [git-guardrails-claude-code](../claude-skills-reference/git-guardrails-claude-code.md) | Skill | Blocks destructive git commands | Global | Public | ✅ Yes |
+| [playwright](../claude-plugins-reference/playwright.md) | Plugin | Browser automation / E2E testing | **Project** | Public | ✅ Yes |
+| [frontend-design](../claude-plugins-reference/frontend-design.md) | Plugin | Distinctive, non-generic UI design | **Project** | Public | ✅ Yes |
+| [web-design-guidelines](../claude-skills-reference/web-design-guidelines.md) | Skill | Audits web UI against interface guidelines | **Project** | Public | ✅ Yes |
+| [grill-me](../claude-skills-reference/grill-me.md) | Skill | Adversarial interview to sharpen a plan/design | **Project** | Public | ✅ Yes |
+| [jupyter-notebook](../claude-skills-reference/jupyter-notebook.md) | Skill | Scaffolds/edits Jupyter notebooks | Not yet | Public | ⏳ Later (Phase 3) |
+| [just-scrape](../claude-skills-reference/just-scrape.md) | Skill | Web scraping/crawling via ScrapeGraph | Not yet | Public | ⏳ Later (Phase 0, if needed) |
+| [firecrawl](../claude-plugins-reference/firecrawl.md) | Plugin | Web scraping/crawling/monitoring | Not yet | Public | ⏳ Later (Phase 0, last resort) |
+| [writing-guidelines](../claude-skills-reference/writing-guidelines.md) | Skill | Audits docs/prose | Not yet | Public | ⏳ Later (optional) |
+| [claude-code-setup](../claude-plugins-reference/claude-code-setup.md) | Plugin | One-time automation audit at kickoff | Not yet | Public | ⏳ Later (optional, now or never) |
+| [document-skills](../claude-plugins-reference/document-skills.md) | Plugin | Word/Excel/PowerPoint/PDF editing | Not yet | Public | ❌ No |
+| [figma](../claude-plugins-reference/figma.md) | Plugin | Read/push Figma designs | Not yet | Public | ❌ No |
+| [impeccable](../claude-plugins-reference/impeccable.md) | Plugin | Frontend polish/anti-pattern audit | Not yet | Public | ❌ No |
+| [typescript-lsp](../claude-plugins-reference/typescript-lsp.md) | Plugin | TypeScript/JS language server | Not yet | Public | ❌ No |
+| [claude-api](../claude-plugins-reference/claude-api.md) | Plugin | Claude/Anthropic API reference | Not yet | Public | ❌ No |
+| [mattpocock-skills](../claude-plugins-reference/mattpocock-skills.md) | Plugin | Ticket/spec-driven engineering | Not yet | Public | ❌ No |
+| [feature-dev](../claude-plugins-reference/feature-dev.md) | Plugin | Explore/architect/review agent split | Not yet | Public | ❌ No |
+| [notion](../claude-plugins-reference/notion.md) | Plugin | Notion docs/tasks/knowledge base | Not yet | Public | ❌ No |
+| [pr-review-toolkit](../claude-plugins-reference/pr-review-toolkit.md) | Plugin | Deeper multi-agent PR review | Not yet | Public | ❌ No |
+| [task-observer](../claude-plugins-reference/task-observer.md) | Plugin | Meta-improvement of other skills (unvetted) | Not yet | Public | ❌ No |
+| [skill-creator](../claude-plugins-reference/skill-creator.md) | Plugin | Author/benchmark a new Claude Code skill | Not yet | Public | ❌ No |
+| [learning-output-style](../claude-plugins-reference/learning-output-style.md) | Plugin | Teaching / "★ Insight" output style | Not yet | Public | ❌ No |
+| [example-skills](../claude-plugins-reference/example-skills.md) | Plugin | 12 unrelated bundled skills, all-or-nothing | Not yet | Public | ❌ No |
+| [grill-with-docs](../claude-skills-reference/grill-with-docs.md) | Skill | Same interview as `grill-me`, plus ADRs + glossary | Not yet | Public | ❌ No |
+| [improve-codebase-architecture](../claude-skills-reference/improve-codebase-architecture.md) | Skill | Scans for architecture improvements | Not yet | Public | ❌ No |
+| [hyperframes](../claude-skills-reference/hyperframes.md) | Skill | Video/animation from HTML | Not yet | Public | ❌ No |
+| [mlflow-onboarding](../claude-skills-reference/mlflow-onboarding.md) | Skill | One-time MLflow onboarding | Not yet | Public | ❌ No |
+| [deploy-to-vercel](../claude-skills-reference/deploy-to-vercel.md) | Skill | Deploy to Vercel | Not yet | Public | ❌ No |
+| [vercel-cli-with-tokens](../claude-skills-reference/vercel-cli-with-tokens.md) | Skill | Vercel CLI token auth | Not yet | Public | ❌ No |
+| [vercel-composition-patterns](../claude-skills-reference/vercel-composition-patterns.md) | Skill | React composition patterns | Not yet | Public | ❌ No |
+| [vercel-optimize](../claude-skills-reference/vercel-optimize.md) | Skill | Vercel cost/performance optimization | Not yet | Public | ❌ No |
+| [vercel-react-best-practices](../claude-skills-reference/vercel-react-best-practices.md) | Skill | React/Next.js performance guidelines | Not yet | Public | ❌ No |
+| [vercel-react-native-skills](../claude-skills-reference/vercel-react-native-skills.md) | Skill | React Native / Expo best practices | Not yet | Public | ❌ No |
+| [vercel-react-view-transitions](../claude-skills-reference/vercel-react-view-transitions.md) | Skill | React View Transition API | Not yet | Public | ❌ No |
 
-13 installed (all global) · 4 recommended to add · 5 deferred · 24 not applicable.
+**17 active here** — 13 global + 4 project-scoped, installed 2026-08-28 · 5 deferred ·
+24 not applicable.
+By origin: 4 Mine · 41 Public · 1 Bundled.
+
+## Installed 2026-08-28 — verified
+
+All four confirmed from inside `/Users/darrensy/Projects/starbucks-planner`:
+
+| Name | Verified by | Result |
+| --- | --- | --- |
+| `playwright` | `claude plugin list` | `Scope: project` · `Status: ✔ enabled` |
+| `frontend-design` | `claude plugin list` | `Scope: project` · `Status: ✔ enabled` |
+| `web-design-guidelines` | `npx skills ls` | `.agents/skills/web-design-guidelines`, lock entry present |
+| `grill-me` | `npx skills ls` | `.agents/skills/grill-me`, lock entry present |
+
+On-disk artefacts, all committed (matching the convention in `fantasy-hoops`, which tracks the
+same set): `.claude/settings.json` (the two plugin registrations), `.agents/skills/*` (12 KB of
+vendored skill content), `.claude/skills/*` (symlinks into `.agents/`), and `skills-lock.json`.
 
 ---
 
