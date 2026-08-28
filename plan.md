@@ -1,31 +1,50 @@
-# Starbucks Study Spot Planner — Build Plan
+# Study Venue Planner — Build Plan
 
 ## Goal
 
-Decide **which of ~10 Starbucks stores in Singapore to go to, and whether it works for the session I actually want**, given where I'm starting from.
+> Recommend the coffee destination that gives me a high chance of getting a suitable seat for the full study session, while minimising the wasted time and energy if the prediction is wrong.
 
-The real question this tool answers:
+The failure this tool exists to prevent is **travelling 40 minutes to a venue, finding no seat, and having to travel somewhere else.** That failure costs more than any amount of mild sub-optimality in the choice itself, which is why the output is not just a ranked list but a **Plan A and a practical Plan B**.
 
-> It's 4pm and I want to study for 3-6 hours. I'm at work. Where do I go?
+Two queries it answers:
 
-Sessions run **3-6 hours**, which is what makes this non-trivial. At that length, **closing time is usually the binding constraint, not busyness** — a store that closes at 9pm is useless at 4pm no matter how empty it is. Busyness only decides between stores that already survive the hours-and-travel filter.
+> It's 4pm and I want to study for 3-6 hours. I'm at work. Where do I go, and where do I go if that fails?
 
-Data sources, in decreasing order of reliability:
+> I want six hours today. When do I need to leave?
 
-1. **Opening hours** — from an authoritative source (Google Places API or Starbucks SG's own store locator). Reliable, official. This drives the hard filter.
-2. **Google Popular Times histogram** — the weekly busyness curve per store. A rolling multi-month average, so it changes slowly. This is the prior for "can I get a seat when I arrive".
-3. **My own hand-maintained store facts** — travel times by origin and mode, personal preference, seating and wifi quality. Nothing scrapes these and they matter a lot over six hours.
-4. **My own seat log** — what actually happened when I showed up. The correction, and the part Google can't give me.
+Sessions run **3-6 hours**. At that length opening hours are a **feasibility constraint** — a venue that closes at 9pm is useless at 4pm regardless of how empty it is — but feasibility is not the goal. **Getting and keeping a suitable seat is the goal**, and hours only rule out venues that cannot deliver it.
+
+### What each input contributes
+
+| Input | What it tells us | What it cannot tell us |
+| --- | --- | --- |
+| **Opening hours** (Places API) | Whether the full session physically fits | Anything about seats |
+| **`baseline_seatability`** (hand-maintained) | How reliably *this venue* seats me, in absolute terms | Whether today/this hour is unusual |
+| **Google Popular Times** (histogram) | Whether this is an unusually good or bad *time* for this venue | Whether this venue beats another venue |
+| **Seat log** (personal, growing) | What actually happened when I showed up | Much of anything yet — needs volume |
+
+The two middle rows are the crux: **neither one alone answers "will I get a seat here"**. Baseline gives the absolute level and is the only cross-venue signal available before calibration. Popular Times gives the time-relative adjustment and is *not* cross-venue comparable at all. They are combined into a `seat_confidence` tier, never conflated.
 
 ## Non-goals (explicit — do not build these)
 
-- No live / real-time busyness. No "check now" button.
+- No live / real-time busyness. No "check now" button. Popular Times means the **historical** weekly histogram, never the live overlay.
 - No live weather, traffic, or transit APIs. Rain is a manual toggle.
-- No backend, no server, no API keys in the deployed app.
+- No deployed backend, no server-side code, no API keys in the deployed app.
 - No auth, no multi-user, no accounts.
 - No native iOS app.
+- No service worker in v1.
+- **No numerical seat probability before Phase 3.** Confidence is qualitative until there is enough personal outcome data to earn a number.
+- **No full venue-to-venue travel matrix.** Only hand-picked fallback links between plausible neighbours.
 
-Any of these can be revisited later. None are in scope.
+## Multi-brand from the start
+
+Scope now includes **Starbucks, Coffee Bean & Tea Leaf, Tim Hortons, and potentially independent cafés.** Because no code exists yet, the domain model is **brand-neutral now** — retrofitting it later would mean renaming every contract, function and label.
+
+Use `venue`, `venue_id`, `venues.json`, `venues_meta.json`, `venue_arrival`. Never bake a brand into a contract name, a function name, or UI copy.
+
+The repository keeps the name `starbucks-planner` for now; that is a directory name, not an architectural commitment.
+
+`venue_type` is a small, extensible, **descriptive** classification: `large_cafe`, `mall_cafe`, `office_cafe`, `takeaway_heavy`, `small_kiosk`, `independent_cafe`. It is recorded from the start so Phase 3 can eventually test whether it predicts anything. **Nothing computes with it until there is evidence that it should.**
 
 ## Architecture
 
@@ -34,27 +53,31 @@ Everything is either a **local Python script** (run manually on the Mac) or a **
 ```
 starbucks-planner/
 ├── scraper/
-│   ├── fetch_hours.py          # official source, run monthly
-│   └── fetch_busyness.py       # SerpApi, run monthly
+│   ├── fetch_hours.py          # official source
+│   └── fetch_busyness.py       # SerpApi
+├── build/
+│   └── refresh.py              # ORCHESTRATOR — owns venues.json and index.html
 ├── analysis/
 │   └── calibrate.py            # run occasionally, Phase 3
 ├── data/
-│   ├── stores.json             # GENERATED by scrapers, committed
-│   ├── stores_meta.json        # HAND-MAINTAINED, never written by code
+│   ├── venues.json             # GENERATED by refresh.py, committed
+│   ├── venues_meta.json        # HAND-MAINTAINED, never written by code
 │   ├── holidays.json           # HAND-MAINTAINED SG public holidays
-│   ├── seatlog.csv             # coarsened log, committed (see below)
-│   └── calibration.json        # generated by analysis, committed
+│   ├── seatlog.csv             # coarsened log, committed
+│   └── calibration.json        # generated by analysis, Phase 3
 ├── web/
-│   ├── index.html              # static SPA, no build step
-│   ├── app.js                  # DOM + render only
-│   ├── ranking.js              # pure functions, no DOM imports
-│   └── style.css
-├── tests/                      # pure-function tests only
+│   ├── index.template.html     # HAND-WRITTEN source
+│   ├── index.html              # GENERATED — never hand-edit
+│   ├── app.js                  # SOURCE — DOM + render only; inlined into index.html
+│   ├── ranking.js              # SOURCE — pure functions, no DOM imports; inlined
+│   ├── style.css               # SOURCE — inlined
+│   └── manifest.webmanifest    # NOT inlined — see below
+├── tests/
+│   ├── js/                     # node --test, imports ranking.js directly
+│   └── python/                 # pytest, fixture-based parser tests
 ├── requirements.txt
-└── Makefile                    # `make refresh` = fetch + calibrate
+└── Makefile                    # `make refresh` = coarsen + fetch + validate + generate
 ```
-
-**Deploy target:** GitHub Pages. The repo is public — GitHub Pages' free tier only serves sites built from public repositories, and a public repo is acceptable for this project. The app fetches `data/*.json` as relative paths.
 
 **Python environment:** `.venv/` plus `requirements.txt`. Always invoke as `.venv/bin/python3`, **never bare `python3`** — on this machine that resolves to an Anaconda install (`/Users/darrensy/anaconda3/bin/python3`) which will not have this project's dependencies. This trap has already been hit in another project on this Mac.
 
@@ -62,73 +85,518 @@ starbucks-planner/
 
 ### Why this shape
 
-The histogram and the opening hours are both near-static, so there is no reason to fetch either at request time. Generating JSON on the Mac and committing it means the deployed app has zero runtime dependencies and cannot break because Google changed its HTML. When a fetcher breaks, it breaks on my laptop where I can see it, not in front of me at 9am on a Saturday.
+The histogram and the opening hours are both near-static, so there is no reason to fetch either at request time. Generating everything on the Mac and committing it means the deployed app has zero runtime dependencies and cannot break because Google changed its HTML. When a fetcher breaks, it breaks on my laptop where I can see it, not in front of me at 9am on a Saturday.
+
+### The generated page is self-contained
+
+`build/refresh.py` generates `web/index.html` from `web/index.template.html`, inlining:
+
+- **the data** — `venues.json`, `venues_meta.json`, `holidays.json`, `seatlog.csv` as `<script type="application/json">` blocks
+- **the code** — `ranking.js` then `app.js`, into **one** `<script type="module">` block
+- **the styles** — the contents of `style.css` into a `<style>` block
+
+**The source files remain real files on disk.** They are the source of truth, hand-edited, and `tests/js/` imports `ranking.js` directly. Only the *generated artifact* is a single file. An earlier draft inlined the JSON alone and then claimed "one portable file" and "no network requests at all" — both false, because the page still fetched four assets. That error survived three consistency sweeps because they grepped for stale claims rather than checking new claims against the file tree.
+
+#### The module inlining contract
+
+Source files are ES modules so Node can import them; the artifact must have no module graph at all. The convention, which needs no npm and no bundler:
+
+1. `ranking.js` is a valid ES module using `export` declarations. `tests/js/` imports it directly — this is the only consumer of those exports.
+2. `app.js` imports from it with a **single, fixed-form** statement at the top of the file:
+   `import { … } from "./ranking.js";`
+3. The generator emits one `<script type="module">` containing the full text of `ranking.js`, then the full text of `app.js` **with that import statement removed**.
+
+Because both files land in the same module scope, `ranking.js`'s top-level bindings are directly visible to `app.js` code — no import needed at runtime. `export` declarations remain in the concatenated module; they are syntactically legal in an inline module script and simply have no importer, so they are inert.
+
+**Constraint this creates:** after concatenation the two files share one top-level scope, so **`ranking.js` and `app.js` must not declare colliding top-level names.** That is a real constraint on how the code is written, and it needs a test.
+
+Leaving the import in place would defeat the whole design — the browser would fetch `./ranking.js` over the network, reintroducing exactly the external dependency inlining exists to remove.
+
+#### Escaping embedded JSON
+
+**Inside a `<script type="application/json">` block, every `<` in the serialised JSON must be written as its six-character JSON unicode escape** — a backslash, then `u003c`:
+
+In Python, unambiguously:
+
+```python
+json.dumps(data).replace("<", "\\u003c")
+```
+
+That writes **six characters** into the JSON text — a backslash, then `u`, `0`, `0`, `3`, `c` — which a JSON parser reads back as the single character `<`.
+
+This is a **JSON-level** escape, not an HTML one. HTML entities are *not* decoded inside a `<script>` element, so writing `&lt;` would place the literal characters `&lt;` into the parsed data and corrupt the value. The unicode escape is valid JSON that parses back to a less-than sign, so the data round-trips intact while the byte sequence `</script>` can never appear literally in the markup.
+
+A `notes` field, a venue name, or an upstream string containing `</script>` would otherwise terminate the block and corrupt the page. **This must have a test using a value that actually contains `</script>`**, asserting both that the page still parses and that the value survives round-trip.
+
+Consequences of the whole arrangement:
+
+- **No `fetch()`, no unresolved imports, and exactly one external reference** — the manifest, described below. No CORS, no `file://` restriction, no local dev server needed.
+- **No relative-path question** between `web/` and `data/` under GitHub Pages.
+- **Genuinely one portable file** that can be AirDropped and opened with no network at all.
+
+**The manifest is the sole external asset, and it is optional.** `<link rel="manifest">` accepts a `data:` URI in principle, but Safari support has been unreliable — and Safari is the only browser that matters here — so `manifest.webmanifest` stays a separate file.
+
+It is *optional* in the precise sense that **the page is fully functional without it**. When the manifest is absent or fails to load — which is exactly what happens to the AirDropped copy opened from `file://` — nothing degrades except the ability to install to the home screen. Every feature, all data, all logic works.
+
+So the accurate claim, used consistently across these documents, is:
+
+> The generated page loads **no external assets except an optional web app manifest**, and functions completely without it.
+
+Not "no external assets", which was the earlier wording and was false.
+
+`localStorage` was considered and rejected: with no signal the page shell doesn't load either, so there is nothing running to read it.
+
+**Offline, honestly scoped:** *portable* offline (a saved file always works) and *best-effort* cached offline (repeat visits to the hosted URL depend on the browser's HTTP cache). Guaranteed offline for the hosted URL would need a service worker. Deferred.
+
+### Deploy
+
+**GitHub Pages, publishing from the repository root of the default branch.** The repo is public — Pages' free tier only serves public repositories.
+
+- Site root: `/` (repo root) · App URL: `<site>/web/index.html`
+- **All paths in the manifest and the page are relative**, never absolute:
+
+  ```json
+  "start_url": "./index.html",
+  "scope": "./"
+  ```
+
+  For a project site the repository name is a path prefix (`darrensy19.github.io/starbucks-planner/`), so an absolute `/web/index.html` would resolve to `darrensy19.github.io/web/` and 404. Relative paths also keep the AirDropped `file://` copy working.
+
+- No data URLs, no asset URLs — everything except the manifest is inlined.
+
+**Note on publishing sources:** branch-based publishing offers repo root or `/docs`, but Pages can also publish a GitHub Actions artifact from any directory. Root-of-branch is chosen here for simplicity; the "root or `/docs` only" framing in an earlier draft was incomplete.
+
+"No server" means **no deployed backend**. A local server is permitted, and under the inlined design isn't needed.
+
+---
+
+## The decision model
+
+Four derived quantities, computed in order. **Every one is shown separately in the UI — never blended into a single opaque score.**
+
+### 1. `baseline_seatability` — hand-maintained, absolute, per venue
+
+How reliably this venue seats me *in general*, independent of time of day. This is the **only cross-venue seat signal available before Phase 3**.
+
+| State | Meaning |
+| --- | --- |
+| `dependable` | I would make a long trip here without needing a nearby backup |
+| `usually_available` | I normally get a seat, but busyness or a backup still matters |
+| `mixed` | Genuinely unpredictable |
+| `poor` | I frequently fail to get a suitable seat |
+| `unknown` | Not enough personal experience to judge |
+
+**`unknown` is a missing-knowledge state, not a rung on the scale.** It never averages, never substitutes for `mixed`, and never resolves upward from busyness evidence alone.
+
+### 2. `preference` — hand-maintained, strictly about study quality
+
+Tables, seating comfort, Wi-Fi, noise, atmosphere, food, and how much I actually enjoy working there.
+
+**Preference must not carry crowding information.** An earlier version of this plan let preference silently absorb "this place is always full", which made one number mean two things and hid the crowding signal from every other part of the system. Crowding now lives in `baseline_seatability`.
+
+### 3. `relative_busyness` — derived from the Popular Times histogram
+
+Computed from the **historical** Google Maps Popular Times curve for that venue — never live busyness.
+
+For the selected date and that venue's **own arrival hour**:
+
+```
+busyness_delta = arrival_hour_popular_times
+               - median_popular_times_for_that_venue_and_weekday
+```
+
+| Band | Rule |
+| --- | --- |
+| `peak` | within `P` points of that venue/weekday's maximum |
+| `busy` | `delta >= N`, unless already `peak` |
+| `typical` | `-N < delta < N` |
+| `quiet` | `delta <= -N` |
+| `unknown` | histogram missing, or coverage below the minimum |
+
+**`peak` takes precedence over `busy`.** `N` and `P` are **determined in Phase 0 from the observed curves** and recorded in `decisions.md`. They are not guessed here.
+
+**Minimum coverage for a median.** A median over two or three hourly buckets is meaningless. A venue/weekday curve needs at least **`MIN_HISTOGRAM_HOURS = 6`** populated hourly buckets to compute a median; below that the band is `unknown`. Provisional — Phase 0 reports actual coverage and this can be revised.
+
+**Four bands and no more.** Popular Times is an indirect, noisy proxy for seating — it counts everyone in the geofence including the takeaway queue. Finer gradations would manufacture precision the underlying signal cannot support.
+
+A `very_quiet` band **may** be added later, and only if Phase 0 shows several venues with genuinely large and repeatable troughs — on the order of `2N` below their median. Deliberately **not** in the initial contract.
+
+#### What this band does and does not mean
+
+It answers: **is this an unusually good or bad time to visit this particular venue?**
+
+It does **not** answer: **is this venue more likely to have a seat than another venue?**
+
+This distinction is load-bearing. A `quiet` reading at a venue that is always packed can still be worse than a `busy` reading at a venue that is usually empty. The band is a **within-venue adjustment**; the absolute level it adjusts comes from `baseline_seatability`, and later from calibrated `P(seat)`. Any statement that the band makes venues comparable is wrong.
+
+### 4. `seat_confidence` — the combination
+
+`baseline_seatability` adjusted by `relative_busyness`, on the same four-level ladder, **conservatively**.
+
+Ladder: `poor` (1) → `mixed` (2) → `usually_available` (3) → `dependable` (4). Clamped to [1, 4].
+
+| `relative_busyness` | Adjustment |
+| --- | --- |
+| `quiet` | **+1** level, capped at `dependable` |
+| `typical` | no change |
+| `busy` | **−1** level |
+| `peak` | **−2** levels |
+| `unknown` | **no adjustment** — use baseline alone, and mark the evidence as weaker |
+
+**If `baseline_seatability` is `unknown`, `seat_confidence` is `unknown`, always.**
+
+```
+poor              + quiet    → mixed
+usually_available + busy     → mixed
+dependable        + typical  → dependable
+mixed             + peak     → poor
+unknown baseline  + quiet    → unknown
+usually_available + unknown  → usually_available   (evidence flagged weaker)
+```
+
+An explicit lookup, not a weighted score. **The UI must always show the components:**
+
+```
+Medium seat confidence
+Baseline: usually available
+Adjustment: busy for this venue
+```
+
+User-facing labels may be friendlier (`High` / `Good` / `Medium` / `Low` / `Unknown`), but the underlying states are preserved and reconstructable.
+
+### 5. `backup_strength` — how bad it is to be wrong
+
+Derived from hand-maintained `fallbacks` links, evaluated **at their delayed arrival time**, not from geographic proximity.
+
+The requested session is 3-6 hours. A fallback offering 90 minutes may still rescue the trip, but it is **not** a substitute for the session — and presenting it as an equivalent backup would be dishonest. The three states are therefore graded by *whether the requested session survives*, not merely by whether somewhere is open:
+
+| Strength | Rule |
+| --- | --- |
+| `strong` | a fallback where **the requested session fits** — `robust` or `tight` at its delayed arrival — with confidence at least `PLAN_B_MIN_CONFIDENCE` |
+| `salvage` | at least `PLAN_B_MIN_SESSION_MINUTES` remains and confidence is at least `PLAN_B_MIN_CONFIDENCE`, **but the requested session does not fit** |
+| `none` | less than `PLAN_B_MIN_SESSION_MINUTES` remains, or confidence is below `PLAN_B_MIN_CONFIDENCE`, or no fallback is valid at all |
+
+`salvage` replaces the earlier `weak`, which was too vague to act on — it conflated "a bit further away" with "you'll get half the session you wanted", which are entirely different problems.
+
+**A `salvage` option must always be labelled as such and must state its actual duration.** "Plan B: still provides 1h40m of your 6h" is useful. Presenting the same venue as though it satisfies the request is not.
+
+**Do not multiply probabilities across venues.** "Venue A is 70% and venue B is 70%, so 91% chance of a seat somewhere" is invalid — neighbouring venues share the same crowd, weather, events and lunch rush. Their failures are strongly correlated. Backup strength is deliberately qualitative for exactly this reason.
+
+---
+
+## Time, dates and hours resolution
+
+All time arithmetic is in **integer minutes from local midnight**, never string comparison. All dates are resolved in **`Asia/Singapore`**.
+
+### Inputs
+
+**`selected_date`** (a calendar date, defaulting to today), **leave-at time** (defaulting to now), session duration, origin, travel mode, and a manual "raining" toggle.
+
+```
+selected_weekday = weekday(selected_date, tz="Asia/Singapore")
+departure_date   = selected_date          # the date the journey starts
+```
+
+Every symbol used in a formula below resolves to one of these:
+
+| Symbol | Kind | Source |
+| --- | --- | --- |
+| `selected_date`, `leave_at`, `duration`, `origin`, `mode`, `raining` | input | UI controls |
+| `selected_weekday`, `departure_date` | derived | from `selected_date`, above |
+| `travel_minutes_mid`, `travel_minutes_upper` | derived | `venues_meta.access[origin][mode].band` |
+| `closing_buffer` | derived | `venues_meta.closing_buffer_minutes`, or `CLOSING_BUFFER_DEFAULT_MINUTES` when `null` |
+| `CLOSING_BUFFER_DEFAULT_MINUTES` = 30 | constant | `ranking.js` |
+| `FEASIBILITY_TOLERANCE_MINUTES` = 15 | constant (provisional) | `ranking.js` |
+| `PLAN_B_MIN_SESSION_MINUTES` = 90 | constant (provisional) | `ranking.js` |
+| `PLAN_B_MIN_CONFIDENCE` = `mixed` | constant (provisional) | `ranking.js` |
+| `SEAT_CHECK_BUFFER_MINUTES` = 10 | constant (provisional) | `ranking.js` |
+| `MIN_HISTOGRAM_HOURS` = 6 | constant (provisional) | `ranking.js` |
+| `N`, `P` | constant (**unset** until Phase 0) | `ranking.js` |
+| `plan_a_arrival_mid`, `plan_a_arrival_upper` | derived | Plan A's own `arrival_mid` and `arrival_upper` |
+| `arrival_date`, `today`, `yesterday` | derived | `date(arrival_abs)`, and `resolve_hours` for that date and the one before |
+| `fallback_travel_minutes_mid`, `fallback_travel_minutes_upper` | derived | `venues_meta.fallbacks[].travel_band` |
+
+`duration` is the requested session length in minutes. `closing_buffer` is always the resolved value, never the raw nullable field.
+
+**The UI selects a date, not a weekday.** An earlier draft selected a weekday while `holidays.json` was keyed by date, so the two could never be reconciled — and the hours schema had nowhere to hold Google's date-specific overrides. `selected_weekday` is derived, never chosen directly.
+
+### `resolve_hours(venue, target_date)`
+
+Hours resolution is a **function of an arbitrary date**, not of the user's selected date. It is called for *every* date whose periods might matter — which, because of after-midnight closing, is always at least two.
+
+```
+resolve_hours(venue, target_date) -> {state, periods}
+
+    target_weekday = weekday(target_date, tz="Asia/Singapore")
+
+    if venue.hours.date_overrides[target_date] exists:
+        return it                                         # authoritative for that date
+    elif target_date <= venue.hours.overrides_valid_through:
+        return regular_hours[target_weekday]              # in horizon, no override = normal day
+    elif target_date is in holidays.json:
+        return {state: "unknown", periods: []}            # beyond horizon, known holiday
+    else:
+        return regular_hours[target_weekday]
+```
+
+**Every date goes through this function — never through `regular_hours` directly.** An earlier draft wrote the resolution inline against `selected_date` and then had the active-period lookup pull "periods recorded on" the arrival and previous dates, bypassing overrides and holiday handling for both. A venue with a date override on the previous day, or a previous day that is a holiday beyond the horizon, would have had the wrong periods — or fabricated ones — silently used for a post-midnight arrival.
+
+**A known public holiday beyond the override horizon yields `unknown` hours, never inferred regular hours.** `currentOpeningHours` from the Places API covers roughly seven days; past that, a holiday's hours are genuinely not known, and guessing the regular weekday schedule on a day when malls close early is the exact failure this tool exists to prevent.
+
+`unknown` propagates: if either date needed for an arrival resolves to `unknown`, the venue's status at that arrival is `unknown`, not closed and not open.
+
+`overrides_valid_through` makes the horizon explicit so the UI can say "beyond this date, regular schedule only".
+
+### One coordinate system: absolute minutes
+
+Periods carry offsets from **their own start date's** local midnight, and a period can close after midnight. Comparing such an offset directly against an arrival time expressed relative to a *different* date is meaningless — a Tuesday 00:30 arrival (`30`) would fail to match a Monday period `{open: 450, close: 1500}` even though 00:30 Tuesday falls squarely inside it.
+
+Everything is therefore converted to **absolute minutes** before any comparison:
+
+```
+abs(date, offset) = days_since_epoch(date) * 1440 + offset      # date in Asia/Singapore
+```
+
+For a period `{open, close}` recorded on date `D`:
+
+```
+period_start_abs = abs(D, open)
+period_end_abs   = abs(D, close)        # close > 1440 rolls into D+1 naturally
+```
+
+Worked example — Monday period `{open: 450, close: 1500}` spans `abs(Mon, 450)` to `abs(Mon, 1500)`, i.e. Monday 07:30 to Tuesday 01:00. A Tuesday 00:30 arrival is `abs(Tue, 30)` = `abs(Mon, 1470)`, which lies inside `[abs(Mon,450), abs(Mon,1500))`. It matches, as it must.
+
+**No comparison anywhere in the codebase mixes coordinate systems.** Offsets are for storage; absolute minutes are for arithmetic.
+
+### Deriving the active period
+
+```
+arrival_abs   = abs(departure_date, leave_at) + travel_minutes
+arrival_date  = date(arrival_abs)
+
+today     = resolve_hours(venue, arrival_date)
+yesterday = resolve_hours(venue, arrival_date - 1 day)
+
+if today.state == "unknown" or yesterday.state == "unknown":
+    return unknown                       # cannot assert open or closed
+
+candidate_periods = [abs(arrival_date,     p.open), abs(arrival_date,     p.close)) for p in today.periods
+                  + [abs(arrival_date - 1, p.open), abs(arrival_date - 1, p.close)) for p in yesterday.periods
+
+active_period   = the P where P.period_start_abs <= arrival_abs < P.period_end_abs
+venue_close_abs = active_period.period_end_abs
+```
+
+- **Both dates go through `resolve_hours`.** The previous day's periods are resolved with the same override and holiday logic as the arrival day — not read raw from `regular_hours`. A date override or an out-of-horizon holiday on the previous day changes which after-midnight period exists, and must be honoured.
+- **Boundary rule is `open <= arrival < close`.** Arriving exactly at opening is fine; arriving exactly at closing is not open.
+- **The previous date must always be a candidate** — an arrival shortly after midnight belongs to yesterday's after-midnight period, not to today's.
+- **`unknown` on either date yields `unknown` overall**, never "closed". The venue is surfaced as hours-unknown rather than filtered out as shut.
+- **Travel can cross midnight**: `arrival_abs` is computed from the *departure* date plus travel, then the *arrival* date is read back off it. Hours resolve for the arrival date, never the departure date.
+- **Split periods** are handled by the same scan: at most one period can contain a given instant, so the match is unambiguous. Arrival in the gap between two periods means closed.
+- **If no period matches**, the venue is closed on arrival and is filtered out.
+
+### Travel: two derived values
+
+`venues_meta.json` stores a coarse band, never exact minutes. Two numbers come from it:
+
+```
+travel_minutes_mid   = band midpoint      # display, ordering, Plan B arrival
+travel_minutes_upper = band upper edge    # the robustness test
+```
+
+Using the midpoint everywhere would pretend a ±2.5 minute estimate is exact. Using the upper edge for feasibility means `robust` genuinely survives the pessimistic case. The same derivation applies to `fallbacks[].travel_band`.
+
+### Per-venue derived values — resolved independently for each bound
+
+**The two bounds must be resolved separately, all the way through.** A later arrival can fall into a *different* period, or into no period at all — so reusing the midpoint's closing time for the upper-bound test is wrong near closing, across midnight, and with split periods.
+
+```
+arrival_mid          = abs(departure_date, leave_at) + travel_minutes_mid
+active_period_mid    = period containing arrival_mid           (may be none)
+venue_close_mid      = active_period_mid.period_end_abs
+
+arrival_upper        = abs(departure_date, leave_at) + travel_minutes_upper
+active_period_upper  = period containing arrival_upper         (may be none)
+venue_close_upper    = active_period_upper.period_end_abs
+
+usable_minutes  = max(0, min(venue_close_mid - closing_buffer, arrival_mid + duration) - arrival_mid)
+surplus_mid     = (venue_close_mid   - closing_buffer) - (arrival_mid   + duration)
+surplus_upper   = (venue_close_upper - closing_buffer) - (arrival_upper + duration)
+latest_leave_at = (venue_close_mid   - closing_buffer) - duration - travel_minutes_mid
+```
+
+`surplus_upper` is **undefined** when `active_period_upper` is none — that is not a shortfall of zero, it is "the venue is shut by the time you could plausibly arrive", and it fails `robust` outright.
+
+**Arrival is per-venue**, because travel time is. Three consequences, all easy to get wrong:
+
+1. The "open on arrival" test uses *that venue's* arrival, against *that venue's* active period.
+2. `relative_busyness` is read at *that venue's* `arrival_mid` hour.
+3. Arrival hours are rarely round. **The busyness bucket is chosen by flooring** — 16:25 reads hour 16.
+
+`latest_leave_at` answers "when must I leave for the session to still fit". It does **not** account for the busyness band worsening at a later arrival.
+
+### Feasibility tiers
+
+```
+robust  : active_period_upper exists AND surplus_upper >= 0
+tight   : not robust, AND active_period_mid exists,
+          AND (surplus_mid >= 0 OR -surplus_mid <= FEASIBILITY_TOLERANCE_MINUTES)
+shorter : otherwise
+```
+
+`robust` requires the **upper-bound arrival to land inside a genuinely open period** and the whole requested session to fit before that period's closing buffer. `tight` is judged on the midpoint plus the named tolerance.
+
+**`FEASIBILITY_TOLERANCE_MINUTES = 15`, provisional**, a named constant in `ranking.js`. Bands are five minutes wide, so the midpoint carries ±2.5. Fifteen minutes is roughly **4-8% of a supported session** — about 8% of a three-hour one and about 4% of a six-hour one. A shortfall worth flagging, not worth relegating. Adjust after real use.
+
+`robust` and `tight` are both ranked, `robust` first. `shorter` drops to the separate group showing what it does give ("4h of 6h — closes 8pm").
+
+This replaces the hard cliff at `surplus >= 0`, which relegated 5h59m while ranking 6h00m despite the boundary being noisier than the arithmetic implied.
+
+---
 
 ## The ranking pipeline
 
-This is the core logic. It is ordered, and **every number is shown separately — never blended into a single score.** A store ranked below another should make it obvious why.
+1. **Hard filter — reachability.** A **missing** `access` entry for the selected origin/mode means the mode isn't viable there. Excluded.
+2. **Hard filter — open on arrival**, at that venue's own arrival, against its active period.
+3. **Feasibility tier** — `robust` before `tight`; `shorter` moves to its own group.
+4. **`seat_confidence` tier**, best first.
+5. **`backup_strength`**, `strong` → `salvage` → `none`.
+6. **Travel burden** (`travel_minutes_mid`), least first.
+7. **`preference`**, best first.
+8. **`surplus_mid`**, most first — final tiebreak only.
 
-1. **Hard filter — reachability.** Is this store reachable from the selected origin by the selected mode? If `access` has no entry for that origin/mode pair, the store is excluded. If the entry is `null` (not yet filled in), show it as "travel unknown" rather than excluding it.
-2. **Hard filter — open on arrival.** Is the store open at the arrival hour on the selected day?
-3. **Rank by `usable_hours`, descending.**
+Feasibility comes first because a venue that can't hold the session isn't a candidate at any confidence. Seat confidence is next because it is the objective. Backup strength ranks above travel because the whole point is minimising the cost of being wrong.
 
-   ```
-   usable_hours = min(closing_time - closing_buffer, arrival + duration) - arrival
-   ```
+A **thin-margin warning** appears on any `tight` venue.
 
-   A store giving 6 of 6 requested hours beats one giving 4 of 6, regardless of how quiet it is. This is the ranking's primary key because it is the constraint that actually kills sessions.
-4. **Then arrival-hour busyness, ascending** — the tiebreaker among stores that give the full duration. Only the *arrival* hour matters: once I have a seat I keep it, so busyness later in the session is irrelevant.
-5. **Then preference score, descending** — my hand-set 1-5 ranking.
-6. **Then travel minutes, ascending.**
+### Venues that cannot be ranked
 
-**Busyness is an enrichment layer, not a prerequisite.** A store with a missing, failed, or stale histogram is still ranked on hours, reachability and preference — flagged in the UI as "no busyness data" rather than dropped. The fragile data source must never be able to make the reliable ones unusable.
+An `access` entry of explicit `null` means *not yet measured*. Without travel time there is no `venue_arrival`, so nothing downstream is computable. These sit in a **separate "travel time unknown" group**, never interleaved.
+
+### Missing busyness never removes a venue
+
+If the histogram is missing or below `MIN_HISTOGRAM_HOURS`, `relative_busyness` is `unknown`, and `seat_confidence` falls back to `baseline_seatability` alone with a **visible lower-evidence warning**.
+
+**It is not treated as `typical`.** Absence of evidence is recorded as absence, not as an average.
+
+### The tool is allowed to say no
+
+When no venue reaches at least `mixed` confidence, the correct output is:
+
+> **No low-risk option found for the requested session.**
+
+...shown with the reasons and the best of a bad set, rather than promoting something weak into Plan A. A confident-looking recommendation built on nothing is worse than an honest refusal.
+
+---
+
+## Plan A and Plan B
+
+The primary result is a **plan**: Plan A, Plan B, and "more alternatives" behind an expander.
+
+### Plan B is recalculated, not just second place
+
+By the time I need it I am standing inside Plan A, later than planned, having already spent the trip.
+
+**Plan B carries two bounds, not one**, because the uncertainty in the first leg does not disappear when you walk out of Plan A — it compounds into the second:
+
+```
+plan_b_departure_mid   = plan_a_arrival_mid   + SEAT_CHECK_BUFFER_MINUTES
+plan_b_departure_upper = plan_a_arrival_upper + SEAT_CHECK_BUFFER_MINUTES
+
+plan_b_arrival_mid     = plan_b_departure_mid   + fallback_travel_minutes_mid
+plan_b_arrival_upper   = plan_b_departure_upper + fallback_travel_minutes_upper
+```
+
+`fallback_travel_minutes_mid` and `fallback_travel_minutes_upper` come from `fallbacks[].travel_band`, using the same midpoint-and-upper-edge derivation as `access[][].band`.
+
+**The upper bound is the sum of two upper bounds.** If the first leg ran to the pessimistic end, you arrive at Plan A late, spend the seat-check buffer, and *then* travel the second leg — also possibly at its pessimistic end. Collapsing this to a single midpoint-derived arrival, as an earlier draft did, silently discarded the original trip's uncertainty exactly where it matters most: deciding whether the rescue option is itself robust.
+
+`SEAT_CHECK_BUFFER_MINUTES` is a **provisional global, default 10** — entering, scanning for a seat, deciding to leave. It applies identically to both bounds; the time spent looking around doesn't depend on how the journey went.
+
+Plan B is then re-evaluated from scratch using **exactly the same machinery as Plan A**:
+
+- reachable from **Plan A**, using `fallbacks[].travel_band` for both of its travel bounds
+- `active_period_mid` resolved at `plan_b_arrival_mid`, and `active_period_upper` resolved **independently** at `plan_b_arrival_upper` — each through the absolute-minutes lookup, on its own arrival date, since either can roll past midnight
+- its own `robust` / `tight` / `shorter` tier, computed by the same rule (`robust` requires `active_period_upper` to exist **and** the session to fit before that period's buffer)
+- `seat_confidence` at the **delayed** hour taken from `plan_b_arrival_mid`, which can cross a band boundary
+- rain and `wet_weather_mode` effects on a leg that may differ from the origin leg
+
+Plan B is not a simplified calculation. Anything less and the fallback would be recommended on weaker evidence than the option it is meant to rescue.
+
+### Plan B viability floor
+
+Both thresholds are **provisional**:
+
+- **`PLAN_B_MIN_SESSION_MINUTES = 90`** — below an hour and a half the trip isn't worth making.
+- **`PLAN_B_MIN_CONFIDENCE = mixed`** — a `poor` or `unknown` fallback is not a plan.
+
+These set the floor for `salvage`. Clearing the floor is **not** the same as satisfying the request: a fallback only reaches `strong` when the requested session actually fits. If nothing clears the floor, `backup_strength` is `none` and the UI says so rather than inventing a fallback.
+
+### Presentation
+
+A `strong` Plan B — the requested session survives:
+
+```
+Plan A
+Starbucks Holland Village
+High seat confidence · full 6h session · 27m from origin
+Baseline: dependable · Adjustment: typical for this venue
+
+If full: Plan B
+Coffee Bean Holland Village
+6-10m from Plan A · medium confidence · full 6h session
+Baseline: usually available · Adjustment: busy for this venue
+```
+
+A `salvage` Plan B — labelled, with the real duration stated:
+
+```
+If full: Plan B (salvage only)
+Coffee Bean Holland Village
+6-10m from Plan A · medium confidence
+Gives 1h40m, not the 6h you asked for — closes 9pm
+```
+
+---
 
 ## Frontend: plain HTML, no framework
 
-**Decision: vanilla HTML/CSS/JS. No React, no Vite, no build step.** A single `index.html`, one stylesheet, two JS modules. Deployable by pushing the files.
+**Vanilla HTML/CSS/JS. No React, no Vite, no npm.**
 
-Rationale: at Phase 1 scope, React and vanilla cost about the same to write. React's advantage only shows up at Phase 3, and it's worth maybe two hours across the whole build. Against that, a dependency tree costs a few hours a year in upkeep and will greet me with build errors the first time I touch it after a long gap. For a tool I open twice a week and want working in March without maintenance, that trade is bad.
+Rationale: at Phase 1 scope React and vanilla cost about the same to write; React's advantage shows up later and is worth maybe two hours. Against that, a dependency tree costs a few hours a year and greets me with build errors after any long gap.
 
-Add a **web app manifest** so this can be added to the iPhone home screen with a proper icon and no Safari chrome. That's ~20 lines and gets most of what "feels like an app" means here. No service worker in v1 — offline caching is a real want if any store is in a basement mall, but stale-cache bugs are miserable to debug and this shouldn't carry that cost until the problem actually appears.
+The generation step is **not** a build system in this sense — a Python script inlining files into a template. No dependency resolution, no bundler, no transpilation.
 
-Not native iOS. Nothing here needs App Store review or a developer account.
+### Primary view
 
-### Primary view: ranked list, not heatmap
+**Controls:** date, leave-at time, session duration, origin, travel mode, raining toggle.
 
-**Controls:** day, arrival time, session duration, origin, travel mode, and a manual "raining" toggle (which disables cycle-mode reachability).
-
-**Result:** the stores that survive the filters, ranked, each row showing `usable_hours` (e.g. "6h of 6h" or "4h — closes 8pm"), arrival-hour busyness, travel minutes, and preference. Tap a store to expand its day curve as a sparkline with the session window shaded.
-
-This replaces the heatmap as the front door. A 10-store × 18-hour grid cannot answer a windowed question — it makes me integrate five columns across ten rows on a phone, standing on a train platform. The per-store curve survives as the drill-down, which is where an hour-by-hour view is actually useful.
+**Result:** Plan A and Plan B, then "More alternatives" expanding to the full ranked list grouped by area — each row showing `seat_confidence` with its two components, feasibility tier, `usable_minutes`, `latest_leave_at`, travel, `backup_strength`, preference, and my own visit history (Phase 2). Tap a venue for its day curve with the session window shaded.
 
 ### Constraints — write vanilla in a React-shaped way
 
-These are non-negotiable. They cost nothing now and make a later React port mechanical rather than a rewrite.
+1. **One state object. Never read state back out of the DOM.**
+2. **One `render(state)` function.**
+3. **Pure data functions in `ranking.js`, importing nothing DOM-related** — ranking, time and date arithmetic, hours resolution, active-period lookup, the busyness band, the `seat_confidence` lookup, feasibility tiers, Plan B recalculation, backup strength, the venues/meta merge, holiday policy, area grouping, the log→venue join.
+4. **CSS in a stylesheet with plain class names.**
 
-1. **One state object. Never read state back out of the DOM.** To know the selected day, read `state.selectedDay`, not a class on a button. Implicit state living in the DOM is the single thing that makes a vanilla→React port painful.
-2. **One `render(state)` function.** Every interaction mutates state then calls `render`. Rebuilding the whole list is inefficient by framework standards and completely irrelevant at 10 rows. It is also exactly React's mental model.
-3. **Pure data functions in `ranking.js`, importing nothing DOM-related** — the ranking pipeline, `usable_hours`, the stores/meta merge, busyness→colour, holiday detection, joining log entries to histogram cells. These are the majority of the real logic and they must port over untouched.
-4. **CSS in a stylesheet with plain class names.** No styles assembled in JS strings.
+`ranking.js` stays a real file specifically so `node --test` can import it; the generator copies its contents into the artifact.
 
-### If React ever happens
-
-Only port if there is a concrete reason — a second view, per-store drill-downs that grow real state, or wanting this as a portfolio piece. Not because it feels more proper. Most side projects never get the rewrite and that is usually correct.
-
-When it does happen, the data files, the scrapers, the CSS, and `ranking.js` all carry over unchanged. Only the DOM code is discarded — roughly 150-250 lines. `state` becomes `useState`, the explicit `render()` call becomes React calling it, the load `fetch` becomes `useEffect`. An afternoon, if constraints 1-4 were followed.
+---
 
 ## Data contracts
 
-The single most important rule: **generated files and hand-maintained files are separate.** The scrapers rewrite `stores.json` wholesale. If hand-typed facts lived in there, every refresh would risk clobbering work that took an evening to enter. They are merged by `id` in the browser at load time.
+**Generated files and hand-maintained files are separate.** `refresh.py` rewrites `venues.json` wholesale, so anything hand-typed there would be destroyed by a refresh. They are merged by `id` at generation time.
 
-### `data/stores.json` — generated, never hand-edited
+### `data/venues.json` — generated, never hand-edited
 
 ```json
 {
-  "generated_at": "2026-08-28T10:00:00+08:00",
-  "timezone": "Asia/Singapore",
-  "stores": [
+  "hours_timezone": "Asia/Singapore",
+  "histogram_timezone": "Asia/Singapore",
+  "venues": [
     {
-      "id": "beauty-world",
+      "id": "starbucks-beauty-world",
       "name": "Starbucks Beauty World Centre",
       "place_id": "ChIJ...",
       "lat": 1.3412,
@@ -136,199 +604,366 @@ The single most important rule: **generated files and hand-maintained files are 
       "business_status": "OPERATIONAL",
       "hours": {
         "source": "places_api",
-        "fetched_at": "2026-08-28T10:00:00+08:00",
-        "mon": {"open": "07:30", "close": "22:00"},
-        "tue": {"open": "07:30", "close": "22:00"},
-        "wed": null
+        "last_attempt_at": "2026-08-29T10:00:00+08:00",
+        "last_success_at": "2026-08-29T10:00:00+08:00",
+        "status": "ok",
+        "overrides_valid_through": "2026-09-05",
+        "regular_hours": {
+          "mon": {"state": "known", "periods": [{"open": 450, "close": 1320}]},
+          "tue": {"state": "known", "periods": [{"open": 450, "close": 1500}]},
+          "wed": {"state": "closed", "periods": []},
+          "thu": {"state": "unknown", "periods": []}
+        },
+        "date_overrides": {
+          "2026-08-31": {"state": "known", "periods": [{"open": 600, "close": 1080}]},
+          "2026-09-01": {"state": "closed", "periods": []}
+        }
       },
       "histogram": {
         "source": "serpapi",
-        "fetched_at": "2026-08-28T10:00:00+08:00",
-        "mon": [{"hour": 7, "busyness": 19}, {"hour": 8, "busyness": 34}],
-        "tue": [],
-        "wed": [], "thu": [], "fri": [], "sat": [], "sun": []
+        "last_attempt_at": "2026-08-29T10:00:00+08:00",
+        "last_success_at": "2026-07-29T10:00:00+08:00",
+        "status": "stale",
+        "days": {
+          "mon": [{"hour": 7, "busyness": 19}, {"hour": 8, "busyness": 34}],
+          "tue": []
+        }
       }
     }
   ]
 }
 ```
 
-- `busyness` is 0-100, normalised to **that store's own peak**. Not comparable across stores without calibration. This is the single most important thing to get right in the UI copy.
-- `hours.<day>` of `null` means closed that day. Hours absent from the histogram array mean no data for that hour, which is not the same as closed — `hours` is authoritative for open/closed, never the histogram.
-- `business_status` catches permanently-closed or relocated stores. A non-`OPERATIONAL` store must be surfaced loudly, not silently ranked.
-- `histogram` may be absent or empty for a store. That is a degraded state, not an error — see the ranking pipeline.
+**Hours state:** `known` (periods authoritative) · `closed` (confirmed, periods empty) · `unknown` (source silent, fetch failed, or beyond the override horizon on a known holiday — **never treated as closed**).
 
-### `data/stores_meta.json` — hand-maintained, never written by any script
+`open`/`close` are **integer minutes from local midnight of the period's start date**. `close > 1440` means after-midnight (`{"open": 450, "close": 1500}` = 07:30 to 01:00 next day). A 24-hour venue is `{"open": 0, "close": 1440}`.
+
+`date_overrides` holds Google's date-specific `currentOpeningHours`; `overrides_valid_through` records how far that data reaches.
+
+**Timezones are recorded separately** for hours and histogram — different sources, may not agree. Phase 0 confirms each independently.
+
+**Freshness is per source.** No top-level `generated_at`.
+
+| `status` | Meaning |
+| --- | --- |
+| `ok` | this run fetched successfully; data is from `last_success_at` = `last_attempt_at` |
+| `stale` | this run failed; showing **last-known-good** from an earlier `last_success_at` |
+| `failed` | this run failed and there is **no** last-known-good to fall back on |
+
+`business_status` catches permanently-closed or relocated venues — surfaced loudly, never silently ranked.
+
+### `data/venues_meta.json` — hand-maintained, never written by any script
 
 ```json
 {
-  "beauty-world": {
-    "preference": 4,
-    "closing_buffer_minutes": 30,
+  "starbucks-beauty-world": {
+    "brand": "starbucks",
+    "venue_type": "mall_cafe",
+    "area": "Beauty World",
+    "baseline_seatability": "usually_available",
+    "preference": 3,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown",
     "access": {
-      "home": {"cycle": 18, "transit": 25},
-      "work": {"transit": 12, "walk": null}
+      "origin_a": {"cycle": {"rank": 2, "band": "15-20m"},
+                   "transit": {"rank": 4, "band": "25-30m"}},
+      "origin_b": {"transit": {"rank": 1, "band": "10-15m"},
+                   "walk": null}
     },
+    "wet_weather_mode": {"origin_a": {"cycle": "transit"}},
+    "fallbacks": [
+      {"venue_id": "coffee-bean-beauty-world", "mode": "walk", "travel_band": "5-10m"}
+    ],
     "attributes": {
       "seating": "communal tables + a few armchairs",
       "table_size": "large",
       "wifi": "good",
       "laptop_policy": "no restrictions seen"
     },
-    "seats_est": 45,
     "notes": ""
   }
 }
 ```
 
-- `preference` — 1-5, my own ranking, independent of any scraped metric.
-- `closing_buffer_minutes` — how long before official closing the store stops being usable (staff stacking chairs, lights up). Default 30. "Open till 10pm" is not "study till 10pm".
-- `access` — travel minutes per origin and mode. Four real combinations: `home`/`cycle`, `home`/`transit`, `work`/`transit`, `work`/`walk`. A **missing** key means that mode isn't viable for that store. An explicit **`null`** means not yet measured — shown as "travel unknown", not excluded. 10 stores × 4 combos is 40 numbers; fill them in incrementally rather than in one sitting.
-- `attributes` — the things no data source has and that matter more than a few busyness points across six hours. Structured fields, not a freeform string, so the UI can show and filter them.
+- **`brand`**, **`venue_type`** and **`area`** live here, not in `venues.json`, because all three are hand-assigned and a refresh would clobber them. (The Places API returns no clean neighbourhood field, so `area` is a judgement call, not fetched data.) They are merged onto the venue object at generation time.
+- **`baseline_seatability`** — start every venue at `unknown` and only promote from real experience. Guessing corrupts the one cross-venue seat signal that exists.
+- **`preference`** — strict total order, no ties. **Study quality only.**
+- **`closing_buffer_minutes`** — `null` means use `CLOSING_BUFFER_DEFAULT_MINUTES` (30), a named constant in `ranking.js`. The resolved value is what formulas refer to as `closing_buffer`.
+- **`holiday_policy`** — `unknown` (default) or `substitute_sun`. See `holidays.json` below.
+- **`access`** — ordinal rank plus a coarse band, never exact minutes. **Missing** mode key = not viable. Explicit **`null`** = not yet measured.
+- **`wet_weather_mode`** — which mode replaces which when the rain toggle is on, per origin. Without this the toggle's effect is undefined; with it, disabling `cycle` for `origin_a` explicitly selects `transit`, and the resulting later arrival is a visible consequence rather than a silent reorder. A mode with no wet-weather substitute is simply unavailable in the rain.
+- **`fallbacks`** — hand-picked links to plausible nearby venues only. Not a matrix; most venues will have zero, one or two.
+
+**Privacy: bands, not exact minutes.** This file is committed to a public repo. Exact travel times from `home` and `work` to venues whose coordinates are published would trilaterate both origins. Rank plus a five-minute band gives the pipeline what it consumes — ordering, a midpoint, and an upper bound — while widening the inference considerably. Origins are `origin_a` / `origin_b`; the mapping is not committed. A reduction in precision, not a guarantee, accepted deliberately.
 
 ### `data/holidays.json` — hand-maintained
 
-A list of Singapore public holiday dates. On these days **both** the day-of-week histogram and the regular opening hours are likely wrong (malls and stores run reduced hours). The app shows a warning banner and does not attempt to model the difference.
+```json
+{
+  "2026-01-01": {"name": "New Year's Day"},
+  "2026-02-17": {"name": "Chinese New Year"},
+  "2026-08-09": {"name": "National Day"}
+}
+```
+
+Dates only. **The busyness substitution rule is per venue**, in `venues_meta.json`'s `holiday_policy`:
+
+- **`unknown`** (default) — on a holiday, `relative_busyness` is `unknown` and confidence falls back to baseline with the lower-evidence warning.
+- **`substitute_sun`** — use that venue's Sunday curve, flagged in the UI.
+
+A global Sunday substitution was the earlier rule. It is plausible for mall cafés and wrong for office cafés, kiosks and independents — and multi-brand scope makes a global rule weaker still. `unknown` is the honest default; substitution is an explicit per-venue claim.
+
+Hours are handled separately, by the resolution order above.
 
 ### `data/seatlog.csv` — committed, deliberately coarsened
 
 ```csv
-store_id,day_of_week,hour,outcome
-beauty-world,thu,14,seat
-holland-v,fri,10,no_seat
+venue_id,day_of_week,hour,outcome,histogram_busyness,histogram_fetched_at
+starbucks-beauty-world,thu,14,seat,42,2026-08-28T10:00:00+08:00
+coffee-bean-holland-v,fri,10,no_seat,71,2026-08-28T10:00:00+08:00
 ```
 
-- `outcome` — `seat` | `no_seat`. Two values only. Power outlets don't matter for how I work, so the three-way split isn't worth the extra logging friction.
-- **The calendar date is deliberately dropped.** The repo is public, and a dated log of which café I was in at 2:32pm is a movement history. Calibration only ever consumes `(store, day_of_week, hour, outcome)`, so nothing analytical is lost. The raw dated CSV stays in iCloud Drive and is gitignored; `make refresh` coarsens it on the way into the repo.
-- Append-only. Never rewrite the raw iCloud file from code.
+- `outcome` — `seat` | `no_seat`. Two values.
+- `histogram_busyness` / `histogram_fetched_at` — the busyness value **in effect at visit time**, captured during coarsening. See the refresh order below — this only holds if coarsening runs *before* the histogram is replaced.
+- **Calendar date deliberately dropped** — the repo is public and a dated café log is a movement history.
 
-Entry must be **two taps**: pick store from a list of 10, pick outcome from a list of 2. Timestamp is automatic. If it takes more than two taps I will stop logging within a week and the whole calibration idea dies.
+**What dropping the date costs — corrected.** An earlier version said "visit ordering is permanently unavailable". That was wrong: the file is append-only and rows stay in chronological order, so **relative ordering survives** — "last visit" is answerable, and so is "the last three visits here". What is genuinely lost is **absolute dates, intervals between visits, and seasonality**. The loss is real but narrower than previously stated.
+
+Raw dated CSV stays in iCloud Drive, gitignored, append-only.
+
+Entry must be **two taps**: pick venue, pick outcome.
 
 ### `data/calibration.json`
 
-Written by `analysis/calibrate.py`. Shape TBD until Phase 3 — see below.
+Written by `analysis/calibrate.py`. Shape TBD until Phase 3.
 
-## Fetch layer
+---
 
-Two independent interfaces, because they have different sources, different reliability, and different terms-of-service standing:
+## Fetch layer and refresh orchestration
 
 ```python
 fetch_hours(place_id) -> Hours          # official source, reliable
 fetch_busyness(place_id) -> Histogram   # SerpApi, fragile
 ```
 
-**They must fail independently.** A busyness failure still writes hours; the app degrades to hours-and-preference ranking. Only a total failure of both leaves the previous `stores.json` untouched. Per-store degradation is acceptable and must be flagged in the output; a partial file that silently looks complete is not.
+**Neither fetcher writes `venues.json`.** `build/refresh.py` solely owns it, and **order matters**:
 
-### Hours source — decided in Phase 0
+1. **Coarsen new raw visits from iCloud first**, joining each against the **currently deployed** histogram — the one about to be replaced. This is the only step that can capture "busyness in effect at visit time"; running it after the fetch would stamp every new visit with the *new* histogram value and silently destroy the lineage the Phase 3 join depends on.
+2. Call both fetch interfaces for all venues, catching failures per source and per venue.
+3. **Validate** against the contract.
+4. **Merge** with existing `venues.json`, retaining **last-known-good** for any failed source.
+5. Record `last_attempt_at`, `last_success_at`, `status` per source.
+6. Write to a temp file and **replace atomically** only after validation passes.
+7. Regenerate `web/index.html` — inline the data (unicode-escaping every `<`), `ranking.js` then `app.js` into one module script with `app.js`'s import stripped, and `style.css`.
 
-Two candidates, both authoritative. Do not take hours from the busyness scrape or any third-party aggregator.
+A busyness failure still refreshes hours, and vice versa. Degradation must be visible.
 
-1. **Starbucks SG's own store locator** (`starbucks.com.sg/stores/`). The operator's own data. The page is a JS app and the store data loads from an endpoint not visible in the HTML — finding it needs one DevTools Network-tab session. Free, no API key, no billing account.
-2. **Google Places API Place Details** — returns `regularOpeningHours`, `currentOpeningHours` (which carries holiday overrides for the next 7 days), and `businessStatus`. This is an official API and ToS-clean. **Open cost question:** the opening-hours fields are billed under the *Enterprise* SKU; the 10,000-free-calls figure found during planning applies to *Essentials*, and no free Enterprise allowance was confirmed. Worst case at ~10 calls/month is around $0.25/month, but it requires a GCP billing account. **Check the live pricing page before committing to this option.**
+**A venue vanishing from a source is not a closure.** That is `status: failed` (or `stale`) with last-known-good retained and a loud warning. Only an explicit `businessStatus` may mark a venue closed.
 
-Try (1) first. It's free, needs no billing relationship, and comes from the operator rather than a third party.
+### Hours source — Places API, chosen for multi-brand
+
+**Google Places API Place Details is the primary hours source.** It returns `regularOpeningHours`, `currentOpeningHours` (date-specific, ~7-day horizon), and `businessStatus`.
+
+Multi-brand scope drove this:
+
+- **One consistent interface** — identity, hours, `businessStatus` — across Starbucks, Coffee Bean, Tim Hortons and independents alike.
+- **Brand-specific locators need a separate integration per chain**, each undocumented, each breaking on its own schedule, none providing a closure signal. Four brands would mean four fragile scrapers instead of one supported API.
+
+**Cost, verified:** opening-hours fields are billed under the **Enterprise** SKU, free cap **1,000 calls/SKU/month**. At a few dozen calls/month this is **$0**. Overage $20/1,000. A GCP billing account and API key are required — the only friction, worth paying once rather than maintaining per-brand scrapers.
+
+The Starbucks SG locator remains a **timeboxed cross-check experiment only**, never an architectural input, and not a prerequisite for anything.
 
 ### Busyness source
 
-**SerpApi Google Maps endpoint** — returns `popular_times` as structured JSON. Free tier confirmed at **250 searches/month** on the live pricing page. At 10 stores refreshed monthly this is ~10 calls/month, comfortably inside it.
+**SerpApi Google Maps endpoint** — `popular_times` as structured JSON. Free tier **250 searches/month**; comfortably inside at this volume.
 
-Fallbacks, only if SerpApi's `popular_times` field turns out to be missing or paywalled during Phase 0:
+Fallbacks only if `popular_times` proves missing or paywalled: the `populartimes` / `LivePopularTimes` libraries (unstable, open legal-concern issue) or the Apify actor.
 
-- **`populartimes` / `LivePopularTimes` Python libraries** — free, but scrape Google Maps HTML directly. The project's own README acknowledges instability ("As Google Maps is constantly updated this library can be unstable") and carries an open legal-concern issue. Fallback only.
-- **Apify Google Maps Popular Times actor** — managed, has a free tier.
+Google's Places API does **not** expose popular times. It does expose opening hours. Two different questions.
 
-Note: Google's Places API does **not** expose popular times or busyness. Do not waste time looking for the field. (It does expose opening hours — those are two different questions.)
+Terms-of-service note: automated scraping of Google Maps is against Google's ToS. Personal tool, low volume; not to be made commercial in this form.
 
-Terms-of-service note: automated scraping of Google Maps is against Google's ToS. This is a personal tool at ~10 requests a month, but it should not be made commercial in this form. The repo being public is fine; publishing this as a product is not.
+---
 
 ## Phases
 
 ### Phase 0 — Verify assumptions before building
 
-Do not skip this. Four things need checking against reality first:
+**Blocked only on venue names and brands** — nothing else. Everything else in the table below is Phase 0's job to produce.
 
-1. **Resolve the 10 stores to Google place IDs.** Store list is at the bottom of this file — fill in before starting.
-2. **Decide the hours source.** Try the Starbucks SG locator endpoint first; fall back to Places API. Record the decision and the reason in `decisions.md`.
-3. **Confirm the histogram timezone.** Pull one store, compare the returned curve against what the Google Maps app shows on my phone at a known time. If the hours are offset, find the offset and handle it explicitly rather than assuming SGT.
-4. **Confirm the busyness source works.** SerpApi actually returns `popular_times` for a Singapore Starbucks.
+1. **Resolve each supplied name + brand to a Google Place ID**, then assign a stable `venue_id`, and record `venue_type` and `area` in `venues_meta.json`.
+2. **Confirm the Places API path works for a non-Starbucks brand** as well as Starbucks — the multi-brand claim rests on one interface covering all of them.
+3. **Confirm `currentOpeningHours` returns date-specific overrides**, and record the real horizon that `overrides_valid_through` will carry.
+4. **Confirm both timezones independently.** `hours_timezone` and `histogram_timezone` are separate fields because the sources may differ.
+5. **Confirm the busyness source works** for venues of each brand.
+6. **Check real hours shapes.** Any after-midnight closing, 24-hour operation, or split periods? Determines whether the periods array and previous-date lookup earn their complexity.
+7. **Measure the Popular Times spread and set `N` and `P`.** Per venue and weekday: max−min, IQR, distance from median to max, and **hourly coverage** (to validate or revise `MIN_HISTOGRAM_HOURS = 6`). Record `N` and `P` in `decisions.md` with the evidence.
 
-Acceptance: one store's **hours and histogram** both printed to console, visually matching the Maps app.
+   Also check for repeatable troughs around `2N` below median — that, and only that, would justify `very_quiet` later.
 
-### Phase 1 — Fetchers + ranked list
+   A curve inspected while planning ran roughly 60-100% of peak all day with only a mild evening peak. **If the median venue's range is under ~20 points, banding will barely discriminate** — most venues will read `typical` and `baseline_seatability` will carry the ranking. A legitimate finding to record, not a problem to fix by shrinking `N` until the bands look busy.
 
-Both fetchers write `stores.json`. `stores_meta.json` is filled in by hand — at minimum `preference`, `closing_buffer_minutes`, and enough of `access` to cover the origins I actually use.
+**Acceptance:** one venue's hours and histogram printed and matching the Maps app; both timezones confirmed; date-override horizon recorded; a spread and coverage table across all venues; proposed `N` and `P` with justification.
 
-Web app implements the ranking pipeline and the ranked-list view described above.
+**This measures the histogram's shape. It does not validate that Popular Times predicts seat availability** — nothing in Phase 0 can establish that, and no Phase 0 output should be read as evidence for it.
+
+### Phase 1 — Fetchers, orchestrator, Plan A / Plan B
+
+`refresh.py` orchestrates coarsening, both fetchers, and generation. `venues_meta.json` is filled in by hand.
 
 Requirements:
-- Must be readable on an iPhone 15 Pro Max in portrait.
-- Show `generated_at` prominently so I know how stale the data is.
-- Flag stores with missing busyness data rather than hiding them.
-- Flag non-`OPERATIONAL` stores loudly.
-- Show the public-holiday warning banner when the selected day is in `holidays.json`.
+- Readable on an iPhone 15 Pro Max in portrait.
+- Date picker, not a weekday picker.
+- Plan A and Plan B, with Plan B recalculated from Plan A's delayed arrival using the same active-period and dual-bound machinery, and a `salvage` fallback labelled as such with its actual duration stated.
+- `seat_confidence` shown **with its baseline and adjustment components**.
+- Feasibility tier shown; thin-margin warning on `tight`.
+- Per-source freshness with `ok` / `stale` / `failed` distinguished.
+- Missing busyness falls back to baseline with a lower-evidence warning — **never treated as `typical`**.
+- "No low-risk option found for the requested session" when nothing reaches `mixed`.
+- `shorter` venues in their own group; unrankable venues in theirs.
+- `unknown` hours distinct from `closed`; non-`OPERATIONAL` venues flagged loudly.
+- Holiday policy applied per venue and stated in the UI.
+- Alternatives grouped by area; `latest_leave_at` shown.
 
-Acceptance: I can open it on my phone at 4pm on a workday and get a usable answer to "I want six hours, I'm at work" without thinking hard.
+**Acceptance, in two parts** — because every venue starts at `baseline_seatability: unknown`, which correctly yields no Plan A at all:
 
-**Phase 1 is independently useful.** If phases 2 and 3 never happen, this was still worth building.
+1. **With no baselines assessed**, the app returns "No low-risk option found for the requested session", showing the candidates and why each is unknown. This is the correct behaviour, not a failure.
+2. **Once at least one venue has an assessed baseline**, the app produces a Plan A, and a Plan B where a viable fallback exists, and I can see why each was chosen — without thinking hard.
+
+**Phase 1 is independently useful.** If Phases 2 and 3 never happen, this was still worth building.
 
 ### Phase 2 — Seat logging
 
-- Apple Shortcut: two-tap entry (10 stores, 2 outcomes), appends to the raw CSV in iCloud Drive.
-- `make refresh` coarsens the iCloud CSV into `data/seatlog.csv` (dropping the date) and commits.
-- Web app shows past visits overlaid on the per-store drill-down curve, coloured by outcome.
+- Apple Shortcut: two-tap entry, appends to the raw CSV in iCloud Drive.
+- `make refresh` coarsens **before fetching** (see refresh order), dropping the date and capturing `histogram_busyness`. It does **not** commit.
+- **The app shows per-venue history from the first entry** — "been here 3×, seat 3/3", "last visit: no seat, Fri 10am". Ordering comes from CSV row order, which is chronological.
 
-Acceptance: logging a visit takes under five seconds standing at the counter.
+Phase 3 needs volume that is months away; if the log pays out nothing until then, logging becomes an unrewarded chore and stops, taking Phase 3 with it. Raw counts are not a model but they are useful at n=1 — and they are what will eventually let `baseline_seatability` be checked against reality rather than memory.
+
+**Acceptance:** logging takes under five seconds at the counter, and the result is visible on the next refresh.
 
 ### Phase 3 — Calibration
 
-Join each log entry to the busyness value for its store/day/hour. Then estimate P(seat) as a function of busyness, per store.
+Target:
 
-**Do not fit a model until there are enough observations.** Below roughly 30 entries, show the raw log and nothing else. At roughly two visits a week, **30 observations is about four months away** — plan accordingly, and don't let Phase 3's absence make Phases 1-2 feel unfinished.
+```
+P(seat | venue, arrival conditions, personal history)
+```
 
-When there is enough data, start with the simplest thing that works — empirical rates by busyness bucket, or a pooled logistic regression with per-store intercepts. A separate model per store will overfit badly at this sample size; pool first.
+Join each log entry to **its own recorded `histogram_busyness`**, never the current histogram.
 
-Whatever the model, the UI must show **uncertainty**, not a bare probability. Ten visits is not a probability.
+Candidate inputs: brand · `venue_type` · venue-level effect · relative Popular Times signal · weekday/weekend · personal observed outcomes.
+
+**Use partial pooling.** A separate model per venue will overfit badly at realistic sample sizes; pool across venues with venue-level effects so venues with little data shrink toward the population.
+
+**`no_seat` observations are the most valuable rows in the dataset** — including walk-bys and abandoned attempts. Without them, selection bias concentrates the data in venues already believed safe.
+
+Show **uncertainty**, never a bare probability. This is where cross-venue comparability becomes real and where `baseline_seatability` gets validated against evidence.
+
+**Do not design or implement this model now.**
+
+---
 
 ## Testing
 
-Unit tests for the pure functions in `ranking.js` only — `usable_hours` (including the closing-buffer and past-closing edge cases), the ranking order, the stores/meta merge, holiday detection, and the log/histogram join. These are where the real logic lives and where a silent bug would be invisible.
+Deliberately small. No mocking frameworks, no live-network tests.
 
-The fetchers and `calibrate.py` are manually-run solo scripts. They get no test scaffolding beyond failing loudly.
+**`tests/js/` — `node --test`**, importing `ranking.js` directly from source:
+- **`resolve_hours(venue, target_date)` as a pure function of any date** — a date override winning, the `overrides_valid_through` horizon boundary, a holiday beyond the horizon yielding `unknown`, a holiday *inside* the horizon with no override resolving to regular hours, and `selected_weekday` derived in `Asia/Singapore`
+- **`resolve_hours` applied to the previous date too** — a date override on the previous day changing which after-midnight period exists, and a previous day resolving `unknown` making the arrival `unknown` rather than closed
+- **absolute-minute conversion** — that a Tuesday 00:30 arrival matches a Monday `{open: 450, close: 1500}` period, the case that motivated the coordinate system
+- **active-period lookup** — arrival inside a period, in the gap between split periods, before opening, after closing; previous-date after-midnight periods; travel crossing midnight; the exact `open <= arrival < close` boundary at both ends
+- **independent mid/upper resolution** — a case where `arrival_mid` and `arrival_upper` fall in *different* periods, and one where `arrival_upper` falls in **no** period (which must fail `robust`, not read as zero shortfall)
+- `usable_minutes` / `surplus_mid` / `surplus_upper` / `latest_leave_at`, including closing-buffer, past-closing, zero and negative cases
+- feasibility tiers — `robust` / `tight` / `shorter` boundaries, and the `FEASIBILITY_TOLERANCE_MINUTES` edge
+- per-venue arrival derivation and hour flooring
+- the busyness band — `peak` over `busy`, `N`/`P` boundaries, a flat curve landing wholly in `typical`, `unknown` below `MIN_HISTOGRAM_HOURS`
+- the `seat_confidence` lookup across **every** baseline × band combination, clamping at both ends, `unknown` propagation
+- **Plan B's dual-bound arrival chain** — that `plan_b_arrival_upper` derives from `plan_a_arrival_upper` (not from the midpoint), that both bounds resolve their own `active_period` independently, and a case where `plan_b_arrival_upper` rolls past midnight onto a different date than `plan_b_arrival_mid`
+- **`backup_strength` three-way** — `strong` only when the requested session fits at the fallback; `salvage` when the floor is cleared but the session does not fit; `none` below the floor, below `PLAN_B_MIN_CONFIDENCE`, or when a nearby fallback is closed by delayed arrival
+- ranking order, the `shorter` split, and the "no low-risk option" condition
+- venues/meta merge, `closing_buffer_minutes` default, per-venue `holiday_policy`, `wet_weather_mode` substitution
+- area grouping, the log→venue join, and "last visit" resolved from row order
+
+**`tests/python/` — pytest, fixture-based**, using small trimmed real responses:
+- hours parsing — cross-midnight, 24-hour, split periods, missing fields, date overrides
+- popular-times parsing
+- `unknown` vs `closed` never conflated
+- independent source failure; last-known-good retention; `ok`/`stale`/`failed` assignment
+- **coarsening runs before the fetch** — a new visit is stamped with the pre-fetch histogram value
+- **JSON unicode-escaping** — a `notes` value containing `</script>` must not break the generated page, and must survive round-trip unchanged when parsed back out
+
+**Generated-artifact acceptance — asserted against the real `index.html`, not assumed:**
+
+- **no external JavaScript or CSS references** — zero `<script src=`, zero `<link rel="stylesheet"`
+- **exactly one external reference in total**, the optional manifest, and the page renders and functions correctly when it is removed
+- **no unresolved local imports** — no `from "./…"` or `from './…'` survives in the emitted module
+- **no `fetch()` for bundled data** — the inlined JSON is read from the DOM, never requested
+- **only one non-inlined asset**, the manifest, and it is referenced relatively
+- **all paths relative** — no absolute `/…` href or src anywhere
+- **the file opens and renders correctly from `file://`**, which is the real test of every point above
+- **no top-level name collisions** between `ranking.js` and `app.js`, since concatenation puts them in one module scope
+
+Anything touching the network is excluded.
+
+**Manual acceptance checklist:**
+- [ ] Loads on iPhone 15 Pro Max in Safari, portrait, no horizontal scroll
+- [ ] "Add to Home Screen" works from the **hosted** URL (the manifest is not inlined)
+- [ ] The AirDropped single file opens from `file://` and works fully offline
+- [ ] Plan A / Plan B readable one-handed without zooming
+- [ ] Seat-confidence components visible without tapping through
+- [ ] Per-source staleness visible without hunting
+- [ ] Holiday handling stated in the UI
+
+---
 
 ## Known problems to design around
 
-**Busyness is not seat availability.** Google counts everyone in the geofence, including the takeaway queue. A high-throughput store can read 70% and still have empty tables. This is the entire reason the seat log exists — say so in the UI so I remember why I'm logging.
+**Popular Times is not seat availability.** It counts everyone in the geofence including the takeaway queue. A high-throughput venue can read 70% with every table free; a quiet one can read 30% with six students camped for five hours.
 
-**"Open till 10pm" is not "study till 10pm".** Staff start stacking chairs and dimming lights well before closing. That's what `closing_buffer_minutes` is for, and why `usable_hours` subtracts it rather than using raw closing time.
+**The band is within-venue only.** `quiet` at a chronically packed venue can be worse than `busy` at a usually-empty one.
 
-**Public holidays break both data sources at once.** Singapore has around eleven, and on those days the day-of-week histogram is wrong *and* the regular opening hours are wrong. `currentOpeningHours` from the Places API only covers seven days ahead, so it can't be relied on for planning further out. Show a warning banner from `holidays.json`; don't try to model it.
+**"Open till 10pm" is not "study till 10pm".** That is `closing_buffer_minutes`.
 
-**Rain kills the cycling option.** Live weather is explicitly out of scope, so this is a manual toggle that disables cycle-mode reachability. Five lines, no dependency.
+**The rain toggle changes arrival time.** `wet_weather_mode` makes the substitution explicit, but the later arrival can shift the busyness band, downgrade the feasibility tier, and change Plan B's leg. Correct behaviour — but it must be *visible*, not a silent reorder.
 
-**Selection bias in the log.** I will only log when I actually go, and I will go at times I already believe are good. So the log will cluster in low-busyness cells and say almost nothing about high-busyness ones — exactly the cells I most need to predict. Two mitigations worth building in:
-- Let me log a `no_seat` outcome for a store I walked past or gave up on, not just ones I sat down in. At ~2 visits a week every extra observation matters.
-- Surface which store/time cells have zero observations, so I know where the model is guessing.
+**Public holidays are handled per venue.** Default `unknown` rather than a global Sunday substitution, which is plausible for mall cafés and wrong for kiosks and independents.
 
-**Normalisation across stores.** A 60% reading at a 90-seat store and a 20-seat store mean completely different things. Until `seats_est` is filled in by hand, the ranking should not imply cross-store comparability of raw busyness — it's a tiebreaker, and the UI should read that way.
+**Selection bias in the log.** I only log when I go, and I go where I expect a seat. Mitigations: log `no_seat` for venues walked past or abandoned, and surface which venue/time cells have zero observations.
 
-**Seasonality is washed out.** The histogram is a rolling multi-month average, so exam periods and school holidays — exactly when study spots get scarce — are invisible in it. Nothing to fix here; just don't trust the curve during those weeks. UI caveat only.
+**Correlated failure between neighbours.** Nearby venues share crowds, weather and events — which is why `backup_strength` is qualitative and venue probabilities are never multiplied.
 
-**Store closure drift.** A store closes or relocates and the app happily ranks it first. `business_status` catches this if hours come from the Places API; if hours come from the Starbucks locator, a store vanishing from the locator response must fail loudly rather than silently keeping stale data.
+**Seasonality is washed out and unrecoverable.** The histogram is a multi-month rolling average, and dropping calendar dates means the log can't recover exam periods either. (Visit *ordering* does survive; absolute dates do not.)
 
-**Fetcher fragility.** Google changes its markup. Both fetch layers sit behind a single interface each so a source can be swapped without touching anything else.
+**Venue closure drift.** A venue vanishing from a source is a fetch failure, not a closure — so a real closure could persist as stale data if the source simply stops listing it.
+
+**`baseline_seatability` is memory, not measurement, until Phase 3.** Subject to recency bias and the same selection bias as the log. Start venues at `unknown`.
+
+---
 
 ## Build notes
 
-**Model:** run Claude Code on `opusplan` — Opus during plan mode for architecture and reasoning, Sonnet for execution. Most of what remains is mechanical and Sonnet-appropriate. Two places to reach for Opus explicitly: Phase 0 debugging, where a timezone or parse bug will look plausible while being wrong, and the Phase 3 pooling decision, which is a statistical judgement call on thin data. Note that `opusplan` only engages Opus when plan mode is actually active — entering plan mode at the start of each phase is the point.
+**Model:** run Claude Code on `opusplan`. Reach for Opus explicitly at Phase 0 debugging (a timezone, date-boundary or parse bug will look plausible while being wrong) and at the Phase 3 pooling decision.
 
-**Watch for the tipping point.** If Phase 3 turns out to need more interactive state than expected — filtering, comparison mode, per-store drill-downs that grow — hand-rolled state will start to fight back. That is the signal to port to React, not to push through. Constraints 1-4 exist so that door stays cheap to open.
+**`make refresh` does not commit.** Inspecting the diff, committing and pushing stay separate manual actions.
 
-## Store list
+**Watch for the tipping point.** If the UI needs materially more interactive state than expected, that is the signal to port to React rather than push through.
 
-Fill in before Phase 0. Names as they appear in Google Maps. `access` and `preference` go in `stores_meta.json`, not here — this table is just for resolving identity.
+## Venue list
 
-| # | Store name | Short id | Place ID | Notes |
-|---|-----------|----------|----------|-------|
+**You supply two columns. Phase 0 fills the rest.**
+
+| Column | Who | Notes |
+| --- | --- | --- |
+| **Venue name** | **← you** | Exactly as it appears in Google Maps |
+| **Brand** | **← you** | `starbucks`, `coffee_bean`, `tim_hortons`, `independent`, … |
+| `venue_id` | Phase 0 | Stable slug, assigned once and never changed |
+| Place ID | Phase 0 | Resolved from name + brand via the Places API |
+
+Ten rows is a starting size, not a limit — with four brands in scope this will likely grow. Add rows as needed.
+
+| # | Venue name **← you** | Brand **← you** | `venue_id` *(Phase 0)* | Place ID *(Phase 0)* |
+|---|---------------------|-----------------|------------------------|----------------------|
 | 1 | | | | |
 | 2 | | | | |
 | 3 | | | | |
@@ -340,10 +975,19 @@ Fill in before Phase 0. Names as they appear in Google Maps. `access` and `prefe
 | 9 | | | | |
 | 10 | | | | |
 
+`venue_type`, `area`, `baseline_seatability`, `preference`, `access`, `fallbacks`, `holiday_policy` and `wet_weather_mode` all live in `venues_meta.json`, not here. `venue_type` and `area` are recorded during Phase 0; the judgement fields (`baseline_seatability`, `preference`) are filled in by hand during Phase 1, and `baseline_seatability` starts at `unknown` for every venue.
+
 ## Open questions
 
-- Which hours source wins — the Starbucks SG locator endpoint, or Places API? (Phase 0)
-- If Places API: is there a free allowance for the Enterprise SKU that carries the opening-hours fields, or is this a paid-but-trivial cost? (Phase 0, check live pricing)
-- Does the histogram come back in SGT or UTC? (Phase 0)
-- Do all 10 stores actually have popular times data? Smaller or newer outlets may not. The app must degrade gracefully for these — that's already in the ranking pipeline, but it needs to be confirmed as a real case rather than a hypothetical.
-- Is a per-store `closing_buffer_minutes` actually needed, or is a single global default enough? Start with 30 everywhere and only add per-store overrides when a store proves different.
+- **What are `N` and `P`?** Unset until Phase 0 measures real curves. If the median venue's range is under ~20 points, banding will barely discriminate and `baseline_seatability` carries the ranking — record that as a finding.
+- **Is `MIN_HISTOGRAM_HOURS = 6` right?** Provisional; Phase 0 reports real coverage.
+- **Is `FEASIBILITY_TOLERANCE_MINUTES = 15` right?** Provisional. Too large and `tight` swallows genuine shortfalls; too small and it collapses back to the hard cliff.
+- **Are `PLAN_B_MIN_SESSION_MINUTES = 90` and `PLAN_B_MIN_CONFIDENCE = mixed` right?** Provisional. The first few times Plan A actually fails will show whether 90 minutes is worth the trip.
+- **Is `SEAT_CHECK_BUFFER_MINUTES = 10` right?** Provisional.
+- **Does `very_quiet` earn a place?** Only if Phase 0 shows repeatable troughs around `2N` below median.
+- **Do `hours_timezone` and `histogram_timezone` agree?** Confirm each independently.
+- Do any venues close after midnight, run 24 hours, or have split periods? Determines whether the periods array and previous-date lookup earn their complexity.
+- Do all venues have Popular Times data? Independents are the most likely to be missing it entirely.
+- Is a per-venue `closing_buffer_minutes` ever needed, or does the global 30 hold?
+- **How many fallback links are actually needed**, and does the hand-maintained set stay maintainable as brands are added?
+- **How many venues in total?** The table starts at ten; multi-brand scope may push it well beyond that, which affects both API volume and how much hand-maintained meta is realistic to keep current.
