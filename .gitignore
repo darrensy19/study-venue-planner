@@ -13,6 +13,13 @@ node_modules/
 data/raw/
 data/seatlog.raw.csv
 
+# Phase 0 raw API responses. Bulky, and regenerable from the Place IDs, so they
+# are not committed. Kept locally because Phase 1's parser tests are built from
+# trimmed copies of these exact responses. The reports and summaries alongside
+# them (data/phase0/*.md, *.json, place_ids.csv) ARE committed — they are the
+# Phase 0 record.
+data/phase0/raw/
+
 # Local Claude Code tooling — development environment, not planner product code.
 # Plugin registrations and vendored third-party skill content are machine-local
 # and deliberately unversioned in this public repo. skills.md remains the

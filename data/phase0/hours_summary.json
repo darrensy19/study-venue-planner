@@ -1,0 +1,3041 @@
+{
+  "fetched_on": "2026-08-29",
+  "venue_count": 28,
+  "failed_count": 0,
+  "timezone_field_served_by_api": true,
+  "utc_offset_minutes_observed": [
+    480
+  ],
+  "time_zone_ids_observed": [
+    "Asia/Singapore"
+  ],
+  "override_horizon_dates_observed": [
+    "2026-08-29",
+    "2026-08-30",
+    "2026-09-04"
+  ],
+  "override_horizon_days_ahead": [
+    1,
+    2,
+    7
+  ],
+  "business_statuses_observed": [
+    "OPERATIONAL"
+  ],
+  "shape_flags_observed": [
+    "24_hour",
+    "after_midnight",
+    "day_absent_from_regular_hours",
+    "multi_day_period"
+  ],
+  "venues": [
+    {
+      "seed_no": 1,
+      "proposed_venue_id": "starbucks-centrepoint",
+      "place_id": "ChIJRZ1c0JYZ2jERZi1GJIoRVy0",
+      "name": "Starbucks Centrepoint",
+      "address": "176 Orchard Rd, #01-41/42 Centrepoint, Singapore 238843",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 2,
+      "proposed_venue_id": "starbucks-singhealth-tower",
+      "place_id": "ChIJdz_uG8MZ2jERWgyvDAP7F60",
+      "name": "Starbucks SingHealth Tower",
+      "address": "10 Hospital Blvd, #01-02 SingHealth Tower, Singapore 168582",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "mon": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "tue": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "wed": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "thu": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "fri": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "sat": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "sun": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-29": [
+          {
+            "open": 0,
+            "close": 10079,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-08-29",
+      "shape_flags": [
+        "24_hour",
+        "multi_day_period"
+      ],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 3,
+      "proposed_venue_id": "starbucks-wisma-atria",
+      "place_id": "ChIJkQL5B5IZ2jER520GahisXVQ",
+      "name": "Starbucks Wisma Atria",
+      "address": "435 Orchard Rd, #01-34 to #01-36 Wisma Atria, Singapore 238877",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 4,
+      "proposed_venue_id": "starbucks-utown",
+      "place_id": "ChIJ3SWtPfUa2jERQaXuDgcJ4uc",
+      "name": "Starbucks",
+      "address": "8 College Ave W, B1-01, Singapore 138608",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 9690,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 8639,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 0,
+            "close": 1050,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-08-30",
+      "shape_flags": [
+        "day_absent_from_regular_hours",
+        "multi_day_period"
+      ],
+      "days_absent_from_regular_hours": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat"
+      ]
+    },
+    {
+      "seed_no": 5,
+      "proposed_venue_id": "starbucks-chinatown-food-street",
+      "place_id": "ChIJt5nUihUZ2jERPTdMOfNKjZc",
+      "name": "Starbucks",
+      "address": "37 Smith St, #01-01 & #02-01, Singapore 058950",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1440,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1440,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1439,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1440,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 6,
+      "proposed_venue_id": "starbucks-fusionopolis",
+      "place_id": "ChIJg2RzREUa2jERTWEw-CdqYP0",
+      "name": "Starbucks - Fusionopolis",
+      "address": "1 Fusionopolis Wy, #01-07 / #02-14, Singapore 138632",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 510,
+            "close": 1050,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 480,
+            "close": 1050,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 510,
+            "close": 1050,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 420,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 480,
+            "close": 1050,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 7,
+      "proposed_venue_id": "starbucks-rochester-park",
+      "place_id": "ChIJTyS910Ia2jERCTho_ldH97E",
+      "name": "Starbucks Rochester Park",
+      "address": "37 Rochester Dr, Singapore 138640",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 8,
+      "proposed_venue_id": "starbucks-west-mall",
+      "place_id": "ChIJd2Ve700R2jERIK2KnTMT4C8",
+      "name": "Starbucks - West Mall",
+      "address": "1 Bukit Batok Central Link, #01-32 West Mall, Singapore 658713",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 420,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 420,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 420,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 420,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 9,
+      "proposed_venue_id": "starbucks-hillv2",
+      "place_id": "ChIJ9XU8l1IQ2jERZFVUmQayS6A",
+      "name": "Starbucks - HillV2",
+      "address": "4 Hillview Rise, #01-05 HillV2, Singapore 667979",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 10,
+      "proposed_venue_id": "starbucks-hometeamns-bukit-batok",
+      "place_id": "ChIJ_8i9xA4R2jERt6f-QY9hHWU",
+      "name": "Starbucks HomeTeamNS Bukit Batok",
+      "address": "2 Bukit Batok West Ave 7 01-01/02/03 HomeTeamNS, 2 Bukit Batok West Ave 7, Clubhouse, Singapore 659003",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 11,
+      "proposed_venue_id": "starbucks-united-square",
+      "place_id": "ChIJ79DF5-cZ2jERF3Y7mXwGcpc",
+      "name": "Starbucks United Square",
+      "address": "101 Thomson Rd, #01-01 United Square, Singapore 307591",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 12,
+      "proposed_venue_id": "starbucks-tekka-place",
+      "place_id": "ChIJG_j_BI0Z2jER6Q9Sl7nEhaY",
+      "name": "Starbucks Tekka Place",
+      "address": "2 Serangoon Rd, #01-06/07/08/29 Tekka Place, Singapore 218227",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 13,
+      "proposed_venue_id": "starbucks-the-central",
+      "place_id": "ChIJt7a1YKgZ2jERzg8I3Z03fag",
+      "name": "Starbucks",
+      "address": "6 Eu Tong Sen St, #01-29 The Central, Singapore 059817",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 4200,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1439,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 0,
+            "close": 2760,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [
+        "after_midnight",
+        "day_absent_from_regular_hours",
+        "multi_day_period"
+      ],
+      "days_absent_from_regular_hours": [
+        "sat",
+        "sun"
+      ]
+    },
+    {
+      "seed_no": 14,
+      "proposed_venue_id": "starbucks-valley-point",
+      "place_id": "ChIJHao5Q4EZ2jERZ2a53B7V0wI",
+      "name": "Starbucks Valley Point",
+      "address": "491 River Valley Rd, #01 - 16 Valley Point Shopping Centre, Singapore 248371",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 15,
+      "proposed_venue_id": "starbucks-ue-square",
+      "place_id": "ChIJRcgWPJ8Z2jER0csaY54NMQ0",
+      "name": "Starbucks UE Square",
+      "address": "83 Clemenceau Ave, #01-31 UE Square, Singapore 239918",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 16,
+      "proposed_venue_id": "starbucks-the-cathay",
+      "place_id": "ChIJCwc9Ib0Z2jERoAUtX6VD_u4",
+      "name": "Starbucks The Cathay",
+      "address": "2 Handy Rd, #01-01 The Cathay, Singapore 229233",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 480,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 17,
+      "proposed_venue_id": "starbucks-one-holland-village",
+      "place_id": "ChIJXV4K9bgb2jERnyYM2k6rii4",
+      "name": "Starbucks - One Holland Village",
+      "address": "7 Holland Vlg Wy, #01-56 One, Singapore 275748",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 18,
+      "proposed_venue_id": "starbucks-jurong-point",
+      "place_id": "ChIJmRnrx-wP2jERJn7vciQERpo",
+      "name": "Starbucks - Jurong Point",
+      "address": "63 Jurong West Central 3, #03-52/52A Jurong Point, Singapore 648331",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "mon": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "tue": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "wed": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "thu": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "fri": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "sat": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "sun": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-29": [
+          {
+            "open": 0,
+            "close": 10079,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-08-29",
+      "shape_flags": [
+        "24_hour",
+        "multi_day_period"
+      ],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 19,
+      "proposed_venue_id": "starbucks-hillion-mall",
+      "place_id": "ChIJoxiTV7sR2jERP_IEEklCR1s",
+      "name": "Starbucks Hillion Mall",
+      "address": "17 Petir Rd, B1-28/29/30, Singapore 678278",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "mon": [
+          {
+            "open": 390,
+            "close": 1410,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 390,
+            "close": 1410,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 390,
+            "close": 1410,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 390,
+            "close": 1410,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 390,
+            "close": 4290,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-31": [
+          {
+            "open": 390,
+            "close": 1410,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 390,
+            "close": 1410,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 390,
+            "close": 1410,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 390,
+            "close": 1410,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 390,
+            "close": 1439,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 0,
+            "close": 2850,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [
+        "after_midnight",
+        "day_absent_from_regular_hours",
+        "multi_day_period"
+      ],
+      "days_absent_from_regular_hours": [
+        "sat",
+        "sun"
+      ]
+    },
+    {
+      "seed_no": 20,
+      "proposed_venue_id": "starbucks-chinatown-point",
+      "place_id": "ChIJGbsjt3UZ2jERV1PZEcbDcnQ",
+      "name": "Starbucks",
+      "address": "133 New Bridge Rd, #01-08, Singapore 059413",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 420,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 420,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 420,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 21,
+      "proposed_venue_id": "starbucks-ion-orchard",
+      "place_id": "ChIJyRIV6Y0Z2jER4IB6WdnCOTo",
+      "name": "Starbucks ION Orchard",
+      "address": "2 Orchard Turn, #B3 - 59, Singapore 238801",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 22,
+      "proposed_venue_id": "starbucks-delfi-orchard",
+      "place_id": "ChIJvzeLuYwZ2jERj4-DCD4SoSE",
+      "name": "Starbucks Delfi Orchard",
+      "address": "402 Orchard Rd, #01-01, Singapore 238876",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 390,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 23,
+      "proposed_venue_id": "starbucks-orchard-gateway",
+      "place_id": "ChIJMVtx1ZYZ2jER3n2e_ke1RH8",
+      "name": "Starbucks Orchard Gateway",
+      "address": "277 Orchard Rd, B2-04 Orchard, Gateway 238858",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1320,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1350,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 24,
+      "proposed_venue_id": "starbucks-takashimaya",
+      "place_id": "ChIJSdO1rRsZ2jER3iQFjJKZET8",
+      "name": "Starbucks Takashimaya",
+      "address": "391A Orchard Road, #B1-01,Takashimaya Shopping Centre, Civic Plaza, Singapore 238873",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1290,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 25,
+      "proposed_venue_id": "baker-and-cook-baker-cook-eng-kong-park",
+      "place_id": "ChIJv-E7qyUR2jERayzYYA22XYo",
+      "name": "Baker & Cook - Eng Kong Park",
+      "address": "21 Eng Kong Ter, Singapore 598993",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 450,
+            "close": 1260,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 26,
+      "proposed_venue_id": "coffee-bean-west-mall",
+      "place_id": "ChIJsaG12D4Q2jEREGLtQIJZepU",
+      "name": "The Coffee Bean & Tea Leaf",
+      "address": "1 Bukit Batok Central, #01-09 West Mall, Singapore 658713",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "mon": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "tue": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "wed": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "thu": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "fri": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "sat": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ],
+        "sun": [
+          {
+            "open": 0,
+            "close": 1440,
+            "always_open": true
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-29": [
+          {
+            "open": 0,
+            "close": 10079,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-08-29",
+      "shape_flags": [
+        "24_hour",
+        "multi_day_period"
+      ],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 27,
+      "proposed_venue_id": "coffee-bean-imm",
+      "place_id": "ChIJva6Ydg4Q2jERHRL1rllbVQ4",
+      "name": "The Coffee Bean & Tea Leaf",
+      "address": "2 Jurong East Street 21, #01-126 IMM Building, Singapore 609601",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 480,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 480,
+            "close": 1380,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 480,
+            "close": 1350,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 480,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 480,
+            "close": 1380,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    },
+    {
+      "seed_no": 28,
+      "proposed_venue_id": "coffee-bean-balmoral-plaza",
+      "place_id": "ChIJkU7EIY8Z2jERDAOGHbODWgU",
+      "name": "The Coffee Bean & Tea Leaf",
+      "address": "271 Bukit Timah Rd, #01-07 Balmoral Plaza, Singapore 259708",
+      "business_status": "OPERATIONAL",
+      "utc_offset_minutes": 480,
+      "time_zone_id": "Asia/Singapore",
+      "regular_hours": {
+        "sun": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "mon": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "tue": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "wed": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "thu": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "fri": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "sat": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ]
+      },
+      "date_overrides": {
+        "2026-08-30": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "2026-08-31": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "2026-09-01": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "2026-09-02": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "2026-09-03": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "2026-09-04": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ],
+        "2026-08-29": [
+          {
+            "open": 420,
+            "close": 1380,
+            "always_open": false
+          }
+        ]
+      },
+      "overrides_valid_through": "2026-09-04",
+      "shape_flags": [],
+      "days_absent_from_regular_hours": []
+    }
+  ]
+}

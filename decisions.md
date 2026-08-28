@@ -974,6 +974,355 @@ the directory.
 
 ---
 
+## 2026-08-29 — Venue list supplied; the seed list moves out of plan.md into a CSV
+
+**24 Starbucks venues in Singapore** — the first batch; four non-Starbucks venues followed the same
+day, see the entry below for the final count of 28. Phase 0's only stated blocker is cleared.
+
+The list did not fit the schema `plan.md` defined for it. Two problems:
+
+1. **Four venues are listed in Google Maps as bare "Starbucks"** — 8 College Ave W (138608),
+   37 Smith St (058950), 6 Eu Tong Sen St (059817) and 133 New Bridge Rd (059413). Name plus brand
+   cannot distinguish them from each other or from the other twenty. The venue-list schema had no
+   address column.
+2. **A markdown table is not a machine-readable input.** The resolver needs to read the list.
+
+**Decision:** the seed list lives in `data/venue_seeds.csv` — `name,brand,address_hint` — and
+`plan.md`'s venue-list section becomes a pointer to it plus the column contract. `address_hint` is
+blank except where the name is ambiguous, and its **postal code is the check** the resolver uses:
+where a hint is given, a candidate is only `confident` if exactly one result's `formattedAddress`
+carries the same six-digit code.
+
+**`venue_id` slugs are not guessed from addresses.** The resolver proposes a slug from the *resolved*
+`displayName`; where that comes back as a bare brand name it emits `NEEDS_SLUG:<brand>-<street>` for
+a human to name. Deriving "starbucks-utown" from "8 College Ave W" is an inference about what a
+building is called, and Phase 0's job is to record what the API returns, not to assert local
+knowledge on its behalf.
+
+## 2026-08-29 — The multi-brand check cannot run on a 24-Starbucks list — RESOLVED same day
+
+Phase 0 item 2 is "confirm the Places API path works for a non-Starbucks brand". Every seed in the
+first list was Starbucks, so the check had nothing to exercise — and the multi-brand claim is the
+stated reason the Places API was chosen over brand-specific store locators at all.
+
+**Resolved:** four non-Starbucks venues added, taking the list to **28 across three brands** —
+24 `starbucks`, 3 `coffee_bean`, 1 `baker_and_cook`. Item 2 is now runnable.
+
+Two of the additions test more than "a second brand parses":
+
+- **A Coffee Bean inside West Mall**, the same building as a Starbucks already on the list. Both
+  carry postal code 658713, so this is a direct test of whether the `address_hint` postal-code check
+  in `phase0_resolve.py` can separate two *different brands at one address* — the case most likely
+  to produce a confident wrong answer rather than an honest `ambiguous`.
+- **`baker_and_cook` is a bakery-café, not a coffee chain.** Popular Times coverage is likeliest to
+  thin out at the edges of the category, and `plan.md` already flags missing histograms as the
+  expected failure for non-chain venues.
+
+**New brand vocabulary: `baker_and_cook`.** `plan.md` left the brand list open-ended. Baker & Cook
+is a multi-outlet chain, so `independent` would have been wrong — `independent` should mean an
+unaffiliated café, not "a brand not yet enumerated". `brand` remains descriptive only; nothing is
+computed from it before Phase 3.
+
+**One submission was a duplicate.** "Starbucks - West Mall" was already row 8 and was not added
+twice. `phase0_resolve.py` also detects duplicates after resolution, by Place ID — the stronger
+check, since two differently-worded seeds can still name one venue.
+
+## 2026-08-29 — API volume ceiling, measured against the real venue count
+
+`plan.md` sized the list at ten. It is 28 — so the volume question is worth answering now rather
+than discovering by rate limit.
+
+| Source | Calls per refresh | Free cap | Refreshes/month |
+| --- | --- | --- | --- |
+| SerpApi (busyness) | 28 | 250 searches/month | **8** |
+| Places (hours) | 28 | 1,000 calls/SKU/month | 35 |
+
+**SerpApi is the binding constraint at eight refreshes a month.** Weekly (~121 calls) fits with room
+to spare; daily does not, and is not close. This suits the data — Popular Times is a historical
+weekly curve and opening hours change rarely, so weekly is the right cadence on its own merits, not
+a concession to the cap.
+
+Note the busyness fetcher can spend **more than one call per venue**: it tries `place_id` first and,
+finding no `popular_times`, falls back to a search and then a `data_id` lookup — up to three calls
+for that venue. A refresh where many venues take the fallback route could approach double the
+figure above. Phase 0 will show which route works, and the estimate should be corrected then.
+
+**Both figures were re-verified 2026-08-29** against Google's pricing/data-fields documentation and
+SerpApi's pricing page. The planning-time numbers hold, and two details that were not previously
+recorded came out of the check:
+
+- **Places bills per field tier, and one request is charged against every tier its field mask
+  touches.** This project's mask spans all three: Essentials (`id`, `formattedAddress`, `location`),
+  Pro (`displayName`, `businessStatus`, `utcOffsetMinutes`, `timeZone`) and **Enterprise**
+  (`regularOpeningHours`, `currentOpeningHours`). Free caps are 10,000 / 5,000 / **1,000** per SKU
+  per month, so **Enterprise is the binding tier** and the ~35-refresh figure above is correct. A
+  billing account is required regardless of the $0 bill.
+- **`timeZone` is a real Place Details field, at the Pro tier.** `scraper/places.py` was written to
+  retry without it if the field mask were rejected — that defence is now known to be unnecessary,
+  but it is kept, since it costs one branch and covers the field being withdrawn.
+- **SerpApi's free plan is throttled to 50 searches/hour** as well as 250/month. With the fallback
+  route costing up to three calls per venue, a bad refresh could approach 84 calls and hit the
+  hourly ceiling mid-run, not just the monthly one.
+
+**The hand-maintained meta load is the other consequence, and the less tractable one.** 24+ venues
+each need `baseline_seatability`, `preference`, per-origin `access`, `fallbacks`, `holiday_policy`
+and `wet_weather_mode`. The `access` bands are per venue and independent, but the **ordinal `rank`
+is cross-venue** — adding one venue can renumber the rest. That is a Phase 1 problem; noting it here
+so it is not a surprise then.
+
+## 2026-08-29 — `histogram_timezone` has to be confirmed indirectly
+
+`plan.md` requires `hours_timezone` and `histogram_timezone` be confirmed **independently**, on the
+grounds that the two sources may disagree. Building the fetcher exposed an asymmetry the plan did
+not anticipate: **SerpApi states no timezone for the Popular Times graph.** There is no field to
+read. Places, by contrast, returns `utcOffsetMinutes` and may return an IANA `timeZone`.
+
+**Decision:** `phase0_busyness.py` confirms the histogram's timezone by cross-checking it against
+each venue's *own* opening hours — the first non-zero busyness hour against the earliest regular
+opening hour. A venue opening at 07:30 whose graph goes live at 07:00 is in venue-local time. A
+systematic offset across every venue would mean it is not.
+
+This is weaker evidence than reading a field, and it is recorded as such. It is also the only
+evidence available, which is precisely why the two fields stay separate in the contract.
+
+## 2026-08-29 — Phase 0 harness built before the credentials exist
+
+Neither API account existed when the venue list arrived, so nothing could be *measured*. The probes
+were written anyway: `scraper/places.py`, `build/phase0_{common,resolve,hours,busyness}.py` and
+`analysis/phase0_spread.py`.
+
+Verified without a key, because unverified code waiting on a credential is a trap:
+
+- `phase0_resolve.py --dry-run` prints the query built for all 24 seeds and makes no calls.
+- The hours parser was exercised against a synthetic Places payload covering **all four shapes at
+  once** — plain same-day, Fri 07:30→Sat 01:00 (`close: 1500`), a split Tuesday, and a 24-hour
+  Sunday encoded as a period with no `close` key. Override-horizon extraction and the shape flags
+  were asserted against it.
+- `analysis/phase0_spread.py` was run end to end on a synthetic 27-venue set, including one curve
+  below `MIN_HISTOGRAM_HOURS` and one venue with no histogram at all, and produced the full report.
+
+**The `N`/`P` proposal is a proposal with its evidence attached, not an answer.** The script reports
+the band mix at every candidate `N` and the peak count at every candidate `P`, so the choice can be
+argued with. It also prints `plan.md`'s own warning when the median curve range comes in under ~20
+points — banding barely discriminates, `baseline_seatability` carries the ranking, and that is a
+finding to record rather than a reason to shrink `N` until the bands look busy.
+
+## 2026-08-29 — Phase 0 resolver run for real: all 28 venues, first try, no manual fixes
+
+`build/phase0_resolve.py` ran live against the Places API for the first time. Result: **28 of 28
+`confident`, single candidate each, zero duplicate Place IDs, every `business_status: OPERATIONAL`.**
+No seed needed a second look from the disambiguation logic itself.
+
+**The West Mall pair is the test this batch existed to run, and it passed.** Row 8 (Starbucks) and
+row 26 (Coffee Bean) both carry postal code 658713, and resolved to two distinct Place IDs —
+`ChIJd2Ve700R2jERIK2KnTMT4C8` and `ChIJsaG12D4Q2jEREGLtQIJZepU`. The address-hint postal-code check
+in `phase0_resolve.py` correctly separated two different brands sharing one building, which was
+named in advance as the case most likely to produce a confident wrong answer rather than an honest
+`ambiguous`.
+
+**Seven venues came back `NEEDS_SLUG`** — every seed whose Maps name is a bare brand, resolved
+against only a street address (seeds 4, 5, 13, 20, 26, 27, 28). Per the rule that a `venue_id` slug
+is never inferred from an address alone, these were named by asking the human directly rather than
+guessing from the resolved `formattedAddress`. All seven confirmed 2026-08-29:
+
+| Seed | Resolved address | `venue_id` |
+| --- | --- | --- |
+| 4 | 8 College Ave W, B1-01, 138608 | `starbucks-utown` |
+| 5 | 37 Smith St, #01-01 & #02-01, 058950 | `starbucks-chinatown-food-street` |
+| 13 | 6 Eu Tong Sen St, #01-29 The Central, 059817 | `starbucks-the-central` |
+| 20 | 133 New Bridge Rd, #01-08, 059413 | `starbucks-chinatown-point` |
+| 26 | 1 Bukit Batok Central, #01-09 West Mall, 658713 | `coffee-bean-west-mall` |
+| 27 | 2 Jurong East St 21, #01-126 IMM Building, 609601 | `coffee-bean-imm` |
+| 28 | 271 Bukit Timah Rd, #01-07 Balmoral Plaza, 259708 | `coffee-bean-balmoral-plaza` |
+
+`data/phase0/place_ids.csv` now has 28 rows, no `NEEDS_SLUG` remaining, no `venue_id` collisions.
+This is the input `build/phase0_hours.py` reads next.
+
+## 2026-08-29 — `build/phase0_hours.py` run live: timezone confirmed, and a real gap found in `resolve_hours`
+
+**`hours_timezone` is settled.** All 28 venues report `utcOffsetMinutes: 480` and `timeZone.id:
+"Asia/Singapore"` — no disagreement, no missing field. `phase0_hours.py`'s retry-without-`timeZone`
+branch never fired.
+
+**Two bugs were found and fixed in the parser before the report could be trusted, and one real
+architectural gap survived the fix.** All three came from the same discovery: Google represents a
+period with no `close` key as **open every day of the week**, anchored to a single `day` value in
+the JSON — not "open only on that one day", which is what a literal read of the field suggests.
+
+1. **Parser bug (fixed).** `parse_regular` was assigning that always-open period only to its anchor
+   weekday, leaving the other six days absent from `regular_hours`. `weekdayDescriptions` on the raw
+   response ("Monday: Open 24 hours" ×7) proved this was wrong for Starbucks SingHealth Tower,
+   Jurong Point and Coffee Bean West Mall. Fixed: an always-open period is now written to every
+   weekday.
+
+2. **Report bug (fixed).** `describe_shapes` folded any `close > 1440` into one `after_midnight`
+   flag, whether the spillover was a few hours or several days. Split into `after_midnight` (spills
+   into exactly the next calendar day) and a new **`multi_day_period`** (spills two or more days
+   ahead) — the distinction is load-bearing, not cosmetic, see finding 3.
+
+3. **Real hours shape, not a bug — `multi_day_period` is genuine at three venues, and it breaks a
+   stated non-negotiable.** Starbucks UTown, The Central and Hillion Mall each run one continuous
+   period spanning several calendar days — e.g. UTown: Sunday 07:30 straight through to the
+   following Saturday 17:30 (`weekdayDescriptions` confirms "Open 24 hours" Mon–Fri, closing briefly
+   Saturday evening into Sunday morning). This is a single API period with `open.day = 0`,
+   `close.day = 6`.
+
+   **`CLAUDE.md` states `resolve_hours` candidates are the arrival date **plus** the date
+   immediately before it, and no other** — "hours resolve for the arrival date and the date before
+   it, never for the departure date alone." That rule is correct and sufficient for a period that
+   spills into *exactly* the next calendar day (the ordinary after-midnight case). It is not
+   sufficient for UTown's period: an arrival on, say, Wednesday would need to trace back to Sunday's
+   period — three days, not one — to find the period that covers it. Left as encoded, every weekday
+   this period touches except its anchor day would read as `day_absent_from_regular_hours`, i.e.
+   `unknown`, for a venue that is in fact open.
+
+   **This was measured on real data, not hypothesised: 3 of 28 venues (~11%).** Not an edge case
+   worth deferring.
+
+   **Not fixed here — Phase 0 measures, Phase 1 builds, per `CLAUDE.md`'s "work one phase at a time."**
+   The resolution direction worth carrying into Phase 1: **decompose a multi-day period into one
+   bounded period per calendar day at ingestion time**, each anchored to its own day's midnight,
+   using the existing single-day spillover encoding (`close` up to 2880) as the link between
+   consecutive days in the chain. Worked through by hand against UTown's case, this preserves
+   `resolve_hours`'s one-day lookback exactly — the fetcher normalises the shape away before
+   `resolve_hours` ever sees it, rather than the resolution function growing a variable-length
+   lookback. This is a proposal for Phase 1 to design and test properly, not a decision made here.
+
+**A related, smaller finding: `currentOpeningHours` overrides for a 24/7 venue also arrive as one
+period spanning the whole override horizon**, with `truncated: true` on both endpoints — Google's
+own signal that the boundary is an artifact of the query window, not a real event. Seen on seeds 2,
+18 and 26. `phase0_hours.py` does not currently read `truncated`; noted here as a field Phase 1's
+fetcher should capture, not yet built.
+
+**The override horizon is not a flat constant.** `overrides_valid_through` measured **1, 2 or 7 days
+ahead** depending on the venue, not a uniform week. `plan.md` already models this as a per-venue
+field, so no contract change is needed — this confirms that design choice was right rather than
+correcting it.
+
+**All 28 venues: `business_status: OPERATIONAL`.** No closures, no relocations in this batch.
+
+## 2026-08-29 — `build/phase0_busyness.py` run live: a key-leak bug fixed, one route bug fixed, and `histogram_timezone` confirmed clean
+
+**Security bug in this repo's own code, fixed before it recurred.** The script's generic
+`except Exception` handler let `requests.HTTPError`'s default message through unmodified, and that
+message embeds the full request URL — including `api_key=` in plain text. It printed to the
+terminal and, once pasted here for diagnosis, into this conversation's transcript. Fixed:
+`serpapi_get` now catches the HTTP error itself and re-raises with the key redacted before any
+caller can print it. Verified the raw JSON response bodies never echo the key back (SerpApi's
+`search_parameters` field lists request params but not credentials) — the exposure was the error
+path only, not the saved data. **The SerpApi key was exposed twice this session** — once via a
+`.env` file-change diff, once via this bug — both non-billing-account, free-tier exposures with no
+financial risk, but rotation was offered both times per the same standard applied to the Places key
+earlier.
+
+**A second, unrelated bug in the fallback chain, also fixed.** `fetch_one`'s third tier (place
+search → `data_id` → place lookup) sent the resolved CID under the request parameter name
+`data_id`. SerpApi's `type=place` endpoint does not accept that name — verified directly against
+the API: `data_id` returns HTTP 400, body "Missing query `data`, `place_id` or `data_cid`
+parameter."; the correct parameter is **`data_cid`**. Confirmed once resolved on Starbucks Delfi
+Orchard's CID.
+No venue in this batch actually needed this fallback tier to succeed (see below), so the bug never
+silently corrupted a result — it only ever produced a clean, visible `FAILED` — but it would have
+kept every third-tier venue failing indefinitely once one existed.
+
+**`histogram_timezone` is confirmed: `Asia/Singapore`, matching `hours_timezone` exactly.** SerpApi
+states no timezone field for the Popular Times graph, so `phase0_busyness.py` cross-checks it
+indirectly — first non-zero busyness hour against each venue's own earliest opening hour. Of the
+venues eligible for this check, **every single one shows exactly 0h offset.** Four venues (seeds 13,
+18, 19, 26) were excluded from the check rather than counted: they carry the `multi_day_period` flag
+from the hours step, whose known parsing gap (a multi-day period is only recorded under its anchor
+weekday) makes their *derived* earliest-open-hour wrong in a way unrelated to timezone — including
+them the first time this ran produced a false `[-7, -6]`-hour "mismatch" that was really this same
+gap, not two sources disagreeing. Excluding the contaminated venues rather than patching the
+symptom keeps this measurement honest: **0h offset, zero exceptions, is now a clean result.**
+
+**Popular Times coverage: 21 of 28 (75%) confirmed present, 6 of 28 (21%) confirmed absent, 1 of 28
+(4%) genuinely unresolved — three different states, not two.** The `place_id` route alone accounted
+for all 21 successes; **the fallback chain (search → data_cid) never once produced usable data in
+this batch**, worth remembering before assuming it earns its complexity in Phase 1.
+
+- **Confirmed absent** (a search succeeded, cleanly returned no `popular_times`): `starbucks-singhealth-tower`,
+  `starbucks-utown`, `starbucks-fusionopolis`, `starbucks-tekka-place`, `starbucks-valley-point`,
+  `starbucks-the-cathay`. All six read as plausible low-foot-traffic or destination-specific
+  locations (a hospital tower, an office park, deep inside a heritage market) rather than any
+  brand or venue-type pattern — six venues is too few to generalise from, and this Phase 0 record
+  should not be read as more than that.
+- **Genuinely unresolved, not confirmed absent**: `starbucks-delfi-orchard`. The `data_cid`
+  fallback for this one venue was non-deterministic — the identical request returned a valid
+  (if data-less) response once, then failed with `"Failed to retrieve maps results."` on three
+  consecutive retries seconds apart. This is SerpApi-side flakiness on that specific lookup, not a
+  bug reachable from this code. Recorded as its own `failed` state rather than folded into "no
+  data" — conflating the two would treat a network hiccup as proof the venue has no Popular Times,
+  which nothing here actually established.
+
+**Correction to a guess made earlier this session:** I predicted `baker_and_cook` — a bakery-café,
+not a coffee chain — was the venue most likely to have thin or missing Popular Times coverage. It
+returned a full 126-hour histogram on the first (`place_id`) route. The prediction was reasonable
+but wrong; recorded here rather than left standing uncorrected.
+
+## 2026-08-29 — `N` and `P`: the first spread analysis measured the wrong thing, corrected before being trusted
+
+**The bug.** `analysis/phase0_spread.py`'s first run against real data reported a median per-curve
+range of **82.0 points** and proposed `N = 25`. Every non-24-hour venue showed `Min: 0` on every
+single weekday, which was the tell. Checked directly against Starbucks Centrepoint's raw Monday
+data: busyness reads 0 at 06:00 and 07:00 (before its 08:00 open) and 0 again at 22:00–23:00 (after
+its 22:00 close), while the actual open-hours values run 44–90. **Popular Times reports 0 busyness
+for hours a venue is closed. That is a fact about closure, not a `quiet` reading**, and letting it
+into the median/range/percentile math measures "closed vs peak" instead of "quiet vs busy while
+open" — the entire point `relative_busyness` exists to capture, per `CLAUDE.md`: "is this an
+unusually good or bad time to visit **this particular venue**", implicitly at a time someone would
+actually go.
+
+**The fix.** `phase0_spread.py` now joins each venue/weekday curve against that same day's
+`regular_hours` from `hours_summary.json` and drops any hourly bucket outside the recorded open
+period before computing anything. A day whose hours could not be determined (the
+`day_absent_from_regular_hours` gap on a `multi_day_period` venue) filters to zero open hours and
+correctly falls out of eligibility, rather than being scored against a guessed period. No curve
+dropped below `MIN_HISTOGRAM_HOURS = 6` as a result — the lowest post-filter curve still cleared it
+more than double.
+
+**Corrected measurement — this is the one to trust:**
+
+| Measure | Before fix (wrong) | After fix (real) |
+| --- | --- | --- |
+| Median per-curve range | 82.0 | **56.0** |
+| Proposed `N` | 25 | **15** |
+| Closed-hour buckets in the data | included | **397 excluded** |
+
+**`N = 15`, set from measurement, not guessed.** Median range of 56 points is comfortably over the
+~20-point flat-curve threshold `plan.md` set in advance — banding will discriminate, and this
+result does **not** trigger that finding.
+
+**`P` remains genuinely unresolved, both before and after the fix.** Every candidate on the grid
+down to and including 0 already averaged 1–3 peak hours per curve, so the grid never bracketed an
+answer from below — `P = 0` is the least-bad candidate tested, not a confirmed value. `P = 0` means
+"exactly at the maximum," which lets `peak` fire on a single bucket that ordinary noise could shift.
+**Before Phase 1 locks in `P`, look at actual curve shapes** (`data/phase0/spread_report.md`'s
+per-venue table) rather than trust this grid search alone.
+
+**`very_quiet` evidence survives the fix, on a different set of venues than the buggy run showed.**
+Jurong Point, Hillion Mall, United Square, Coffee Bean (mon) and Baker & Cook show repeatable
+troughs ≥`2N` = 30 points below their median on 6+ of 7 weekdays. The buggy run's version of this
+same finding named a different, overlapping set of venues — a further sign the earlier numbers were
+measuring something other than intra-day crowding.
+
+## 2026-08-29 — Environment facts that differ from the plan's assumptions
+
+- **The venv is built on `/Users/darrensy/anaconda3/bin/python3` (3.11.4).** The only alternative
+  present is `/usr/bin/python3` at 3.9.6. `CLAUDE.md`'s rule stands unchanged and matters more than
+  ever: invoke `.venv/bin/python3`, never bare `python3`.
+- **Node is v18.15.0, and Phase 1's test setup as specified will not run on it.** `plan.md` calls
+  for `tests/js/` under `node --test` importing `web/ranking.js` as a real ES module; without
+  `"type": "module"` resolution a `.js` file with `export` is parsed as CommonJS and throws.
+  nvm has v24.19.0 available. **Flagged, not fixed** — `CLAUDE.md` says work one phase at a time,
+  and this is Phase 1's problem to solve when Phase 1 starts.
+- **`data/phase0/raw/` is gitignored**, with the rule added in the same commit as the path, per the
+  narrow-ignore-rules requirement. The dumps are bulky and regenerable; the reports and summaries
+  beside them are committed, because they *are* the Phase 0 record. The raw responses are kept
+  locally because Phase 1's parser fixtures will be trimmed copies of these exact payloads.
+
+---
+
 ## Open — to be resolved in Phase 0
 
 **Hours source.** Two authoritative candidates; hours must not come from the busyness scrape or a third-party aggregator.

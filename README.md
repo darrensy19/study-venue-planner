@@ -93,20 +93,93 @@ slower won't get used.
 
 ## Status
 
-**Nothing is built yet.** The repo currently holds the plan and its supporting docs. The next step
-is Phase 0 in `plan.md`, which is blocked on one thing only: **a list of venue names as they appear
-in Google Maps, plus each one's brand.** Nothing else is needed to start — Place IDs, stable venue
-ids, venue types and areas are all Phase 0's job to resolve and record.
+**Phase 0 is written but not yet run.** The venue list has arrived — 28 venues in Singapore across
+Starbucks, Coffee Bean & Tea Leaf and Baker & Cook, in `data/venue_seeds.csv` — and the probe
+scripts that turn it into measurements exist:
 
-Once there is code, setup will be a standard venv:
+| Script | Answers |
+| --- | --- |
+| `build/phase0_resolve.py` | Which Place ID is each venue? |
+| `build/phase0_hours.py` | Opening hours, timezone, how far date overrides reach, and whether any venue closes after midnight, runs 24h, or splits its day |
+| `build/phase0_busyness.py` | Do the Popular Times histograms exist, and what timezone are they in? |
+| `analysis/phase0_spread.py` | How much do the curves actually vary — and what should `N` and `P` be? |
+
+**Two API keys are all that's missing**, both needing accounts that don't exist yet. See
+[Getting the two API keys](#getting-the-two-api-keys) below.
+
+Setup:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+/Users/darrensy/anaconda3/bin/python3 -m venv .venv
+.venv/bin/python3 -m pip install -r requirements.txt
+.venv/bin/python3 build/phase0_resolve.py --dry-run   # works with no key
 ```
 
 Always invoke Python via `.venv/bin/python3` — a bare `python3` on this machine resolves to an
 Anaconda install that won't have this project's dependencies.
+
+## Getting the two API keys
+
+Both are free at this project's volume. Figures below were verified 2026-08-29; check them again
+before enabling billing, because they have changed before.
+
+### 1. Google Places API — opening hours
+
+A billing account with a real card is required **even though the bill is $0**. Google will not serve
+the Enterprise-tier fields without one.
+
+1. **Create a project** at [console.cloud.google.com](https://console.cloud.google.com) — top bar
+   project selector → *New project*. Name it anything; `study-venue-planner` is fine.
+2. **Link a billing account** — *Billing* → *Link a billing account* → create one, card required.
+3. **Enable the API** — *APIs & Services* → *Library* → search **"Places API (New)"** → *Enable*.
+   **Enable the one labelled "(New)", not the legacy "Places API".** They are separate products with
+   different endpoints, and `scraper/places.py` calls the new one
+   (`places.googleapis.com/v1/places:searchText`).
+4. **Create the key** — *APIs & Services* → *Credentials* → *Create credentials* → *API key*.
+5. **Restrict it** — edit the key → *API restrictions* → *Restrict key* → tick **Places API (New)**
+   only. A leaked unrestricted key can be spent against every Google API on the project.
+6. **Cap the blast radius** — *APIs & Services* → *Places API (New)* → *Quotas* → set a daily request
+   cap (200/day is roomy; a full refresh uses 28). This is what stops a loop bug from becoming a
+   bill. Add a budget alert under *Billing* → *Budgets & alerts* as a second line of defence.
+7. Paste into `.env` as `GOOGLE_PLACES_API_KEY`.
+
+**Why a billing account is unavoidable:** the Places API bills per *field tier*, and one request is
+charged against every tier its field mask touches. This project's mask spans all three:
+
+| Tier | Fields this project requests | Free per month |
+| --- | --- | --- |
+| Essentials | `id`, `formattedAddress`, `location` | 10,000 |
+| Pro | `displayName`, `businessStatus`, `utcOffsetMinutes`, `timeZone` | 5,000 |
+| **Enterprise** | **`regularOpeningHours`, `currentOpeningHours`** | **1,000** |
+
+So one refresh of 28 venues costs 28 events in *each* tier. **Enterprise is the binding limit at
+1,000/month — about 35 refreshes.** Comfortably free at a weekly cadence.
+
+### 2. SerpApi — Popular Times histograms
+
+1. Sign up at [serpapi.com/users/sign_up](https://serpapi.com/users/sign_up) and verify your email.
+2. Copy the key from *Dashboard* → *Your Account* → *API Key*.
+3. Paste into `.env` as `SERPAPI_KEY`.
+
+No card needed. The free plan is **250 searches/month**, throttled to **50/hour**.
+
+**SerpApi is the binding constraint on refresh frequency, not Google.** At 28 venues that is
+**8 refreshes a month** — weekly fits with room spare, daily does not and is not close. The hourly
+throttle matters too: `phase0_busyness.py` falls back through a search to a `data_id` lookup when
+the `place_id` route returns no histogram, so a venue can cost up to three calls. If most venues
+take the fallback, one refresh could approach 84 calls and hit the 50/hour ceiling mid-run. Phase 0
+will show which route actually works.
+
+### Then
+
+```bash
+cp .env.example .env      # fill in both keys
+.venv/bin/python3 build/phase0_resolve.py
+```
+
+`.env` is gitignored. This repo is public — never commit a key, and never let one reach `web/`.
+
+Nothing in `web/` exists yet; that's Phase 1.
 
 ## A note on scope
 
