@@ -2,53 +2,86 @@
 
 Per-project tooling record, following the pattern in
 [claude-project-installs](../claude-project-installs/). Sources:
-[claude-plugins-reference](../claude-plugins-reference/README.md) (marketplace plugins) and
-[claude-skills-reference](../claude-skills-reference/README.md) (standalone skills).
-Those docs carry the full tier rationale, token costs, and install commands — this file is the
-per-project decision record.
+[claude-plugins-reference](../claude-plugins-reference/README.md) (24 marketplace plugins) and
+[claude-skills-reference](../claude-skills-reference/README.md) (22 standalone skills) — 46 total,
+all listed below.
 
-**Live state verified 2026-08-28** by running `claude plugin list` and `npx skills ls` from
-inside `/Users/darrensy/Projects/starbucks-planner`, not read off the reference tables.
+**Live state verified 2026-08-28** by running `claude plugin list` and `npx skills ls` from inside
+`/Users/darrensy/Projects/starbucks-planner`, not read off the reference tables.
 
-> **Project scope does not cascade.** Plugins installed at `~/Projects` (`document-skills`,
-> `hyperframes`, `grill-me`, `grill-with-docs`) do **not** apply here — confirmed: they all
-> report `✘ disabled` from inside this directory. Anything wanted here must be installed here.
+> **Project scope does not cascade.** Plugins and skills installed at `~/Projects`
+> (`document-skills`, `hyperframes`, `grill-me`, `grill-with-docs`) do **not** apply here —
+> confirmed: they report `✘ disabled` from inside this directory. Anything wanted here must be
+> installed here.
 
-## Currently active (verified, nothing installed project-scoped yet)
+**Recommend column:** ✅ Yes = install (or already have it) · ⏳ Later = real fit, but only once a
+specific phase needs it · ❌ No = not applicable to this project.
 
-All 13 come from global/user scope. This project has **zero** project-scoped plugins or skills.
+## Full catalogue
 
-| Name | Type | Tier | Description | Scope |
+| Name | Type | Description | Installed | Recommend |
 | --- | --- | --- | --- | --- |
-| [claude-mem](../claude-plugins-reference/claude-mem.md) | Plugin | 1 | Persists context across sessions | Global |
-| [security-guidance](../claude-plugins-reference/security-guidance.md) | Plugin | 1 | Flags injection/XSS/secrets on edits and commits | Global |
-| [context7](../claude-plugins-reference/context7.md) | Plugin | 1 | Up-to-date library docs on demand | Global |
-| [code-review](../claude-plugins-reference/code-review.md) | Plugin | 1 | Catches logic bugs before they ship | Global |
-| [code-simplifier](../claude-plugins-reference/code-simplifier.md) | Plugin | 1 | Cleanup pass on recently-changed code | Global |
-| [claude-md-management](../claude-plugins-reference/claude-md-management.md) | Plugin | 1 | Keeps project memory/docs current | Global |
-| [superpowers](../claude-plugins-reference/superpowers.md) | Plugin | 1 | TDD, debugging, planning discipline | Global |
-| [find-skills](../claude-skills-reference/find-skills.md) | Skill | 1 | Discover other agent skills | Global |
-| [close](../claude-skills-reference/close.md) | Skill | 1 | Session wrap-up (manual `/close`) | Global |
-| [git-guardrails-claude-code](../claude-skills-reference/git-guardrails-claude-code.md) | Skill | 1 | Blocks destructive git commands | Global |
-| [managing-claude-tooling](../claude-skills-reference/managing-claude-tooling.md) | Skill | 1 | Installs/removes tooling, syncs tracking docs | Global |
-| [analyze-session-tokens](../claude-skills-reference/analyze-session-tokens.md) | Skill | 1 | Audits token/context efficiency of a past session | Global |
-| [loose-ends](../claude-skills-reference/loose-ends.md) | Skill | 1 | Scans conversation for unresolved items | Global |
+| [claude-mem](../claude-plugins-reference/claude-mem.md) | Plugin | Persists context across sessions | Global | ✅ Yes |
+| [security-guidance](../claude-plugins-reference/security-guidance.md) | Plugin | Flags injection/XSS/secrets on edits and commits | Global | ✅ Yes |
+| [context7](../claude-plugins-reference/context7.md) | Plugin | Up-to-date library docs on demand | Global | ✅ Yes |
+| [code-review](../claude-plugins-reference/code-review.md) | Plugin | Catches logic bugs before they ship | Global | ✅ Yes |
+| [code-simplifier](../claude-plugins-reference/code-simplifier.md) | Plugin | Cleanup pass on recently-changed code | Global | ✅ Yes |
+| [claude-md-management](../claude-plugins-reference/claude-md-management.md) | Plugin | Keeps project memory/docs current | Global | ✅ Yes |
+| [superpowers](../claude-plugins-reference/superpowers.md) | Plugin | TDD, debugging, planning discipline | Global | ✅ Yes |
+| [find-skills](../claude-skills-reference/find-skills.md) | Skill | Discover other agent skills | Global | ✅ Yes |
+| [close](../claude-skills-reference/close.md) | Skill | Session wrap-up (manual `/close`) | Global | ✅ Yes |
+| [git-guardrails-claude-code](../claude-skills-reference/git-guardrails-claude-code.md) | Skill | Blocks destructive git commands | Global | ✅ Yes |
+| [managing-claude-tooling](../claude-skills-reference/managing-claude-tooling.md) | Skill | Installs/removes tooling, syncs tracking docs | Global | ✅ Yes |
+| [analyze-session-tokens](../claude-skills-reference/analyze-session-tokens.md) | Skill | Audits token/context efficiency of a past session | Global | ✅ Yes |
+| [loose-ends](../claude-skills-reference/loose-ends.md) | Skill | Scans conversation for unresolved items | Global | ✅ Yes |
+| [playwright](../claude-plugins-reference/playwright.md) | Plugin | Browser automation / E2E testing | **Not yet** | ✅ Yes |
+| [frontend-design](../claude-plugins-reference/frontend-design.md) | Plugin | Distinctive, non-generic UI design | **Not yet** | ✅ Yes |
+| [web-design-guidelines](../claude-skills-reference/web-design-guidelines.md) | Skill | Audits web UI against interface guidelines | **Not yet** | ✅ Yes |
+| [grill-me](../claude-skills-reference/grill-me.md) | Skill | Adversarial interview to sharpen a plan/design | **Not yet** | ✅ Yes |
+| [jupyter-notebook](../claude-skills-reference/jupyter-notebook.md) | Skill | Scaffolds/edits Jupyter notebooks | Not yet | ⏳ Later (Phase 3) |
+| [just-scrape](../claude-skills-reference/just-scrape.md) | Skill | Web scraping/crawling via ScrapeGraph | Not yet | ⏳ Later (Phase 0, if needed) |
+| [firecrawl](../claude-plugins-reference/firecrawl.md) | Plugin | Web scraping/crawling/monitoring | Not yet | ⏳ Later (Phase 0, last resort) |
+| [writing-guidelines](../claude-skills-reference/writing-guidelines.md) | Skill | Audits docs/prose | Not yet | ⏳ Later (optional) |
+| [claude-code-setup](../claude-plugins-reference/claude-code-setup.md) | Plugin | One-time automation audit at kickoff | Not yet | ⏳ Later (optional, now or never) |
+| [document-skills](../claude-plugins-reference/document-skills.md) | Plugin | Word/Excel/PowerPoint/PDF editing | Not yet | ❌ No |
+| [figma](../claude-plugins-reference/figma.md) | Plugin | Read/push Figma designs | Not yet | ❌ No |
+| [impeccable](../claude-plugins-reference/impeccable.md) | Plugin | Frontend polish/anti-pattern audit | Not yet | ❌ No |
+| [typescript-lsp](../claude-plugins-reference/typescript-lsp.md) | Plugin | TypeScript/JS language server | Not yet | ❌ No |
+| [claude-api](../claude-plugins-reference/claude-api.md) | Plugin | Claude/Anthropic API reference | Not yet | ❌ No |
+| [mattpocock-skills](../claude-plugins-reference/mattpocock-skills.md) | Plugin | Ticket/spec-driven engineering | Not yet | ❌ No |
+| [feature-dev](../claude-plugins-reference/feature-dev.md) | Plugin | Explore/architect/review agent split | Not yet | ❌ No |
+| [notion](../claude-plugins-reference/notion.md) | Plugin | Notion docs/tasks/knowledge base | Not yet | ❌ No |
+| [pr-review-toolkit](../claude-plugins-reference/pr-review-toolkit.md) | Plugin | Deeper multi-agent PR review | Not yet | ❌ No |
+| [task-observer](../claude-plugins-reference/task-observer.md) | Plugin | Meta-improvement of other skills (unvetted) | Not yet | ❌ No |
+| [skill-creator](../claude-plugins-reference/skill-creator.md) | Plugin | Author/benchmark a new Claude Code skill | Not yet | ❌ No |
+| [learning-output-style](../claude-plugins-reference/learning-output-style.md) | Plugin | Teaching / "★ Insight" output style | Not yet | ❌ No |
+| [example-skills](../claude-plugins-reference/example-skills.md) | Plugin | 12 unrelated bundled skills, all-or-nothing | Not yet | ❌ No |
+| [grill-with-docs](../claude-skills-reference/grill-with-docs.md) | Skill | Same interview as `grill-me`, plus ADRs + glossary | Not yet | ❌ No |
+| [improve-codebase-architecture](../claude-skills-reference/improve-codebase-architecture.md) | Skill | Scans for architecture improvements | Not yet | ❌ No |
+| [hyperframes](../claude-skills-reference/hyperframes.md) | Skill | Video/animation from HTML | Not yet | ❌ No |
+| [mlflow-onboarding](../claude-skills-reference/mlflow-onboarding.md) | Skill | One-time MLflow onboarding | Not yet | ❌ No |
+| [deploy-to-vercel](../claude-skills-reference/deploy-to-vercel.md) | Skill | Deploy to Vercel | Not yet | ❌ No |
+| [vercel-cli-with-tokens](../claude-skills-reference/vercel-cli-with-tokens.md) | Skill | Vercel CLI token auth | Not yet | ❌ No |
+| [vercel-composition-patterns](../claude-skills-reference/vercel-composition-patterns.md) | Skill | React composition patterns | Not yet | ❌ No |
+| [vercel-optimize](../claude-skills-reference/vercel-optimize.md) | Skill | Vercel cost/performance optimization | Not yet | ❌ No |
+| [vercel-react-best-practices](../claude-skills-reference/vercel-react-best-practices.md) | Skill | React/Next.js performance guidelines | Not yet | ❌ No |
+| [vercel-react-native-skills](../claude-skills-reference/vercel-react-native-skills.md) | Skill | React Native / Expo best practices | Not yet | ❌ No |
+| [vercel-react-view-transitions](../claude-skills-reference/vercel-react-view-transitions.md) | Skill | React View Transition API | Not yet | ❌ No |
 
-Baseline cost: ~650 tokens/msg (plugins) + ~420 (skills) ≈ **1,070 tokens/message** before
-anything project-specific.
+13 installed (all global) · 4 recommended to add · 5 deferred · 24 not applicable.
 
 ---
 
-## Recommended — install now
+## Why the four recommendations
 
-Four items, **~113 tokens/message total**. Two are effectively free.
+~113 tokens/message total on top of the ~1,070 baseline. Two are effectively free.
 
-| Name | Type | Tier | Cost | Why this project |
-| --- | --- | --- | --- | --- |
-| [playwright](../claude-plugins-reference/playwright.md) | Plugin | 2 | **0** | Strongest recommendation. Solves two concrete problems at zero always-on cost: (1) Phase 0 needs the `starbucks.com.sg/stores/` XHR endpoint, which is invisible in the HTML and needs a browser to capture; (2) Phase 1's acceptance criterion is "readable on iPhone portrait", which needs a real viewport, not a guess. |
-| [frontend-design](../claude-plugins-reference/frontend-design.md) | Plugin | 2 | 54 | There is a real UI — a mobile-first ranked list with a drill-down sparkline. This is the whole Phase 1 deliverable. |
-| [web-design-guidelines](../claude-skills-reference/web-design-guidelines.md) | Skill | 2 | ~46 | Audits the built UI against interface guidelines; framework-agnostic, so it works on vanilla HTML/CSS. Pairs with `frontend-design` (design vs. audit, not duplicates). |
-| [grill-me](../claude-skills-reference/grill-me.md) | Skill | 4 | ~13 | Manual-invoke only, so near-free. `plan.md` is about to go through external review and still has open Phase 0 questions — an adversarial interview is exactly the current need. Do **not** assume the Projects-root install covers this; it doesn't. |
+| Name | Cost | Why this project |
+| --- | --- | --- |
+| `playwright` | **0** | Strongest of the four. Solves two concrete problems at zero always-on cost: Phase 0 needs the `starbucks.com.sg/stores/` XHR endpoint, which is invisible in the HTML and needs a browser to capture; and Phase 1's acceptance criterion is "readable on iPhone portrait", which needs a real viewport, not a guess. |
+| `frontend-design` | 54 | There is a real UI — a mobile-first ranked list with a drill-down sparkline. That *is* the Phase 1 deliverable. |
+| `web-design-guidelines` | ~46 | Audits the built UI against interface guidelines; framework-agnostic, so it works on vanilla HTML/CSS. Complements `frontend-design` (design vs. audit), doesn't duplicate it. |
+| `grill-me` | ~13 | Manual-invoke only, so near-free. `plan.md` still has open Phase 0 questions and is heading into external review; an adversarial interview is the current need. The Projects-root install does **not** cover this repo. |
 
 ```bash
 cd /Users/darrensy/Projects/starbucks-planner
@@ -60,58 +93,48 @@ npx skills add vercel-labs/agent-skills@web-design-guidelines -y
 npx skills add mattpocock/skills@grill-me -y
 ```
 
-## Recommended — defer until a phase actually needs it
+## Why the five deferrals
 
-| Name | Type | Tier | Cost | Install when |
-| --- | --- | --- | --- | --- |
-| [firecrawl](../claude-plugins-reference/firecrawl.md) | Plugin | 2 | **1,458** | Only if Phase 0 shows the Starbucks SG locator needs real HTML scraping. SerpApi returns structured JSON and needs no scraper at all, so this may never be justified — it is the most expensive item in the entire catalog, ~1.4× the current total baseline. |
-| [just-scrape](../claude-skills-reference/just-scrape.md) | Skill | 2 | ~87 | The cheap alternative to `firecrawl` if light scraping turns out necessary. Prefer this over `firecrawl` at 1/17th the cost unless crawling/monitoring is genuinely needed. |
-| [jupyter-notebook](../claude-skills-reference/jupyter-notebook.md) | Skill | 2 | — | Phase 3. Fitting P(seat) on ~30 thin observations is exploratory work a notebook suits. Roughly four months out — don't carry it until then. |
-| [writing-guidelines](../claude-skills-reference/writing-guidelines.md) | Skill | 2 | ~52 | Optional now. The repo is currently 100% prose (`plan.md` is 373 lines) and the reference's own lookup table maps "docs-heavy repo" to this. Judgement call — the docs are already reviewed. |
-| [claude-code-setup](../claude-plugins-reference/claude-code-setup.md) | Plugin | 3 | 92 | Optional, and *now* is the only sensible moment — it's a one-time kickoff automation audit. Install, run, remove. |
+| Name | Cost | Install when |
+| --- | --- | --- |
+| `firecrawl` | **1,458** | Only if Phase 0 proves the Starbucks SG locator needs real HTML scraping. SerpApi returns structured JSON and needs no scraper, so this may never be justified — it is the catalogue's most expensive item, more than the entire current baseline. |
+| `just-scrape` | ~87 | The cheap alternative if light scraping does turn out necessary. Prefer this over `firecrawl` at 1/17th the cost unless crawling or monitoring is genuinely needed. |
+| `jupyter-notebook` | — | Phase 3. Fitting P(seat) on ~30 thin observations is exploratory work a notebook suits. Roughly four months out. |
+| `writing-guidelines` | ~52 | Optional. The repo is currently all prose (`plan.md` is 373 lines) and the reference's own lookup maps "docs-heavy repo" here — but the docs have just been reviewed. |
+| `claude-code-setup` | 92 | Optional, and *now* is the only sensible moment — a one-time kickoff automation audit. Install, run, remove. |
 
-## Not applicable (checked, deliberately skipped)
+## Why the Vercel/React block is out
 
-| Name | Type | Tier | Why not |
-| --- | --- | --- | --- |
-| [document-skills](../claude-plugins-reference/document-skills.md) | Plugin | 2 | 1,028 tokens for Word/Excel/PowerPoint/PDF. This project outputs JSON and a static page. |
-| [figma](../claude-plugins-reference/figma.md) | Plugin | 2 | No Figma file; the UI is being designed in code. |
-| [impeccable](../claude-plugins-reference/impeccable.md) | Plugin | 2 | Alternative to `frontend-design` — don't run both. |
-| [typescript-lsp](../claude-plugins-reference/typescript-lsp.md) | Plugin | 2 | Vanilla JS with no build step and no TypeScript — a deliberate `plan.md` decision, not an oversight. |
-| [claude-api](../claude-plugins-reference/claude-api.md) | Plugin | 2 | No LLM-powered feature. The scrapers call SerpApi and Google, not Anthropic. |
-| [mattpocock-skills](../claude-plugins-reference/mattpocock-skills.md) | Plugin | 2 | Alternative to `superpowers` — don't run both. |
-| [feature-dev](../claude-plugins-reference/feature-dev.md) | Plugin | 2 | Explore/architect/review agent split; overlaps `superpowers` and this is a small solo build. |
-| [notion](../claude-plugins-reference/notion.md) | Plugin | 2 | Docs live in this repo. |
-| [pr-review-toolkit](../claude-plugins-reference/pr-review-toolkit.md) | Plugin | 2 | Solo repo, no PR workflow. |
-| [task-observer](../claude-plugins-reference/task-observer.md) | Plugin | 2 | Not vetted; rewrites skills unattended. |
-| [skill-creator](../claude-plugins-reference/skill-creator.md) | Plugin | 3 | Not authoring a skill here. |
-| [learning-output-style](../claude-plugins-reference/learning-output-style.md) | Plugin | 3 | Output style, not workflow-relevant. |
-| [example-skills](../claude-plugins-reference/example-skills.md) | Plugin | 4 | 12 unrelated bundled skills, all-or-nothing. |
-| [hyperframes](../claude-skills-reference/hyperframes.md) | Skill | 2 | No video or motion output. |
-| [grill-with-docs](../claude-skills-reference/grill-with-docs.md) | Skill | 4 | `grill-me` covers the need; ADRs + glossary are overkill for a personal tool. |
-| [improve-codebase-architecture](../claude-skills-reference/improve-codebase-architecture.md) | Skill | 4 | No codebase yet — revisit if Phase 3 triggers the React port. |
-| [mlflow-onboarding](../claude-skills-reference/mlflow-onboarding.md) | Skill | 5 | Experiment tracking for a pooled logistic regression on ~30 observations is disproportionate. |
-| Tier 3 Vercel/React skills (all 7) | Skill | 3 | Deploys to **GitHub Pages**, not Vercel, and uses vanilla JS, not React. Both gates fail. Covers `deploy-to-vercel`, `vercel-cli-with-tokens`, `vercel-composition-patterns`, `vercel-optimize`, `vercel-react-best-practices`, `vercel-react-native-skills`, `vercel-react-view-transitions`. |
-
-Revisit the Tier 3 block only if `plan.md`'s "tipping point" clause fires and the frontend ports
-to React — and even then, only the React-specific ones; the Vercel deploy skills stay irrelevant
-while this is on GitHub Pages.
+All seven Tier 3 skills fail both gates: this deploys to **GitHub Pages**, not Vercel, and uses
+**vanilla JS**, not React — both deliberate `plan.md` decisions. Revisit only if the "tipping
+point" clause fires and the frontend ports to React, and even then only the React-specific ones;
+the Vercel deploy skills stay irrelevant on GitHub Pages.
 
 ---
 
 ## Tracking-doc drift found while writing this
 
-Recorded, not yet fixed — these live in other repos:
+### Fixed 2026-08-28
 
-1. **`starbucks-planner` has no column** in the "Installed where" matrix of either reference
-   README, and no `claude-project-installs/starbucks-planner.md`. Only `fantasy-hoops`,
-   `cadence`, and `trackers` have files.
-2. **`claude-project-installs/fantasy-hoops.md:55`** says `grill-me`/`grill-with-docs` are
-   "available globally-adjacent via Projects root if ever needed". That is wrong — project scope
-   does not cascade, verified live from this directory. The same misreading would have led to
-   skipping `grill-me` here.
-3. **`claude-skills-reference/README.md:56` has a broken link.** It lists `frontend-design` in
-   its Tier 2 table pointing at `frontend-design.md` — that file does not exist in
-   `claude-skills-reference/`. `frontend-design` is a marketplace plugin, tracked at
-   `claude-plugins-reference/frontend-design.md`. It also isn't in that README's own "Installed
-   where" matrix, so the row is an orphan in two ways.
+- **`claude-project-installs/fantasy-hoops.md:55`** claimed `grill-me`/`grill-with-docs` were
+  "available globally-adjacent via Projects root if ever needed". Wrong — project scope does not
+  cascade, verified live from this directory. The same misreading would have led to skipping
+  `grill-me` here. Reason text replaced with the accurate one. Checked `cadence.md` and
+  `trackers.md` too — both already gave a correct, different reason, so this was the only instance.
+- **`claude-skills-reference/README.md:56` was a broken link.** It listed `frontend-design` in its
+  Tier 2 table pointing at `frontend-design.md`, which does not exist in that repo —
+  `frontend-design` is a marketplace plugin tracked at
+  `claude-plugins-reference/frontend-design.md`, and the row was absent from that README's own
+  "Installed where" matrix. Since that doc's stated scope is standalone skills only, the row was
+  removed; the quick-lookup entry now cross-links to the plugins reference and labels it a plugin.
+  No token total needed recalculating — Tier 2 has no total line. Every relative `.md` link in both
+  reference READMEs was then confirmed to resolve.
+
+Neither tracking repo is a git repo, so these are saved to disk with nothing to commit.
+
+### Still open
+
+- **`starbucks-planner` has no column** in the "Installed where" matrix of either reference README,
+  and there is no `claude-project-installs/starbucks-planner.md`. Only `fantasy-hoops`, `cadence`,
+  and `trackers` have files. **Deliberately deferred** until the recommendations above are decided
+  — adding a column of empty cells for a project with zero project-scoped installs records nothing.
