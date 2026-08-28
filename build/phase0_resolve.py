@@ -115,7 +115,14 @@ def propose_venue_id(seed, candidate):
     if resolved_name and resolved_name.lower() not in BARE_NAMES:
         slug = slugify(resolved_name)
         # "Starbucks Wisma Atria" -> "starbucks-wisma-atria", not doubled up.
-        if not slug.startswith(brand_slug):
+        # A plain startswith() check missed "Baker & Cook - Eng Kong Park":
+        # slugify() drops "&", so its slug ("baker-cook-...") never matches
+        # the brand slug ("baker-and-cook"), and got prepended anyway ->
+        # "baker-and-cook-baker-cook-eng-kong-park". Token overlap catches
+        # this regardless of how the brand name's punctuation slugifies.
+        brand_tokens = set(brand_slug.split("-")) - {"and", "the", "of"}
+        slug_tokens = set(slug.split("-"))
+        if not (slug_tokens & brand_tokens):
             slug = f"{brand_slug}-{slug}"
         return slug
 

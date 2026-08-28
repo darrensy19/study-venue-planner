@@ -44,7 +44,7 @@ Use `venue`, `venue_id`, `venues.json`, `venues_meta.json`, `venue_arrival`. Nev
 
 The project is **`study-venue-planner`** throughout — GitHub repository and local directory alike — named for the real scope rather than the first brand in it. The repo name becomes the GitHub Pages URL prefix, so it was worth settling before deployment rather than after links existed.
 
-`venue_type` is a small, extensible, **descriptive** classification: `large_cafe`, `mall_cafe`, `office_cafe`, `takeaway_heavy`, `small_kiosk`, `independent_cafe`. It is recorded from the start so Phase 3 can eventually test whether it predicts anything. **Nothing computes with it until there is evidence that it should.**
+`venue_type` is a small, extensible, **descriptive** classification, seeded with `large_cafe`, `mall_cafe`, `office_cafe`, `takeaway_heavy`, `small_kiosk`, `independent_cafe`. "Extensible" turned out to matter immediately: Phase 0's real 28-venue list needed `hospital_cafe`, `campus_cafe`, `tourist_cafe`, `clubhouse_cafe`, `standalone_cafe` and `strip_mall_cafe` to describe venues the original six couldn't fit precisely — see `decisions.md`, 2026-08-29, and the values actually assigned in `data/venues_meta.json`. It is recorded from the start so Phase 3 can eventually test whether it predicts anything. **Nothing computes with it until there is evidence that it should.**
 
 ## Architecture
 
@@ -1022,7 +1022,7 @@ Each step reads the previous step's output, so they run in order. `phase0_resolv
 
 ## Open questions
 
-- ~~**What are `N` and `P`?**~~ **Measured, 2026-08-29: `N = 15`.** Real Popular Times data, restricted to each venue's own open hours (excluding hours it's closed — see `decisions.md` for why that restriction was necessary), gives a median per-curve range of 56 points, comfortably over the ~20-point flat-curve threshold — banding will discriminate. **`P` is unresolved**: every candidate down to 0 already fit the target peak-hour count, so the grid didn't bracket an answer from below; needs eyeballing actual curve shapes in Phase 1, not a number pulled from this grid.
+- ~~**What are `N` and `P`?**~~ **Measured, 2026-08-29: `N = 15`, `P = 5`.** Real Popular Times data, restricted to each venue's own open hours (excluding hours it's closed — see `decisions.md` for why that restriction was necessary), gives a median per-curve range of 54.5 points, comfortably over the ~20-point flat-curve threshold — banding will discriminate. `N`'s grid search resolved cleanly; `P`'s never bracketed an answer (every candidate down to 0 already fit), so `P = 5` was set by eyeballing four real curves of different shapes instead — see `decisions.md`, 2026-08-29, "`P = 5`, set by eyeballing real curves."
 - ~~**Is `MIN_HISTOGRAM_HOURS = 6` right?**~~ **Confirmed generous, 2026-08-29.** Real per-venue-per-weekday coverage after open-hours filtering ranged 14–24 buckets; the lowest observed curve still cleared 6 by more than double. No data pushed against this floor.
 - **Is `FEASIBILITY_TOLERANCE_MINUTES = 15` right?** Provisional. Too large and `tight` swallows genuine shortfalls; too small and it collapses back to the hard cliff.
 - **Are `PLAN_B_MIN_SESSION_MINUTES = 90` and `PLAN_B_MIN_CONFIDENCE = mixed` right?** Provisional. The first few times Plan A actually fails will show whether 90 minutes is worth the trip.

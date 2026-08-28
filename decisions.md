@@ -1327,6 +1327,76 @@ barely moved:
 typical curve — reassuring, since it means the earlier `N` wasn't an artifact of a biased sample.
 `P` remains unresolved for the same reason as before: every candidate down to 0 already fit.
 
+## 2026-08-29 — `P = 5`, set by eyeballing real curves rather than a grid search
+
+The grid search in `analysis/phase0_spread.py` never bracketed an answer — every candidate down to
+and including 0 already averaged 1–3 peak hours per curve. Resolved by hand: pulled four real
+open-hours-only curves covering different shapes (a gentle single hump, two genuine lunch plateaus,
+and a sharp single-hour spike) and checked what each candidate `P` actually selects.
+
+| Venue (day) | Shape | Peak hours at `P=5` | Peak hours at `P=10` |
+| --- | --- | --- | --- |
+| Centrepoint (Mon) | gentle hump, max 90 at 14:00 | 1 (14:00) | 3 (12:00–14:00) |
+| United Square (Sat) | lunch plateau, 99–100 at 12–13:00 | 2 (12–13:00) | 4 (11:00–14:00) |
+| UE Square (Wed) | lunch plateau, 94–96 at 11–12:00 | 2 (11–12:00) | 4 (10:00–13:00) |
+| One Holland Village (Sat) | sharp spike, 100 at 09:00, drops to 61 by 11:00 | 1 (09:00) | 2 (09–10:00) |
+
+**`P = 5` isolates the genuine peak(s) on every shape tested** — one hour on a sharp spike, two on a
+real plateau. **`P = 10` starts pulling in hours that are meaningfully lower than the max** (e.g.
+Centrepoint's 12:00 at 80, ten points under its 90 max) and stops reading as "the worst hour,"
+reading instead as "the whole busy afternoon" — which `busy` already covers. `P = 5` is the smallest
+candidate past the grid's degenerate `P = 0` case (a single bucket ordinary noise could move), so it
+was preferred over 0 on the same reasoning `spread_report.md`'s own caveat gave.
+
+## 2026-08-29 — `venue_type` opened up from six fixed values to a free-text, extensible field
+
+`plan.md` already called `venue_type` "small, extensible" when it proposed the original six values
+(`large_cafe`, `mall_cafe`, `office_cafe`, `takeaway_heavy`, `small_kiosk`, `independent_cafe`), but
+`CLAUDE.md` stated it as a closed parenthetical list, and the real 28-venue list needed more
+precision than six categories give: a hospital-tower café, a university-campus café, a heritage
+colonial-bungalow café, a clubhouse café, a food-street tourist café, and a strip-mall café — none of
+which reads honestly as `large_cafe` or `mall_cafe` just to fit an existing box.
+
+**Resolved: six new values added** — `hospital_cafe`, `campus_cafe`, `tourist_cafe`,
+`clubhouse_cafe`, `standalone_cafe`, `strip_mall_cafe` — and `CLAUDE.md` corrected to state the field
+is free-text, not a fixed enum. Three of these had two reasonable names on offer and were decided
+directly with the user rather than picked unilaterally:
+
+| Venue | Considered | Chosen |
+| --- | --- | --- |
+| Starbucks Rochester Park (standalone colonial bungalow) | `heritage_cafe` vs `standalone_cafe` | `standalone_cafe` |
+| Baker & Cook Eng Kong Park (standalone bakery-café, landed estate) | `independent_cafe` vs `neighbourhood_cafe` | `independent_cafe` — already in the original six, no new value needed |
+| Coffee Bean Balmoral Plaza (low-rise commercial strip) | `street_cafe` vs `strip_mall_cafe` | `strip_mall_cafe` |
+
+The caveat this field already carried is unaffected by widening it: **descriptive only, nothing
+computed from it until Phase 3 shows it predicts something.**
+
+## 2026-08-29 — `data/venues_meta.json` created — the Phase 0 deliverable that had been missed entirely
+
+`plan.md` assigns `venue_type` and `area` to Phase 0, separate from the judgement fields
+(`baseline_seatability`, `preference`, `access`, `fallbacks`, etc.) that are explicitly Phase 1's job.
+The file itself had never been created this session — caught only when closing out Phase 0 and
+checking the acceptance list line by line rather than trusting memory of what had been done.
+
+**Scope kept deliberately minimal**, matching exactly what `plan.md` assigns to this phase: `brand`,
+`venue_type`, `area`, and `baseline_seatability: "unknown"` for all 28 venues — the judgement fields
+are left absent, for Phase 1 to add by hand, not pre-guessed here. `venue_type` and `area` were
+proposed from each venue's resolved address and confirmed with the user; four were corrected or
+reclassified (Rochester Park, HomeTeamNS Bukit Batok, Baker & Cook, Coffee Bean Balmoral Plaza — see
+the `venue_type` entry above) and three were reassigned to new, more precise types (SingHealth
+Tower, UTown, Chinatown Food Street).
+
+**A real bug surfaced and was fixed while building the venue list for this file:** seed 25's
+`venue_id` read `baker-and-cook-baker-cook-eng-kong-park` — the brand slug prepended twice.
+`propose_venue_id()` in `phase0_resolve.py` checked `slug.startswith(brand_slug)` to avoid doubling
+up, but `slugify()` drops `&`, so "Baker & Cook"'s slug (`baker-cook-...`) never matches the brand
+slug built from `baker_and_cook` (`baker-and-cook`) — the check failed to recognise the overlap and
+prepended anyway. Fixed to compare token sets instead of a literal prefix, which is robust to
+punctuation differences between a brand's `venue_seeds.csv` identifier and its Google-resolved
+display name. Confirmed no other of the 28 venue_ids has the same defect (scanned for any brand-name
+token repeated in its own venue_id). `data/phase0/place_ids.csv` row 25 corrected to
+`baker-cook-eng-kong-park`.
+
 ## 2026-08-29 — `N` and `P`: the first spread analysis measured the wrong thing, corrected before being trusted
 
 **The bug.** `analysis/phase0_spread.py`'s first run against real data reported a median per-curve
