@@ -160,9 +160,22 @@ the Vercel deploy skills stay irrelevant on GitHub Pages.
 
 Neither tracking repo is a git repo, so these are saved to disk with nothing to commit.
 
-### Still open
+### Tracking docs synced 2026-08-28
 
-- **`starbucks-planner` has no column** in the "Installed where" matrix of either reference README,
-  and there is no `claude-project-installs/starbucks-planner.md`. Only `fantasy-hoops`, `cadence`,
-  and `trackers` have files. **Deliberately deferred** until the recommendations above are decided
-  — adding a column of empty cells for a project with zero project-scoped installs records nothing.
+Done once the four installs landed, so the record describes real state rather than empty cells:
+
+- **Created `claude-project-installs/starbucks-planner.md`** — the fourth per-project file, joining
+  `fantasy-hoops`, `cadence`, and `trackers`.
+- **Added a `starbucks-planner` column** to the "Installed where" matrix in both reference READMEs
+  — 24 plugin rows and 22 skill rows, 17 ✅ between them.
+- **Added project-scoped reproduce blocks** to both READMEs, each with a note that scope does not
+  cascade from `~/Projects` into this repo.
+- **Updated four individual reference files** — `playwright.md`, `frontend-design.md`,
+  `web-design-guidelines.md`, `grill-me.md` — Status lines, per-project install/remove notes, and
+  rationale.
+
+Two further drift items were found and fixed in `grill-me.md` while updating it: its Remove block
+showed `-g`, contradicting its own Status line recording the global copy's removal on 2026-08-23;
+and a Notes line claimed a copy existed "in both project and global skills (see Duplicates below)"
+— wrong about the global copy, and referring to a `Duplicates` section that has never existed in
+that file.
