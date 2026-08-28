@@ -1034,18 +1034,25 @@ than discovering by rate limit.
 
 | Source | Calls per refresh | Free cap | Refreshes/month |
 | --- | --- | --- | --- |
-| SerpApi (busyness) | 28 | 250 searches/month | **8** |
+| SerpApi (busyness) | 28–56 (see below) | 250 searches/month | **4–8** |
 | Places (hours) | 28 | 1,000 calls/SKU/month | 35 |
 
-**SerpApi is the binding constraint at eight refreshes a month.** Weekly (~121 calls) fits with room
-to spare; daily does not, and is not close. This suits the data — Popular Times is a historical
-weekly curve and opening hours change rarely, so weekly is the right cadence on its own merits, not
-a concession to the cap.
+**SerpApi is the binding constraint, at somewhere between 4 and 8 refreshes a month depending on
+how many venues need a retry that day** — see the corrected fetch design in "Popular Times
+coverage, take two" (2026-08-29). One live run of all 28 venues spent 31 calls (28 first attempts +
+3 retries); worst case, every venue needs the retry and a refresh costs 56. Weekly (4–8 refreshes
+possible) fits; daily does not, and is not close either way. This suits the data regardless — Popular
+Times is a historical weekly curve and opening hours change rarely, so weekly is the right cadence
+on its own merits, not a concession to the cap.
 
-Note the busyness fetcher can spend **more than one call per venue**: it tries `place_id` first and,
+**Superseded:** the paragraph below described the busyness fetcher's *third, wrong* fetch design
+(`place_id` → search → `data_id`) and its cost. That design was retracted after being shown wrong on
+real data — see "Popular Times coverage, take two" for what replaced it and why.
+
+~~Note the busyness fetcher can spend more than one call per venue: it tries `place_id` first and,
 finding no `popular_times`, falls back to a search and then a `data_id` lookup — up to three calls
 for that venue. A refresh where many venues take the fallback route could approach double the
-figure above. Phase 0 will show which route works, and the estimate should be corrected then.
+figure above. Phase 0 will show which route works, and the estimate should be corrected then.~~
 
 **Both figures were re-verified 2026-08-29** against Google's pricing/data-fields documentation and
 SerpApi's pricing page. The planning-time numbers hold, and two details that were not previously
@@ -1237,28 +1244,88 @@ gap, not two sources disagreeing. Excluding the contaminated venues rather than 
 symptom keeps this measurement honest: **0h offset, zero exceptions, is now a clean result.**
 
 **Popular Times coverage: 21 of 28 (75%) confirmed present, 6 of 28 (21%) confirmed absent, 1 of 28
-(4%) genuinely unresolved — three different states, not two.** The `place_id` route alone accounted
-for all 21 successes; **the fallback chain (search → data_cid) never once produced usable data in
-this batch**, worth remembering before assuming it earns its complexity in Phase 1.
+(4%) genuinely unresolved — three different states, not two.** ~~The `place_id` route alone
+accounted for all 21 successes; the fallback chain (search → data_cid) never once produced usable
+data in this batch.~~ **SUPERSEDED — every part of this coverage claim was wrong. See "Popular
+Times coverage, take two" below.** The `place_id` route was not merely incomplete, it was actively
+unreliable, and 5 of the 7 venues called "absent" or "unresolved" here turned out to have real data.
 
-- **Confirmed absent** (a search succeeded, cleanly returned no `popular_times`): `starbucks-singhealth-tower`,
-  `starbucks-utown`, `starbucks-fusionopolis`, `starbucks-tekka-place`, `starbucks-valley-point`,
-  `starbucks-the-cathay`. All six read as plausible low-foot-traffic or destination-specific
-  locations (a hospital tower, an office park, deep inside a heritage market) rather than any
-  brand or venue-type pattern — six venues is too few to generalise from, and this Phase 0 record
-  should not be read as more than that.
-- **Genuinely unresolved, not confirmed absent**: `starbucks-delfi-orchard`. The `data_cid`
-  fallback for this one venue was non-deterministic — the identical request returned a valid
-  (if data-less) response once, then failed with `"Failed to retrieve maps results."` on three
-  consecutive retries seconds apart. This is SerpApi-side flakiness on that specific lookup, not a
-  bug reachable from this code. Recorded as its own `failed` state rather than folded into "no
-  data" — conflating the two would treat a network hiccup as proof the venue has no Popular Times,
-  which nothing here actually established.
+- ~~**Confirmed absent**~~: `starbucks-singhealth-tower`, `starbucks-utown`, `starbucks-fusionopolis`,
+  `starbucks-tekka-place`, `starbucks-valley-point`, `starbucks-the-cathay`. **Only the first two are
+  actually absent** — see below.
+- ~~**Genuinely unresolved**~~: `starbucks-delfi-orchard`. **Has real data**, retrieved once the
+  correct request was used — see below.
 
 **Correction to a guess made earlier this session:** I predicted `baker_and_cook` — a bakery-café,
 not a coffee chain — was the venue most likely to have thin or missing Popular Times coverage. It
 returned a full 126-hour histogram on the first (`place_id`) route. The prediction was reasonable
 but wrong; recorded here rather than left standing uncorrected.
+
+## 2026-08-29 — Popular Times coverage, take two: the "confirmed absent" list was mostly wrong
+
+**How this was caught: the user checked Google Maps directly and it disagreed with this report.**
+Five venues this session had already called `absent` or `unresolved` — Delfi Orchard, Fusionopolis,
+Tekka Place, Valley Point, The Cathay — were shown, one screenshot at a time, to have a real Popular
+Times graph on Maps. That is the only reason this got caught: nothing in the code raised a flag,
+because every one of those responses came back as valid, well-formed, **empty** JSON. A negative
+result that looks exactly like a positive one is the failure mode worth remembering here, not the
+specific parameter names below.
+
+**Three fetch designs were tried and retracted in sequence, each disproven by a fresh piece of
+evidence rather than by inspection:**
+
+1. **`type=place&place_id=...` as the sole lookup** (the original design). Wrong: silently omitted
+   `popular_times` for at least 4 of the 6 "confirmed absent" venues.
+2. **Always search, then always a second `type=place&data_cid=...` call** when the first came back
+   empty. Fixed the wrong parameter name, but missed that this project's queries (venue name + exact
+   address) make Google/SerpApi's search **collapse directly to a `place_results` object** —
+   `search_information.local_results_state` literally reads *"Showing results for type: place
+   instead of type: search"* — and that object already carries `popular_times` when the venue has
+   any. Checking only for a `local_results` list treated every one of these fully-populated,
+   collapsed responses as "no match", which made things briefly much worse (27 of 28 read
+   `no_search_match` on this design) before the collapse behaviour was found and handled.
+3. **Trusting an empty `popular_times` on the first response — collapsed or not — as a confirmed
+   absence.** Still wrong. Retrying Fusionopolis and HillV2 via the `data` parameter (built from the
+   `data_id` and `gps_coordinates` already present on that same first response) returned real
+   histograms on the second attempt. **The omission is intermittent per call, not a property of the
+   venue.** Only SingHealth Tower and UTown stayed empty after *both* the first response and the
+   retry — and those two are exactly the pair the user independently confirmed absent by checking
+   Maps directly, before this retry logic existed to prove it a third way.
+
+**The validated design, in `build/phase0_busyness.py`'s current `fetch_one`:** search once; if
+`popular_times` is present, done, one call. If not, extract `data_id` + `gps_coordinates` from
+whatever the search returned (the collapsed `place_results`, or the top `local_results` candidate)
+and retry via the `data` parameter — `!4m5!3m4!1s{data_id}!8m2!3d{lat}!4d{lng}`. **Absence is only
+recorded once both calls have come back empty.**
+
+**Corrected coverage: 26 of 28 (93%) confirmed present, 2 of 28 (7%) confirmed absent, 0
+unresolved.** The two absences — `starbucks-singhealth-tower` and `starbucks-utown` — are the only
+ones that survived a retry *and* a direct user check of Google Maps; there is no third state left to
+explain away. `data/phase0/histograms.json` and `busyness_report.md` were regenerated from this run
+and are what's committed; nothing from the two earlier, wrong runs is.
+
+**Cost, corrected.** Per venue is now **1 call if the search collapses with data, 2 if a retry is
+needed** — not a flat number either way. This run spent 28 first-attempt calls plus 3 retries
+(seeds 6, 9, 22) = 31 total for 28 venues, but that ratio isn't load-bearing: which venues need a
+retry looked partly random across identical repeated calls (finding 3, above), so a future refresh
+could easily need more. **The API-volume estimate in "API volume ceiling" (below) is corrected on
+that basis, not on today's specific 31.**
+
+## 2026-08-29 — `N` and `P`, recomputed against the corrected coverage: unchanged
+
+Re-ran `analysis/phase0_spread.py` after the coverage fix, since `N`/`P` were computed against
+data that was missing 5 of 26 now-known-real histograms. Eligible curves rose from 147 to **182** of
+196 (the 5 recovered venues × 7 days, minus the usual closed-hour exclusions). The proposed values
+barely moved:
+
+| | 21-venue dataset (wrong) | 26-venue dataset (corrected) |
+| --- | --- | --- |
+| Median per-curve range | 56.0 | 54.5 |
+| Proposed `N` | 15 | **15** |
+
+**`N = 15` holds.** The coverage bug changed *which* venues were measured, not the shape of a
+typical curve — reassuring, since it means the earlier `N` wasn't an artifact of a biased sample.
+`P` remains unresolved for the same reason as before: every candidate down to 0 already fit.
 
 ## 2026-08-29 — `N` and `P`: the first spread analysis measured the wrong thing, corrected before being trusted
 

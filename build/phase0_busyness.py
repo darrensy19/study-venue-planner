@@ -117,39 +117,62 @@ def extract_histogram(payload):
     return histogram
 
 
-def fetch_one(place_id, query_text, api_key, raw_dir, seed_no):
-    """Try place_id first, then a search->data_id lookup.
+def fetch_one(query_text, api_key, raw_dir, seed_no):
+    """Search; if that response has no `popular_times`, retry via the `data`
+    parameter before accepting the negative. Absence is only trusted once
+    both routes have been tried and both came back empty.
 
-    Which path works is itself a Phase 0 finding, so the route taken is recorded
-    rather than hidden behind a retry.
+    Three designs preceded this one, each retracted in decisions.md,
+    2026-08-29, after being contradicted by directly checking Google Maps:
+
+    1. `type=place&place_id=...` as the primary lookup. Silently omitted real
+       `popular_times` on Delfi Orchard, Fusionopolis, Tekka Place and Valley
+       Point.
+    2. Always search, then always a `data`-parameter follow-up. Missed that a
+       specific query (venue name + exact address) makes the search collapse
+       directly into a `place_results` object that already carries
+       `popular_times` when it has any — so the follow-up was usually
+       redundant.
+    3. Trusting a missing `popular_times` on the *first* response (collapsed
+       or not) as a confirmed absence. Still wrong: Fusionopolis and HillV2
+       both come back with popular_times missing on the first response but
+       present once retried via `data` — the omission is intermittent per
+       call, not a property of the venue. Only SingHealth Tower and UTown
+       stayed empty on both the first response and the retry, matching a
+       direct check of Google Maps for those two specifically.
+
+    So: extract `data_id` + `gps_coordinates` from whichever object the
+    search response gives (the collapsed `place_results`, or the top
+    `local_results` candidate when it doesn't collapse) and, if the first
+    histogram is empty, spend the second call before calling it absent.
     """
-    attempts = []
-
-    payload = serpapi_get({"engine": "google_maps", "type": "place", "place_id": place_id}, api_key)
-    write_json(raw_dir / f"seed_{seed_no:02d}_by_place_id.json", payload)
-    histogram = extract_histogram(payload)
-    attempts.append("place_id")
-    if histogram:
-        return histogram, "place_id", attempts
-
-    # No popular_times on the place_id route. Resolve a data_id by search and retry.
-    search = serpapi_get({"engine": "google_maps", "type": "search", "q": query_text}, api_key)
+    search = serpapi_get({"engine": "google_maps", "type": "search", "q": query_text, "hl": "en"}, api_key)
     write_json(raw_dir / f"seed_{seed_no:02d}_search.json", search)
-    attempts.append("search")
-    locals_found = search.get("local_results") or []
-    data_id = locals_found[0].get("data_id") if locals_found else None
-    if not data_id:
-        return histogram, "none", attempts
 
-    # SerpApi's `type=place` endpoint takes the CID under `data_cid`, not
-    # `data_id` — the latter is only ever a field name in the *search*
-    # response, never an accepted request parameter. Verified directly
-    # against SerpApi: `data_id` returns 400 "Missing query `data`,
-    # `place_id` or `data_cid` parameter."; `data_cid` returns 200.
-    payload = serpapi_get({"engine": "google_maps", "type": "place", "data_cid": data_id}, api_key)
-    write_json(raw_dir / f"seed_{seed_no:02d}_by_data_cid.json", payload)
-    attempts.append("data_cid")
-    return extract_histogram(payload), "data_cid", attempts
+    place_results = search.get("place_results")
+    if place_results:
+        histogram = extract_histogram({"place_results": place_results})
+        if histogram:
+            return histogram, "search_collapsed", ["search"]
+        candidate = place_results
+    else:
+        locals_found = search.get("local_results") or []
+        if not locals_found:
+            return {}, "no_search_match", ["search"]
+        candidate = locals_found[0]
+
+    data_id = candidate.get("data_id")
+    coords = candidate.get("gps_coordinates") or {}
+    lat, lng = coords.get("latitude"), coords.get("longitude")
+    if not data_id or lat is None or lng is None:
+        return {}, "search_missing_fields", ["search"]
+
+    data_param = f"!4m5!3m4!1s{data_id}!8m2!3d{lat}!4d{lng}"
+    payload = serpapi_get({"engine": "google_maps", "type": "place", "data": data_param, "hl": "en"}, api_key)
+    write_json(raw_dir / f"seed_{seed_no:02d}_by_data_param.json", payload)
+    histogram = extract_histogram(payload)
+    route = "search+data" if histogram else "confirmed_absent_after_retry"
+    return histogram, route, ["search", "data"]
 
 
 def first_active_hour(histogram):
@@ -198,7 +221,9 @@ def main():
 
     hours_by_seed = load_hours_by_seed()
     print(f"fetching Popular Times for {len(rows)} venue(s)")
-    print(f"  {len(rows)} SerpApi searches — count these against the monthly free cap\n")
+    print(f"  {len(rows)}-{len(rows) * 2} SerpApi searches (1 if the search collapses to a "
+          f"single place, 2 if it needs a data-param follow-up) — count these against the "
+          f"monthly free cap\n")
 
     venues = []
     for row in rows:
@@ -206,9 +231,7 @@ def main():
         name = row["resolved_name"] or row["seed_name"]
         query_text = f"{name}, {row['resolved_address']}"
         try:
-            histogram, route, attempts = fetch_one(
-                row["place_id"], query_text, api_key, raw_dir, seed_no
-            )
+            histogram, route, attempts = fetch_one(query_text, api_key, raw_dir, seed_no)
         except Exception as error:  # requests, JSON and SerpApi errors alike
             print(f"  {seed_no:>3}. FAILED {name}: {error}")
             venues.append(

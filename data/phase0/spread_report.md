@@ -1,19 +1,19 @@
 # Phase 0 — Popular Times spread, coverage, and the N / P proposal
 
-28 venues, 147 populated venue/weekday curves, 147 of them at or above MIN_HISTOGRAM_HOURS = 6.
+28 venues, 182 populated venue/weekday curves, 182 of them at or above MIN_HISTOGRAM_HOURS = 6.
 
 **This measures the histogram's shape. It does not establish that Popular Times predicts seat availability** — nothing in Phase 0 can, and no line below should be read as evidence for it.
 
-**Closed-hour buckets are excluded from every statistic below (397 buckets removed).** Popular Times reports 0 busyness for hours a venue is closed — that is a fact about closure, not a `quiet` reading, and an earlier run of this script that did not exclude them reported a median range roughly 3-4x too high because it was measuring 'closed vs peak' rather than 'quiet vs busy while open'. Any weekday whose regular hours could not be determined (e.g. the `multi_day_period` gap recorded in decisions.md) filters to zero open hours and correctly drops out of eligibility below, rather than being scored on a guess.
+**Closed-hour buckets are excluded from every statistic below (521 buckets removed).** Popular Times reports 0 busyness for hours a venue is closed — that is a fact about closure, not a `quiet` reading, and an earlier run of this script that did not exclude them reported a median range roughly 3-4x too high because it was measuring 'closed vs peak' rather than 'quiet vs busy while open'. Any weekday whose regular hours could not be determined (e.g. the `multi_day_period` gap recorded in decisions.md) filters to zero open hours and correctly drops out of eligibility below, rather than being scored on a guess.
 
 ## Headline
 
 | Measure | Value |
 | --- | --- |
-| Median per-curve range (max − min) | **56.0** points |
-| Mean per-curve range | 58.1 points |
-| Median per-curve IQR | 21.0 |
-| Median per-curve median→max | 27.5 |
+| Median per-curve range (max − min) | **54.5** points |
+| Mean per-curve range | 56.8 points |
+| Median per-curve IQR | 20.0 |
+| Median per-curve median→max | 26.0 |
 | Proposed `N` | **15** |
 | Proposed `P` | **0** |
 
@@ -21,8 +21,8 @@
 
 | Measure | Value |
 | --- | --- |
-| Populated curves | 147 |
-| Min hourly buckets on a curve | 14 |
+| Populated curves | 182 |
+| Min hourly buckets on a curve | 9 |
 | Median hourly buckets | 15 |
 | Max hourly buckets | 24 |
 | Curves below 6 buckets (band → `unknown`) | 0 |
@@ -31,10 +31,10 @@
 
 | Percentile | \|delta\| |
 | --- | --- |
-| 50th | 11 |
+| 50th | 10.5 |
 | 67th | 17 |
 | 75th | 21.0 |
-| 90th | 34.5 |
+| 90th | 33.5 |
 
 `N` is proposed as **15**, the candidate nearest the 67th percentile (17). That leaves roughly two thirds of hours `typical` and splits the rest between `busy` and `quiet` — often enough to be useful, rarely enough to mean something.
 
@@ -42,26 +42,26 @@ Band mix at each candidate `N` (peak precedence applied at the proposed `P`):
 
 | `N` | peak | busy | typical | quiet |
 | --- | --- | --- | --- | --- |
-| 5 | 7% | 30% | 27% | 37% |
-| 8 | 7% | 24% | 39% | 30% |
-| 10 | 7% | 21% | 46% | 26% |
-| 12 | 7% | 18% | 51% | 24% |
-| 15 ← | 7% | 13% | 60% | 20% |
-| 20 | 7% | 8% | 70% | 15% |
-| 25 | 7% | 6% | 76% | 11% |
+| 5 | 7% | 29% | 27% | 37% |
+| 8 | 7% | 23% | 39% | 30% |
+| 10 | 7% | 20% | 46% | 27% |
+| 12 | 7% | 17% | 52% | 24% |
+| 15 ← | 7% | 12% | 61% | 20% |
+| 20 | 7% | 7% | 71% | 14% |
+| 25 | 7% | 5% | 77% | 11% |
 
 ## Choosing `P` — how wide is "within P points of the maximum"?
 
 | `P` | mean peak hours per curve | max peak hours on one curve |
 | --- | --- | --- |
-| 0 ← | 1.2 | 3 |
+| 0 ← | 1.2 | 4 |
 | 2 | 1.6 | 6 |
 | 3 | 1.9 | 7 |
 | 5 | 2.3 | 10 |
-| 8 | 3.2 | 10 |
-| 10 | 3.7 | 12 |
-| 15 | 4.9 | 14 |
-| 20 | 6.3 | 15 |
+| 8 | 3.3 | 10 |
+| 10 | 3.8 | 12 |
+| 15 | 5.0 | 14 |
+| 20 | 6.4 | 15 |
 
 `P` is proposed as the smallest candidate averaging 1-3 `peak` hours per venue/weekday. Wider and `peak` stops marking the genuinely worst hour and starts swallowing the afternoon.
 
@@ -76,9 +76,11 @@ plan.md admits it only on repeatable troughs around `2N` = 30 points below the m
 | Baker & Cook - Eng Kong Park | 6 |
 | Starbucks | 17 |
 | Starbucks - Jurong Point | 7 |
+| Starbucks Delfi Orchard | 6 |
 | Starbucks Hillion Mall | 6 |
 | Starbucks UE Square | 6 |
 | Starbucks United Square | 7 |
+| Starbucks Valley Point | 5 |
 | The Coffee Bean & Tea Leaf | 8 |
 
 **Evidence found.** `very_quiet` can be argued for in Phase 1.
@@ -122,13 +124,13 @@ plan.md admits it only on repeatable troughs around `2N` = 30 points below the m
 | Starbucks | fri | 17 | 19 | 100 | 81 | 70.0 | 17 | 30.0 |
 | Starbucks | sat | 17 | 20 | 90 | 70 | 81.0 | 35 | 9.0 |
 | Starbucks | sun | 15 | 19 | 78 | 59 | 70.0 | 18 | 8.0 |
-| Starbucks - Fusionopolis | mon | 0 | — | — | — | — | — | — |
-| Starbucks - Fusionopolis | tue | 0 | — | — | — | — | — | — |
-| Starbucks - Fusionopolis | wed | 0 | — | — | — | — | — | — |
-| Starbucks - Fusionopolis | thu | 0 | — | — | — | — | — | — |
-| Starbucks - Fusionopolis | fri | 0 | — | — | — | — | — | — |
-| Starbucks - Fusionopolis | sat | 0 | — | — | — | — | — | — |
-| Starbucks - Fusionopolis | sun | 0 | — | — | — | — | — | — |
+| Starbucks - Fusionopolis | mon | 14 | 32 | 96 | 64 | 47.5 | 31 | 48.5 |
+| Starbucks - Fusionopolis | tue | 14 | 34 | 100 | 66 | 54.0 | 27 | 46.0 |
+| Starbucks - Fusionopolis | wed | 14 | 32 | 84 | 52 | 48.5 | 17 | 35.5 |
+| Starbucks - Fusionopolis | thu | 14 | 33 | 95 | 62 | 50.0 | 15 | 45.0 |
+| Starbucks - Fusionopolis | fri | 14 | 24 | 74 | 50 | 39.0 | 22 | 35.0 |
+| Starbucks - Fusionopolis | sat | 9 | 23 | 41 | 18 | 32.0 | 11 | 9.0 |
+| Starbucks - Fusionopolis | sun | 9 | 9 | 29 | 20 | 28.0 | 12 | 1.0 |
 | Starbucks Rochester Park | mon | 15 | 21 | 64 | 43 | 43.0 | 6 | 21.0 |
 | Starbucks Rochester Park | tue | 15 | 30 | 74 | 44 | 48.0 | 25 | 26.0 |
 | Starbucks Rochester Park | wed | 15 | 22 | 67 | 45 | 44.0 | 15 | 23.0 |
@@ -164,13 +166,13 @@ plan.md admits it only on repeatable troughs around `2N` = 30 points below the m
 | Starbucks United Square | fri | 15 | 7 | 77 | 70 | 57.0 | 30 | 20.0 |
 | Starbucks United Square | sat | 15 | 12 | 100 | 88 | 62.0 | 29 | 38.0 |
 | Starbucks United Square | sun | 15 | 10 | 96 | 86 | 62.0 | 24 | 34.0 |
-| Starbucks Tekka Place | mon | 0 | — | — | — | — | — | — |
-| Starbucks Tekka Place | tue | 0 | — | — | — | — | — | — |
-| Starbucks Tekka Place | wed | 0 | — | — | — | — | — | — |
-| Starbucks Tekka Place | thu | 0 | — | — | — | — | — | — |
-| Starbucks Tekka Place | fri | 0 | — | — | — | — | — | — |
-| Starbucks Tekka Place | sat | 0 | — | — | — | — | — | — |
-| Starbucks Tekka Place | sun | 0 | — | — | — | — | — | — |
+| Starbucks Tekka Place | mon | 15 | 20 | 55 | 35 | 32.0 | 11 | 23.0 |
+| Starbucks Tekka Place | tue | 15 | 27 | 53 | 26 | 46.0 | 12 | 7.0 |
+| Starbucks Tekka Place | wed | 15 | 29 | 74 | 45 | 52.0 | 17 | 22.0 |
+| Starbucks Tekka Place | thu | 15 | 20 | 57 | 37 | 42.0 | 8 | 15.0 |
+| Starbucks Tekka Place | fri | 15 | 19 | 89 | 70 | 55.0 | 36 | 34.0 |
+| Starbucks Tekka Place | sat | 15 | 18 | 91 | 73 | 61.0 | 36 | 30.0 |
+| Starbucks Tekka Place | sun | 15 | 18 | 100 | 82 | 85.0 | 27 | 15.0 |
 | Starbucks | mon | 15 | 26 | 77 | 51 | 54.0 | 27 | 23.0 |
 | Starbucks | tue | 15 | 40 | 71 | 31 | 57.0 | 7 | 14.0 |
 | Starbucks | wed | 15 | 24 | 71 | 47 | 66.0 | 18 | 5.0 |
@@ -178,13 +180,13 @@ plan.md admits it only on repeatable troughs around `2N` = 30 points below the m
 | Starbucks | fri | 17 | 31 | 86 | 55 | 74.0 | 22 | 12.0 |
 | Starbucks | sat | 24 | 13 | 100 | 87 | 71.0 | 51 | 29.0 |
 | Starbucks | sun | 22 | 16 | 71 | 55 | 44.0 | 36 | 27.0 |
-| Starbucks Valley Point | mon | 0 | — | — | — | — | — | — |
-| Starbucks Valley Point | tue | 0 | — | — | — | — | — | — |
-| Starbucks Valley Point | wed | 0 | — | — | — | — | — | — |
-| Starbucks Valley Point | thu | 0 | — | — | — | — | — | — |
-| Starbucks Valley Point | fri | 0 | — | — | — | — | — | — |
-| Starbucks Valley Point | sat | 0 | — | — | — | — | — | — |
-| Starbucks Valley Point | sun | 0 | — | — | — | — | — | — |
+| Starbucks Valley Point | mon | 15 | 33 | 82 | 49 | 65.0 | 5 | 17.0 |
+| Starbucks Valley Point | tue | 15 | 31 | 96 | 65 | 79.0 | 29 | 17.0 |
+| Starbucks Valley Point | wed | 15 | 45 | 100 | 55 | 75.0 | 16 | 25.0 |
+| Starbucks Valley Point | thu | 15 | 35 | 79 | 44 | 72.0 | 18 | 7.0 |
+| Starbucks Valley Point | fri | 15 | 23 | 89 | 66 | 70.0 | 23 | 19.0 |
+| Starbucks Valley Point | sat | 15 | 29 | 66 | 37 | 43.0 | 18 | 23.0 |
+| Starbucks Valley Point | sun | 15 | 24 | 56 | 32 | 46.0 | 16 | 10.0 |
 | Starbucks UE Square | mon | 15 | 27 | 96 | 69 | 71.0 | 29 | 25.0 |
 | Starbucks UE Square | tue | 15 | 24 | 100 | 76 | 79.0 | 20 | 21.0 |
 | Starbucks UE Square | wed | 15 | 25 | 96 | 71 | 80.0 | 16 | 16.0 |
@@ -192,13 +194,13 @@ plan.md admits it only on repeatable troughs around `2N` = 30 points below the m
 | Starbucks UE Square | fri | 15 | 29 | 93 | 64 | 76.0 | 31 | 17.0 |
 | Starbucks UE Square | sat | 15 | 19 | 72 | 53 | 50.0 | 23 | 22.0 |
 | Starbucks UE Square | sun | 15 | 18 | 55 | 37 | 42.0 | 17 | 13.0 |
-| Starbucks The Cathay | mon | 0 | — | — | — | — | — | — |
-| Starbucks The Cathay | tue | 0 | — | — | — | — | — | — |
-| Starbucks The Cathay | wed | 0 | — | — | — | — | — | — |
-| Starbucks The Cathay | thu | 0 | — | — | — | — | — | — |
-| Starbucks The Cathay | fri | 0 | — | — | — | — | — | — |
-| Starbucks The Cathay | sat | 0 | — | — | — | — | — | — |
-| Starbucks The Cathay | sun | 0 | — | — | — | — | — | — |
+| Starbucks The Cathay | mon | 14 | 26 | 94 | 68 | 55.0 | 14 | 39.0 |
+| Starbucks The Cathay | tue | 14 | 32 | 60 | 28 | 48.0 | 12 | 12.0 |
+| Starbucks The Cathay | wed | 14 | 28 | 98 | 70 | 68.0 | 30 | 30.0 |
+| Starbucks The Cathay | thu | 14 | 24 | 74 | 50 | 56.0 | 16 | 18.0 |
+| Starbucks The Cathay | fri | 14 | 42 | 96 | 54 | 59.0 | 18 | 37.0 |
+| Starbucks The Cathay | sat | 14 | 40 | 100 | 60 | 82.0 | 30 | 18.0 |
+| Starbucks The Cathay | sun | 14 | 40 | 78 | 38 | 63.0 | 10 | 15.0 |
 | Starbucks - One Holland Village | mon | 15 | 13 | 79 | 66 | 22.0 | 23 | 57.0 |
 | Starbucks - One Holland Village | tue | 15 | 18 | 72 | 54 | 25.0 | 18 | 47.0 |
 | Starbucks - One Holland Village | wed | 15 | 13 | 93 | 80 | 26.0 | 22 | 67.0 |
@@ -234,13 +236,13 @@ plan.md admits it only on repeatable troughs around `2N` = 30 points below the m
 | Starbucks ION Orchard | fri | 15 | 31 | 75 | 44 | 48.0 | 11 | 27.0 |
 | Starbucks ION Orchard | sat | 15 | 45 | 78 | 33 | 51.0 | 11 | 27.0 |
 | Starbucks ION Orchard | sun | 15 | 39 | 100 | 61 | 69.0 | 24 | 31.0 |
-| Starbucks Delfi Orchard | mon | 0 | — | — | — | — | — | — |
-| Starbucks Delfi Orchard | tue | 0 | — | — | — | — | — | — |
-| Starbucks Delfi Orchard | wed | 0 | — | — | — | — | — | — |
-| Starbucks Delfi Orchard | thu | 0 | — | — | — | — | — | — |
-| Starbucks Delfi Orchard | fri | 0 | — | — | — | — | — | — |
-| Starbucks Delfi Orchard | sat | 0 | — | — | — | — | — | — |
-| Starbucks Delfi Orchard | sun | 0 | — | — | — | — | — | — |
+| Starbucks Delfi Orchard | mon | 16 | 28 | 80 | 52 | 67.0 | 19 | 13.0 |
+| Starbucks Delfi Orchard | tue | 16 | 44 | 82 | 38 | 67.5 | 19 | 14.5 |
+| Starbucks Delfi Orchard | wed | 16 | 20 | 91 | 71 | 65.5 | 25 | 25.5 |
+| Starbucks Delfi Orchard | thu | 16 | 34 | 84 | 50 | 67.0 | 8 | 17.0 |
+| Starbucks Delfi Orchard | fri | 16 | 25 | 75 | 50 | 61.5 | 33 | 13.5 |
+| Starbucks Delfi Orchard | sat | 15 | 45 | 98 | 53 | 78.0 | 11 | 20.0 |
+| Starbucks Delfi Orchard | sun | 15 | 34 | 100 | 66 | 74.0 | 15 | 26.0 |
 | Starbucks Orchard Gateway | mon | 15 | 19 | 80 | 61 | 48.0 | 32 | 32.0 |
 | Starbucks Orchard Gateway | tue | 15 | 35 | 100 | 65 | 70.0 | 23 | 30.0 |
 | Starbucks Orchard Gateway | wed | 15 | 51 | 96 | 45 | 64.0 | 16 | 32.0 |

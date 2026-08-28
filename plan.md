@@ -813,7 +813,7 @@ The Starbucks SG locator remains a **timeboxed cross-check experiment only**, ne
 
 ### Busyness source
 
-**SerpApi Google Maps endpoint** — `popular_times` as structured JSON. Free tier **250 searches/month**, throttled to **50/hour** (re-verified 2026-08-29). At 28 venues that is **8 refreshes/month** — SerpApi, not Google, is what caps refresh frequency. Weekly fits; daily does not.
+**SerpApi Google Maps endpoint** — `popular_times` as structured JSON. Free tier **250 searches/month**, throttled to **50/hour** (re-verified 2026-08-29). Cost per venue is 1 call if search returns `popular_times` directly, 2 if a `data`-parameter retry is needed to get a real result — see `decisions.md`, 2026-08-29, "Popular Times coverage, take two." At 28 venues that's **4–8 refreshes/month** depending on how many need the retry that day. SerpApi, not Google, is what caps refresh frequency. Weekly fits; daily does not.
 
 Fallbacks only if `popular_times` proves missing or paywalled: the `populartimes` / `LivePopularTimes` libraries (unstable, open legal-concern issue) or the Apify actor.
 

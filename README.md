@@ -163,12 +163,12 @@ So one refresh of 28 venues costs 28 events in *each* tier. **Enterprise is the 
 
 No card needed. The free plan is **250 searches/month**, throttled to **50/hour**.
 
-**SerpApi is the binding constraint on refresh frequency, not Google.** At 28 venues that is
-**8 refreshes a month** — weekly fits with room spare, daily does not and is not close. The hourly
-throttle matters too: `phase0_busyness.py` falls back through a search to a `data_id` lookup when
-the `place_id` route returns no histogram, so a venue can cost up to three calls. If most venues
-take the fallback, one refresh could approach 84 calls and hit the 50/hour ceiling mid-run. Phase 0
-will show which route actually works.
+**SerpApi is the binding constraint on refresh frequency, not Google.** Cost per venue is 1 call
+when a search resolves straight to a working histogram, 2 when a `data`-parameter retry is needed —
+see `decisions.md`, 2026-08-29, "Popular Times coverage, take two," for why the retry exists: an
+empty `popular_times` on the first response is not reliable evidence the venue lacks one. At 28
+venues that's **4–8 refreshes a month** depending on how many need the retry that day — weekly fits
+either way, daily does not and is not close.
 
 ### Then
 
