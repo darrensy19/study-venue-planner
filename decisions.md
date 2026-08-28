@@ -843,6 +843,135 @@ privacy-sensitive file (`venues_meta.json`, carrying travel bands and origin lab
 yet. The commit was scanned for secrets and personal location data before pushing; the only machine
 path present is the documented Anaconda one.
 
+## 2026-08-29 — Active-period resolution: positive evidence before missing evidence
+
+The `resolve_hours` generalisation recorded above introduced a short-circuit: if *either* candidate
+date resolved `unknown`, the lookup returned `unknown` immediately — before scanning for a matching
+period at all.
+
+That discards real information. The previous date only matters for arrivals falling in its
+after-midnight tail. If today's hours are known and a known period contains the arrival, the venue
+**is** open, and whether yesterday could be resolved is irrelevant to that fact. The short-circuit
+would have marked such venues hours-unknown and pushed them out of confident ranking for no reason.
+
+Corrected precedence:
+
+```
+1. Resolve hours for both candidate dates.
+2. Build candidate periods from every date whose state is known or closed.
+3. If any known period contains the arrival, return open.
+4. Otherwise, if either candidate date is unknown, return unknown.
+5. Otherwise, return closed.
+```
+
+The distinction that makes this work is between the two non-contributing states:
+
+| State | Contributes periods | Contributes certainty |
+| --- | --- | --- |
+| `known` | yes | yes |
+| `closed` | no — empty by definition | **yes** — definitely not open then |
+| `unknown` | no | **no** — silence, not a negative |
+
+A failed match therefore means `closed` only when every contributing date was *definite*. If any was
+`unknown`, the arrival might have fallen inside a period nobody could see, and `unknown` is the honest
+answer. `unknown` is still never silently treated as `closed`.
+
+Tests updated to cover the case that motivated this: a known period containing the arrival returning
+`open` **while the sibling date is `unknown`**.
+
+## 2026-08-29 — Development tooling untracked from the public repo
+
+`.claude/settings.json` (plugin activation) and `.agents/skills/` (vendored third-party skill content)
+are development-environment configuration, not planner product code, and are now untracked and
+gitignored. Files remain on disk; the tooling still functions.
+
+The two `.claude/skills/*` symlinks were untracked with them — not an independent decision, but a
+forced consequence: they point into `.agents/skills/`, so leaving them tracked would have committed
+broken symlinks to a public repo.
+
+**`skills-lock.json` deliberately stays tracked.** It is safe, machine-readable provenance — the two
+skills and their source hashes — and is neither plugin activation nor vendored content. It is the
+machine-readable counterpart to `skills.md`, which remains the human-readable record of the project's
+tooling choices.
+
+Also closed the raw seat-log gap ahead of Phase 2: `data/raw/` and `data/seatlog.raw.csv` are ignored,
+while the committed coarsened output `data/seatlog.csv` deliberately is **not** — verified with
+`git check-ignore` in both directions, since a rule that caught the output would have broken the
+calibration input.
+
+## 2026-08-29 — Raw seat-log staging paths named in the specs, not just in `.gitignore`
+
+The ignore rules were added without the specs ever naming them: `plan.md` and `CLAUDE.md` both said
+only that the raw log "stays in iCloud Drive, gitignored". An implementer reading the spec would not
+have known *where* to stage a local copy, and any path they invented would not have been ignored.
+
+Since the ignore rules are deliberately narrow — so that `data/seatlog.csv`, the coarsened committed
+output, stays committable — a raw file staged anywhere else would have been committed to a public
+repo as a timestamped movement history. The narrowness that protects the output is exactly what makes
+the convention load-bearing.
+
+**Local staging is restricted to `data/raw/` or `data/seatlog.raw.csv`, and no others.** Both specs
+now say so, and both state that any new staging path needs its ignore rule added in the same commit.
+
+## 2026-08-29 — Two naming and wording corrections
+
+- **`skills.md` heading** still read `starbucks-planner`; updated to `study-venue-planner`. It was
+  missed in the rename sweep because that pass targeted the four planning docs, and `skills.md` — a
+  tracked, public file — was not among them.
+- **"Hours resolve for the arrival date, never the departure date"** was left over from the
+  single-date model and now contradicts the corrected logic. When travel crosses midnight,
+  `arrival_date - 1` **is** the departure date, so the departure date *is* resolved — as the
+  previous-date candidate, never as the anchor. Reworded in `plan.md` and `CLAUDE.md` to
+  "the arrival date and the date before it, never the departure date alone", with the coincidence
+  called out explicitly.
+- The directory tree in `plan.md` is annotated to show `starbucks-planner/` is the local working
+  directory while the GitHub repo is `study-venue-planner`, so the mismatch reads as deliberate.
+
+## 2026-08-29 — Three prose leftovers contradicting the corrected precedence
+
+Applying the open/unknown/closed precedence rewrote the pseudocode and added the explanation, but
+left surrounding prose still asserting the superseded rule. Three statements, all in `plan.md`:
+
+- **`resolve_hours` section** — "`unknown` propagates: if either date resolves to `unknown`, the
+  venue's status is `unknown`". Directly contradicted the precedence, and sat in the section an
+  implementer reads *first*. Now: "`unknown` propagates only when no known candidate period matches
+  the arrival. A known matching period returns `open` even if the sibling date is `unknown`."
+- **"If no period matches, the venue is closed on arrival and is filtered out."** Now qualified —
+  `closed` only when neither candidate date is `unknown`, otherwise `unknown` and surfaced rather
+  than filtered.
+- **"Arrival in the gap between two periods means closed."** Same defect, found by a broader sweep
+  rather than by the review. An apparent gap is only definitive when both dates are definite; an
+  `unknown` date could have held a period covering it.
+
+**Why these survived three consistency sweeps.** Every prior sweep grepped for *phrases I remembered
+writing* — "sorts neutrally", "display-only", "never the departure date". These three stated the same
+superseded rule in wording I hadn't anticipated ("`unknown` propagates", "closed on arrival", "means
+closed"), so no phrase-based search reached them. The sweep that found the third was
+concept-based: every assertion containing `closed`, `filtered out`, or `unknown` near a date, read
+individually.
+
+**Lesson worth carrying into implementation:** when a rule changes, grep for the *concept* the rule
+governs, not for the sentences previously written about it. A phrase-based sweep only finds what the
+author already recalls saying.
+
+## 2026-08-29 — Local directory renamed to match the repo; the mismatch is gone
+
+Earlier entries record the GitHub repo as `study-venue-planner` while the local working directory
+stayed `starbucks-planner`, and call that mismatch cosmetic and deliberate. **Superseded:** the
+directory has been renamed to `study-venue-planner`, so the project now has one name everywhere.
+
+The move preserved everything — `.git`, the index, the remote, branch tracking. The seven staged
+tooling deletions and four unstaged doc modifications all survived, since renaming a directory does
+not touch repository state.
+
+Path references updated in the same pass: `claude-tooling/README.md`'s relative link and
+`claude-tooling/CATALOG.md`'s `cd` target both pointed at the old directory and would have broken.
+The clarifying comment added to `CATALOG.md` when the names diverged is now removed, since there is
+nothing left to clarify.
+
+`skills-lock.json` needed no change — it stores relative paths, and `.agents/skills/` travelled with
+the directory.
+
 ---
 
 ## Open — to be resolved in Phase 0

@@ -42,7 +42,7 @@ Scope now includes **Starbucks, Coffee Bean & Tea Leaf, Tim Hortons, and potenti
 
 Use `venue`, `venue_id`, `venues.json`, `venues_meta.json`, `venue_arrival`. Never bake a brand into a contract name, a function name, or UI copy.
 
-The GitHub repository is **`study-venue-planner`**, named for the real scope rather than the first brand. The local working directory is still `starbucks-planner`; that mismatch is cosmetic and deliberate — the repo name is what becomes the Pages URL prefix, so it was worth getting right before deployment.
+The project is **`study-venue-planner`** throughout — GitHub repository and local directory alike — named for the real scope rather than the first brand in it. The repo name becomes the GitHub Pages URL prefix, so it was worth settling before deployment rather than after links existed.
 
 `venue_type` is a small, extensible, **descriptive** classification: `large_cafe`, `mall_cafe`, `office_cafe`, `takeaway_heavy`, `small_kiosk`, `independent_cafe`. It is recorded from the start so Phase 3 can eventually test whether it predicts anything. **Nothing computes with it until there is evidence that it should.**
 
@@ -51,7 +51,7 @@ The GitHub repository is **`study-venue-planner`**, named for the real scope rat
 Everything is either a **local Python script** (run manually on the Mac) or a **static page** (deployed, read-only).
 
 ```
-starbucks-planner/
+study-venue-planner/
 ├── scraper/
 │   ├── fetch_hours.py          # official source
 │   └── fetch_busyness.py       # SerpApi
@@ -343,7 +343,7 @@ resolve_hours(venue, target_date) -> {state, periods}
 
 **A known public holiday beyond the override horizon yields `unknown` hours, never inferred regular hours.** `currentOpeningHours` from the Places API covers roughly seven days; past that, a holiday's hours are genuinely not known, and guessing the regular weekday schedule on a day when malls close early is the exact failure this tool exists to prevent.
 
-`unknown` propagates: if either date needed for an arrival resolves to `unknown`, the venue's status at that arrival is `unknown`, not closed and not open.
+**`unknown` propagates only when no known candidate period matches the arrival.** A known matching period returns `open` even if the sibling date is `unknown` — see the precedence in "Deriving the active period" below, which is authoritative. `unknown` is never resolved to `closed`.
 
 `overrides_valid_through` makes the horizon explicit so the UI can say "beyond this date, regular schedule only".
 
@@ -374,26 +374,49 @@ Worked example — Monday period `{open: 450, close: 1500}` spans `abs(Mon, 450)
 arrival_abs   = abs(departure_date, leave_at) + travel_minutes
 arrival_date  = date(arrival_abs)
 
-today     = resolve_hours(venue, arrival_date)
-yesterday = resolve_hours(venue, arrival_date - 1 day)
+# 1. Resolve hours for both candidate dates.
+candidates = { arrival_date:          resolve_hours(venue, arrival_date),
+               arrival_date - 1 day:  resolve_hours(venue, arrival_date - 1 day) }
 
-if today.state == "unknown" or yesterday.state == "unknown":
-    return unknown                       # cannot assert open or closed
+# 2. Build periods from every date whose state is known or closed.
+#    (a closed date contributes zero periods, but contributes certainty)
+candidate_periods = [ [abs(d, p.open), abs(d, p.close))
+                      for d, h in candidates if h.state in ("known", "closed")
+                      for p in h.periods ]
 
-candidate_periods = [abs(arrival_date,     p.open), abs(arrival_date,     p.close)) for p in today.periods
-                  + [abs(arrival_date - 1, p.open), abs(arrival_date - 1, p.close)) for p in yesterday.periods
+# 3. A known period containing the arrival settles it.
+active_period = the P where P.period_start_abs <= arrival_abs < P.period_end_abs
+if active_period exists:
+    venue_close_abs = active_period.period_end_abs
+    return open
 
-active_period   = the P where P.period_start_abs <= arrival_abs < P.period_end_abs
-venue_close_abs = active_period.period_end_abs
+# 4. Nothing matched — was that certainty, or ignorance?
+if any(h.state == "unknown" for h in candidates):
+    return unknown
+
+# 5. Every contributing date was definite and none contained the arrival.
+return closed
 ```
+
+**Positive evidence wins over a missing sibling.** An earlier draft returned `unknown` the moment *either* date was unknown — before even looking for a match. That discarded real information: if today's hours are known and a known period contains the arrival, the venue **is** open, regardless of whether yesterday's hours could be resolved. Yesterday only matters for arrivals that fall in its after-midnight tail, and if the arrival didn't land there, its unavailability is irrelevant.
+
+The precedence above encodes the distinction that makes this work:
+
+| Date state | Contributes periods? | Contributes certainty? |
+| --- | --- | --- |
+| `known` | yes | yes |
+| `closed` | no (empty by definition) | **yes** — definitely not open then |
+| `unknown` | no | **no** — silence, not a negative |
+
+So a failed match is only `closed` when every contributing date was *definite*. If any was `unknown`, the honest answer is `unknown` — the arrival might have fallen inside a period nobody could see.
 
 - **Both dates go through `resolve_hours`.** The previous day's periods are resolved with the same override and holiday logic as the arrival day — not read raw from `regular_hours`. A date override or an out-of-horizon holiday on the previous day changes which after-midnight period exists, and must be honoured.
 - **Boundary rule is `open <= arrival < close`.** Arriving exactly at opening is fine; arriving exactly at closing is not open.
 - **The previous date must always be a candidate** — an arrival shortly after midnight belongs to yesterday's after-midnight period, not to today's.
-- **`unknown` on either date yields `unknown` overall**, never "closed". The venue is surfaced as hours-unknown rather than filtered out as shut.
-- **Travel can cross midnight**: `arrival_abs` is computed from the *departure* date plus travel, then the *arrival* date is read back off it. Hours resolve for the arrival date, never the departure date.
-- **Split periods** are handled by the same scan: at most one period can contain a given instant, so the match is unambiguous. Arrival in the gap between two periods means closed.
-- **If no period matches**, the venue is closed on arrival and is filtered out.
+- **`unknown` is never silently treated as `closed`.** A venue whose hours could not be resolved is surfaced as hours-unknown, not filtered out as shut.
+- **Travel can cross midnight**: `arrival_abs` is computed from the *departure* date plus travel, then the *arrival* date is read back off it. **Hours resolve for the arrival date and the date before it — never for the departure date alone.** Note that when travel crosses midnight those coincide: `arrival_date - 1` *is* the departure date, so it does get resolved — as the previous-date candidate, not as the anchor. The rule is that the departure date never drives resolution on its own.
+- **Split periods** are handled by the same scan: at most one period can contain a given instant, so a match is unambiguous. Arrival in the gap between two *known* periods resolves by the same precedence as any other non-match — `closed` only when neither candidate date is `unknown`, since an unknown date could have held a period covering that apparent gap.
+- **If no period matches**, the result depends on why: `closed` (and filtered out) **only when neither candidate date is `unknown`**; otherwise `unknown`, and surfaced as hours-unknown rather than filtered.
 
 ### Travel: two derived values
 
@@ -729,7 +752,14 @@ coffee-bean-holland-v,fri,10,no_seat,71,2026-08-28T10:00:00+08:00
 
 **What dropping the date costs — corrected.** An earlier version said "visit ordering is permanently unavailable". That was wrong: the file is append-only and rows stay in chronological order, so **relative ordering survives** — "last visit" is answerable, and so is "the last three visits here". What is genuinely lost is **absolute dates, intervals between visits, and seasonality**. The loss is real but narrower than previously stated.
 
-Raw dated CSV stays in iCloud Drive, gitignored, append-only.
+**Raw log staging paths.** The canonical raw dated CSV lives in iCloud Drive and is append-only — never rewritten from code. When `refresh.py` needs a local copy to coarsen from, it stages it at one of two gitignored paths, and **only these two**:
+
+```
+data/raw/              # directory, for a staged copy or any dated intermediate
+data/seatlog.raw.csv   # single-file staging
+```
+
+Both are in `.gitignore`; `data/seatlog.csv` — the coarsened, dateless, committed output — deliberately is not. Naming the convention here matters because the ignore rules are narrow by design: **a raw file staged at any other path would not be ignored**, and would land in a public repo as a timestamped movement history. If a different staging path ever becomes necessary, add its ignore rule in the same commit.
 
 Entry must be **two taps**: pick venue, pick outcome.
 
@@ -870,7 +900,8 @@ Deliberately small. No mocking frameworks, no live-network tests.
 
 **`tests/js/` — `node --test`**, importing `ranking.js` directly from source:
 - **`resolve_hours(venue, target_date)` as a pure function of any date** — a date override winning, the `overrides_valid_through` horizon boundary, a holiday beyond the horizon yielding `unknown`, a holiday *inside* the horizon with no override resolving to regular hours, and `selected_weekday` derived in `Asia/Singapore`
-- **`resolve_hours` applied to the previous date too** — a date override on the previous day changing which after-midnight period exists, and a previous day resolving `unknown` making the arrival `unknown` rather than closed
+- **`resolve_hours` applied to the previous date too** — a date override on the previous day changing which after-midnight period exists
+- **the open/unknown/closed precedence** — a known period containing the arrival returning `open` **even when the sibling date is `unknown`**; no match with a sibling `unknown` returning `unknown`; no match with both dates definite (`known` or `closed`) returning `closed`; and a `closed` date contributing certainty rather than doubt
 - **absolute-minute conversion** — that a Tuesday 00:30 arrival matches a Monday `{open: 450, close: 1500}` period, the case that motivated the coordinate system
 - **active-period lookup** — arrival inside a period, in the gap between split periods, before opening, after closing; previous-date after-midnight periods; travel crossing midnight; the exact `open <= arrival < close` boundary at both ends
 - **independent mid/upper resolution** — a case where `arrival_mid` and `arrival_upper` fall in *different* periods, and one where `arrival_upper` falls in **no** period (which must fail `robust`, not read as zero shortfall)

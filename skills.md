@@ -1,4 +1,4 @@
-# starbucks-planner — plugins & skills
+# study-venue-planner — plugins & skills
 
 Per-project tooling decisions. The machine-wide catalogue, current install
 state, and token costs live in
