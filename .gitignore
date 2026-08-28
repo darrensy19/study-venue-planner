@@ -5,3 +5,18 @@ __pycache__/
 venv/
 .env
 node_modules/
+
+# Personal dated seat-log input — never commit.
+# The repo is public. The raw log carries calendar timestamps, which makes it a
+# movement history. Only the coarsened output (data/seatlog.csv — no dates) is
+# committed; see plan.md's seat-log data contract.
+data/raw/
+data/seatlog.raw.csv
+
+# Local Claude Code tooling — development environment, not planner product code.
+# Plugin registrations and vendored third-party skill content are machine-local
+# and deliberately unversioned in this public repo. skills.md remains the
+# human-readable record of which tooling this project uses and why.
+.claude/settings.json
+.claude/skills/
+.agents/
