@@ -17,7 +17,7 @@ Personal tool for choosing a coffee venue for a 3-6 hour study session — maxim
 
 ### Domain language
 
-- **Brand-neutral vocabulary everywhere.** `venue`, `venue_id`, `venues.json`, `venues_meta.json`, `venue_arrival`. Scope covers Starbucks, Coffee Bean & Tea Leaf, Tim Hortons and potentially independents. Never bake a brand into a contract name, function name, or UI copy. The repo directory is still called `starbucks-planner`; that is a directory name, not an architectural commitment.
+- **Brand-neutral vocabulary everywhere.** `venue`, `venue_id`, `venues.json`, `venues_meta.json`, `venue_arrival`. Scope covers Starbucks, Coffee Bean & Tea Leaf, Tim Hortons and potentially independents. Never bake a brand into a contract name, function name, or UI copy. The GitHub repo is `study-venue-planner`; the local working directory is still `starbucks-planner`. That mismatch is cosmetic — the repo name is the Pages URL prefix, so it was set to the real scope before deployment.
 - `venue_type` (`large_cafe`, `mall_cafe`, `office_cafe`, `takeaway_heavy`, `small_kiosk`, `independent_cafe`) is **descriptive only**. Record it; compute nothing from it until Phase 3 shows it predicts something.
 
 ### The decision model

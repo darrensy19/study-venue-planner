@@ -42,7 +42,7 @@ Scope now includes **Starbucks, Coffee Bean & Tea Leaf, Tim Hortons, and potenti
 
 Use `venue`, `venue_id`, `venues.json`, `venues_meta.json`, `venue_arrival`. Never bake a brand into a contract name, a function name, or UI copy.
 
-The repository keeps the name `starbucks-planner` for now; that is a directory name, not an architectural commitment.
+The GitHub repository is **`study-venue-planner`**, named for the real scope rather than the first brand. The local working directory is still `starbucks-planner`; that mismatch is cosmetic and deliberate — the repo name is what becomes the Pages URL prefix, so it was worth getting right before deployment.
 
 `venue_type` is a small, extensible, **descriptive** classification: `large_cafe`, `mall_cafe`, `office_cafe`, `takeaway_heavy`, `small_kiosk`, `independent_cafe`. It is recorded from the start so Phase 3 can eventually test whether it predicts anything. **Nothing computes with it until there is evidence that it should.**
 
@@ -160,7 +160,7 @@ Not "no external assets", which was the earlier wording and was false.
   "scope": "./"
   ```
 
-  For a project site the repository name is a path prefix (`darrensy19.github.io/starbucks-planner/`), so an absolute `/web/index.html` would resolve to `darrensy19.github.io/web/` and 404. Relative paths also keep the AirDropped `file://` copy working.
+  For a project site the repository name is a path prefix (`darrensy19.github.io/study-venue-planner/`), so an absolute `/web/index.html` would resolve to `darrensy19.github.io/web/` and 404. Relative paths also keep the AirDropped `file://` copy working.
 
 - No data URLs, no asset URLs — everything except the manifest is inlined.
 

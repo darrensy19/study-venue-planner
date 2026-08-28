@@ -824,6 +824,25 @@ Small, but the whole point of that section is byte-level precision about what ge
 is the third time the escape sequence has been stated incorrectly in this document, which is why the
 Python expression is now the primary statement of the rule and the prose merely describes it.
 
+## 2026-08-29 — Repository named `study-venue-planner`, published public
+
+Earlier entries recorded that the repo "keeps the name `starbucks-planner` for now". Superseded: on
+first push the GitHub repository was created as **`darrensy19/study-venue-planner`**, named for the
+real multi-brand scope.
+
+The trigger was deployment, not tidiness. **The repository name becomes the GitHub Pages URL path
+prefix** (`darrensy19.github.io/study-venue-planner/`), which the relative-path decision explicitly
+depends on. Renaming after Pages went live would have broken every saved link and home-screen
+install, so it was worth settling before the first push rather than after.
+
+The local working directory remains `starbucks-planner`. The mismatch is cosmetic and accepted.
+
+**Visibility: public**, per the earlier decision that GitHub Pages' free tier serves only public
+repositories. At this point that publishes four planning documents and nothing else — the
+privacy-sensitive file (`venues_meta.json`, carrying travel bands and origin labels) does not exist
+yet. The commit was scanned for secrets and personal location data before pushing; the only machine
+path present is the documented Anaconda one.
+
 ---
 
 ## Open — to be resolved in Phase 0

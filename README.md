@@ -1,4 +1,4 @@
-# starbucks-planner
+# study-venue-planner
 
 Personal tool for picking a coffee venue to study at in Singapore. It answers:
 
