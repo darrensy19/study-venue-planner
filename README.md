@@ -98,9 +98,20 @@ Cook were resolved to Place IDs, their hours and Popular Times histograms fetche
 from the real measured curves. See `plan.md`'s Phase 0 section and `decisions.md` for the full
 record, including two real bugs found and fixed in the spread analysis after an independent review.
 `data/venues_meta.json` carries `venue_type`/`area` for all 28. **Phase 1 is next** — fetchers, the
-refresh orchestrator, and Plan A/B — and it opens with one unresolved design question:
-`resolve_hours`'s one-day lookback can't handle the 3 venues whose opening period spans multiple
-calendar days (see `CLAUDE.md`).
+refresh orchestrator, and Plan A/B. Concrete opening steps, in order:
+
+1. Resolve the multi-day-period design gap in `resolve_hours` before writing any fetcher code —
+   3 venues have an opening period spanning multiple calendar days, which breaks the one-day
+   lookback `CLAUDE.md` currently specifies. This is a design decision, not a bug fix.
+2. Fill in `baseline_seatability` by hand for at least one venue in `data/venues_meta.json` (every
+   venue is currently `unknown`) — Phase 1's second acceptance test needs at least one non-`unknown`
+   venue to produce a Plan A at all.
+3. Write `build/refresh.py` and the two real fetchers (`fetch_hours.py`, `fetch_busyness.py`) —
+   the bulk of Phase 1.
+
+Per `CLAUDE.md`'s workflow rule, step 3 should start with a plan-mode critique of `plan.md`'s
+Phase 1 section against the repo as it now stands, run on `opusplan` — not a straight port of the
+Phase 0 probe scripts.
 
 The probe scripts that produced Phase 0's data:
 
