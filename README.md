@@ -93,9 +93,16 @@ slower won't get used.
 
 ## Status
 
-**Phase 0 is written but not yet run.** The venue list has arrived — 28 venues in Singapore across
-Starbucks, Coffee Bean & Tea Leaf and Baker & Cook, in `data/venue_seeds.csv` — and the probe
-scripts that turn it into measurements exist:
+**Phase 0 is closed.** 28 venues in Singapore across Starbucks, Coffee Bean & Tea Leaf and Baker &
+Cook were resolved to Place IDs, their hours and Popular Times histograms fetched, and `N`/`P` set
+from the real measured curves. See `plan.md`'s Phase 0 section and `decisions.md` for the full
+record, including two real bugs found and fixed in the spread analysis after an independent review.
+`data/venues_meta.json` carries `venue_type`/`area` for all 28. **Phase 1 is next** — fetchers, the
+refresh orchestrator, and Plan A/B — and it opens with one unresolved design question:
+`resolve_hours`'s one-day lookback can't handle the 3 venues whose opening period spans multiple
+calendar days (see `CLAUDE.md`).
+
+The probe scripts that produced Phase 0's data:
 
 | Script | Answers |
 | --- | --- |
@@ -104,8 +111,10 @@ scripts that turn it into measurements exist:
 | `build/phase0_busyness.py` | Do the Popular Times histograms exist, and what timezone are they in? |
 | `analysis/phase0_spread.py` | How much do the curves actually vary — and what should `N` and `P` be? |
 
-**Two API keys are all that's missing**, both needing accounts that don't exist yet. See
-[Getting the two API keys](#getting-the-two-api-keys) below.
+Both API keys are already set up locally (see [Getting the two API keys](#getting-the-two-api-keys)
+below if setting up fresh). The SerpApi key was exposed in this repo's development transcript twice
+during Phase 0 (a `.env` diff, and a bug in the busyness fetcher's error handling, both fixed) —
+**it was rotated 2026-08-29** and the exposed key is no longer valid.
 
 Setup:
 

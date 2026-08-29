@@ -81,13 +81,21 @@ def open_hour_set(periods):
     function answers "is this hour open on the day whose periods were
     passed in", nothing about adjacent days. An `always_open` period covers
     every hour by definition.
+
+    The close boundary is rounded UP to the hour, not down. A venue closing
+    at 17:30 is genuinely open for part of the 17:00 bucket; floor division
+    (`1050 // 60 == 17`) excluded that whole hour, silently dropping real
+    open-hours data on every non-hour-aligned closing time. 42 of 182
+    eligible curves in the real dataset close on a half hour and were losing
+    their last bucket to this before the fix.
     """
     hours = set()
     for period in periods:
         if period.get("always_open"):
             return set(range(24))
         start_hour = period["open"] // 60
-        end_hour = min(period["close"], 1440) // 60
+        close = min(period["close"], 1440)
+        end_hour = -(-close // 60)  # ceiling division: a partial hour still counts
         hours.update(range(start_hour, min(end_hour, 24)))
     return hours
 
@@ -101,9 +109,17 @@ def filter_to_open_hours(buckets, periods):
     (including the `day_absent_from_regular_hours` gap on a `multi_day_period`
     venue — see decisions.md, 2026-08-29) filters to nothing, which correctly
     drops that curve out of eligibility rather than silently scoring it wrong.
+
+    `periods=None` means "this day has no recorded period for a venue we DO
+    have hours data for" — the caller only reaches this function when the
+    venue's hours are known; a missing per-day entry is a real day-absent
+    gap, not missing venue-level data. An earlier version of this function
+    returned the raw, unfiltered buckets on `None` — the opposite of what its
+    own docstring claimed — which let closed-hour zeros straight into 8 of
+    182 eligible curves (every day-absent weekday on seeds 4, 13 and 19).
     """
     if periods is None:
-        return buckets
+        return []
     open_hours = open_hour_set(periods)
     return [b for b in buckets if b["hour"] in open_hours]
 
@@ -124,10 +140,17 @@ def collect(venues, min_hours, hours_by_seed=None):
             else:
                 buckets = raw_buckets
             stats = curve_stats(buckets)
+            # venue_id, not the display name, is what distinguishes curves: four
+            # venues in this dataset are all literally named "Starbucks" in Maps
+            # (disambiguated only by address), and grouping by name merged their
+            # curves into one impossible entry (up to 28 "weekdays" for one
+            # "venue"). See decisions.md, 2026-08-29.
+            venue_id = venue.get("proposed_venue_id") or venue.get("name", "?")
             if stats is None:
                 curves.append(
                     {
                         "venue": venue.get("name", "?"),
+                        "venue_id": venue_id,
                         "seed_no": venue.get("seed_no"),
                         "day": day,
                         "stats": None,
@@ -141,6 +164,7 @@ def collect(venues, min_hours, hours_by_seed=None):
             curves.append(
                 {
                     "venue": venue.get("name", "?"),
+                    "venue_id": venue_id,
                     "seed_no": venue.get("seed_no"),
                     "day": day,
                     "stats": stats,
@@ -209,17 +233,30 @@ def very_quiet_evidence(curves, n_value):
     plan.md admits `very_quiet` only on that evidence. "Repeatable" is read as
     the trough appearing on at least four of the seven weekdays — a single deep
     Sunday morning is noise, not a band.
+
+    Grouped by `venue_id`, not display name — grouping by name merged four
+    "Starbucks"-named venues (and three "The Coffee Bean & Tea Leaf"-named
+    ones) into single entries with up to 4x7=28 weekday slots, an earlier
+    version of this function that produced a reported "17 weekdays" for one
+    venue. A real venue has at most 7. See decisions.md, 2026-08-29.
     """
     by_venue = {}
+    labels = {}
     for curve in curves:
         if not curve["eligible"]:
             continue
         deep = curve["stats"]["median_to_min"] >= 2 * n_value
-        by_venue.setdefault(curve["venue"], []).append(deep)
+        by_venue.setdefault(curve["venue_id"], []).append(deep)
+        # Display name is ambiguous on its own (four venues are all named
+        # "Starbucks" in Maps); pair it with venue_id in the label so two
+        # qualifying same-named venues can't collide into one report row.
+        labels[curve["venue_id"]] = f"{curve['venue']} ({curve['venue_id']})"
     repeatable = {
-        venue: sum(flags) for venue, flags in by_venue.items() if sum(flags) >= 4
+        labels[vid]: sum(flags) for vid, flags in by_venue.items() if sum(flags) >= 4
     }
-    any_day = {venue: sum(flags) for venue, flags in by_venue.items() if sum(flags) > 0}
+    any_day = {
+        labels[vid]: sum(flags) for vid, flags in by_venue.items() if sum(flags) > 0
+    }
     return repeatable, any_day
 
 

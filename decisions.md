@@ -1458,6 +1458,90 @@ measuring something other than intra-day crowding.
   beside them are committed, because they *are* the Phase 0 record. The raw responses are kept
   locally because Phase 1's parser fixtures will be trimmed copies of these exact payloads.
 
+## 2026-08-29 — Independent review of the closed Phase 0: two real bugs in the analysis script itself
+
+Phase 0 was declared closed and pushed at `4b2fd13`. An independent review of that state — offline,
+against the committed artifacts and raw responses, no new API calls — found two real defects in
+`analysis/phase0_spread.py` and two documentation staleness issues. **All four claims were verified
+directly against the code and data before anything was changed**, not accepted on the review's say-so:
+
+1. **`filter_to_open_hours` did the opposite of what it claimed.** `phase0_spread.py:105` read
+   `if periods is None: return buckets` — passing through the *raw, unfiltered* buckets, including
+   closed-hour zeros, on exactly the case (a weekday absent from `regular_hours`) its own docstring
+   said got "filtered to nothing." **Measured scope, corrected: 4 eligible curves, not 8.** Seeds 4,
+   13 and 19 each have weekdays missing from `regular_hours` (the `multi_day_period` gap), but seed 4
+   (`starbucks-utown`) has **no Popular Times histogram at all** — its raw bucket count is 0 for every
+   day regardless of this bug, so its 6 missing weekdays never contributed a contaminated curve. Only
+   seed 13 (The Central, Saturday and Sunday) and seed 19 (Hillion Mall, Saturday and Sunday) — 4
+   curves — actually had real histogram data (22-24 raw buckets) leaking through uncontrolled.
+   **Fixed:** `periods is None` now returns `[]`.
+
+2. **The same function truncated a venue's last open hour whenever its closing time wasn't
+   hour-aligned.** `open_hour_set` computed `end_hour = close // 60` — floor division — so a venue
+   closing at 17:30 (`close = 1050`) got `end_hour = 17`, excluding the 17:00 bucket entirely even
+   though the venue is genuinely open for half of it. **Measured scope, corrected: 40 curves actually
+   lost a bucket, not 42.** 42 (venue, weekday) pairs close on a non-hour boundary, but 2 of those are
+   the same `multi_day_period` venues from finding 1 (seed 4 Sunday, seed 19 Friday), whose `close`
+   values are the multi-day span figures (9690, 4290 minutes) — capped at `1440` before the hour
+   division, landing the "recovered" hour at 24, which is never a valid histogram bucket. Those 2
+   structurally match the bug's trigger condition but had no real data to recover. **Fixed:** ceiling
+   division (`-(-close // 60)`) — a partial hour still counts, an exact-hour close still excludes the
+   hour after it.
+
+3. **`very_quiet_evidence` grouped by display name, not identity**, and four venues in this dataset
+   are all literally named "Starbucks" in Google Maps (disambiguated only by address — see the
+   `NEEDS_SLUG` entries from venue resolution). Their curves were merging into one dict entry with up
+   to 4×7=28 weekday slots. `spread_report.md` printed "Starbucks — 17" and "The Coffee Bean & Tea
+   Leaf — 8" — both impossible for a real venue, which has at most 7 weekdays. **Fixed:** grouped by
+   `venue_id` (propagated from `proposed_venue_id`, already present on every `histograms.json` entry
+   from the resolve step), with the report label showing `Display Name (venue_id)` so two
+   same-named venues that both qualify can no longer collide into one row either.
+
+4. **`README.md` and `plan.md` still said Phase 0 hadn't run.** Both files had their *specific*
+   answered items updated throughout this session (timezone, hours shapes, coverage, `N`, `P`,
+   venue count) but the *top-level framing* above those items — "Phase 0 is written but not yet run,"
+   "neither account exists yet" — was never revisited after Phase 0 actually closed. A real
+   consistency-sweep miss: the details were kept current, the headline wasn't. Also caught: `plan.md`
+   cited a coverage range of "14–24 buckets," a stale figure from an earlier run — the currently
+   committed report said 9-24 at review time, and now reads 10-24 after fixes 1-2 above shifted which
+   buckets are counted. **Fixed:** both files corrected to state Phase 0 is closed, and the coverage
+   figure now cites whatever `spread_report.md` currently says rather than a copied-in number that
+   will drift the next time the report regenerates.
+
+**Re-ran `analysis/phase0_spread.py` after fixes 1-2 to check the actual impact, not trusting the
+review's own recalculation at face value either:**
+
+| | Before this fix | After this fix | Review's independent recalculation |
+| --- | --- | --- | --- |
+| Eligible curves | 182 of 196 | **178 of 196** | not stated |
+| Median per-curve range | 54.5 | **54.0** | 54.5 |
+| Proposed `N` | 15 | **15** | 15 |
+| `P` grid proposal | 0 | **0** | 0 |
+
+`N` and the `P` grid result hold exactly. The median range moved slightly further than the review's
+own figure (54.0 here vs. their stated 54.5) — a small discrepancy, most likely from a difference in
+exactly how each of us handled the boundary cases, and not investigated further since it doesn't
+change any decision: still comfortably over the ~20-point flat-curve threshold, `N` unaffected.
+
+**The `P = 5` justification was re-checked on real, corrected data, not assumed to survive.** Two of
+the four example curves used to justify `P = 5` (United Square, One Holland Village, both Saturday)
+close on a half-hour and were directly affected by fix 2 — each was missing its true final bucket
+(16 and 35 respectively, both correctly quiet, neither a new peak). Recomputed: both curves still
+show exactly the same peak-hour counts at `P = 5` (2 and 1) as originally reported. **`P = 5` stands,
+verified against the fix, not just carried over.**
+
+`data/phase0/hours_summary.json` and `data/phase0/histograms.json` also still carried the pre-fix
+`venue_id` for Baker & Cook (`baker-and-cook-baker-cook-eng-kong-park`, from the slugify bug fixed
+earlier) even though `place_ids.csv` and `venues_meta.json` had been corrected. Patched both files
+directly — no new API calls, since this is metadata already fetched, not new data.
+
+**SerpApi key rotated, 2026-08-29.** It had been exposed twice in this session's transcript (a
+`.env` file-diff, and the error-handling bug fixed the same day). Rotated via the SerpApi dashboard;
+verified afterward — without printing the key itself at any point — that `.env`'s value differs
+from the previously-exposed one and that a live call to SerpApi's account endpoint succeeds under
+the new key (`plan_searches_left: 188`, `this_month_usage: 62`, consistent with this session's
+actual call volume). The exposed key is no longer valid.
+
 ---
 
 ## Open — to be resolved in Phase 0
