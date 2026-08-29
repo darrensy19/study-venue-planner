@@ -4,7 +4,6 @@ Personal tool for choosing a coffee venue for a 3-6 hour study session — maxim
 
 ## Workflow
 
-- **Solo project. No cross-agent coordination.** There is no primary/reviewer split, no `HANDOFF.md`, no `reviews/` directory, no role preflight. Other projects on this machine use that pattern; this one deliberately does not. Don't import it.
 - Run on `opusplan`. Enter plan mode at the start of each phase — that's what makes Opus engage; without it this session runs on Sonnet.
 - Before writing code for a phase, critique plan.md against the repo and environment as they exist right now, not as assumed when the plan was written. Say what's wrong before implementing around it.
 - Work one phase at a time, in order (0 → 1 → 2 → 3). Don't build ahead — no Phase 2 seat-logging scaffolding while Phase 1 is open.
@@ -105,3 +104,67 @@ Small and deterministic. No mocking frameworks, no live-network tests.
 - **`tests/python/` via pytest** — fixture-based, small trimmed real responses: hours parsing (cross-midnight, 24-hour with no `close`, split periods, missing fields, **multi-day periods** at `day_gap` 2 and 6, **truncated endpoints** including interior truncation failing validation, and the **materialised seven-date current-hours map**; the special-closure fixture is synthetic and labelled so, since no saved payload contains `specialDays`), popular-times parsing, `unknown` never conflated with `closed`, independent source failure, last-known-good retention and `ok`/`stale`/`failed` assignment, **coarsening running before the fetch** (a new visit stamped with the pre-fetch histogram value), **`</script>` escaping** in embedded JSON, and generated-HTML validation confirming code, styles and data are all present and parseable.
 
 Anything touching the network is out of scope for automated tests. The manual iPhone / Home Screen acceptance checklist in plan.md covers what unit tests cannot.
+
+## Cross-agent coordination
+
+`WORKFLOW.md` is authoritative and complete — it contains every rule needed for daily operation,
+including route selection, gate mechanics, and prompt construction. This section contains only
+Claude-specific participation rules: when to read `WORKFLOW.md`, which sections, and the write
+boundaries for each role Claude may hold. It never restates a transition, a gate, or the route
+tables.
+
+### Flagging, without opening
+
+Everyday small work — a typo, a rename, a bounded doc fix — proceeds with no assignment, no ID, no
+gate, no prompt. That is the assignment floor working correctly, not an exception.
+
+**When a request would trip a hard Codex trigger** (architecture, schema, security, promotion,
+public contract — the full list is in `WORKFLOW.md`'s Choosing a route section), say so in **one
+line** and ask whether to open an assignment. Never open one unilaterally, and never proceed
+silently as though no trigger applies.
+
+### Preflight
+
+At the start of each assignment, and again after another agent or the user has acted:
+
+1. Re-read `WORKFLOW.md`'s Roles, Choosing a route, and Lifecycle sections; `HANDOFF.md`; the
+   relevant `PLAN.md` section; and the current review record if it exists — sliced per
+   `WORKFLOW.md`'s role- and state-aware slicing table for whichever role this assignment names.
+2. Inspect `git status` and the exact diff or commit named in `HANDOFF.md`.
+3. Confirm the current assignment names Claude in the intended role and route. If the selected
+   model is not observable, say so rather than claiming it matches.
+4. When returning as primary after a review, reconcile the latest reviewer recommendation into
+   `HANDOFF.md` before editing assignment artifacts. If changes were requested, append the
+   primary-owned response section required by `WORKFLOW.md` after corrections and verification.
+
+- **Implementation or architecture primary — `claude_sonnet`, `claude_opus`, or `claude_fable`**:
+  implement or design only the bounded assignment, run its required verification, freeze edits, and
+  invoke the gate. On `GATE_PASS` set `review_requested` if a hard trigger fired or
+  `approval_requested` otherwise; on `GATE_FAIL` remain in `draft`; on `GATE_INCONCLUSIVE` set
+  `review_requested` or `blocked_on_user`. Do not make an architectural decision absent from or
+  contradicting approved architecture; stop and escalate instead. In a review response, append only
+  `Primary response to review round N`; never edit reviewer-owned or earlier sections.
+- **Pre-gate — always `claude_sonnet`, effort high, fresh context**: runs inside `draft`, before
+  the assignment is offered for review. Write only `reviews/<id>-gate.md`, from a brief generated
+  mechanically from `HANDOFF.md`'s acceptance criteria and required verification — never a brief
+  the primary wrote freehand. Recommend nothing, approve nothing, advance no lifecycle state; emit
+  a terminal `GATE_PASS`/`GATE_FAIL`/`GATE_INCONCLUSIVE` status and report to the primary.
+- As reviewer, do not infer policy changes from user facts, preferences, model confirmations, or
+  ambiguous statements. Recommend `BLOCKED_ON_USER` when an explicit policy decision is required.
+- Existing exploration or delegation defaults do not override the one-writer protocol or the
+  pre-gate-only subagent rule. Do not run primary and reviewer work concurrently, delegate project
+  edits while acting as reviewer, or let a subagent hold the primary or reviewer role.
+- In either role, independently verify inherited factual claims against the cited code, data,
+  commands, or primary sources before accepting them.
+
+### Reading files in this repo
+
+- Don't re-read a file already read earlier in this conversation unless you have a specific reason
+  to believe it changed. **Cross-agent exception:** the numbered preflight above always applies
+  after another agent or the user acts; re-read its state files even if read earlier.
+- Read `HANDOFF.md` in full — it is capped at 25 lines for the assignment block, so this is cheap.
+  Read the **governing** `PLAN.md` section per `WORKFLOW.md`'s contract-aware preflight — keyed on
+  the objective and acceptance criteria, not on whether the diff happens to touch `PLAN.md`, and
+  never "in full" merely because the assignment requires it; do not rely on a remembered line
+  count either way.
+- Prefer Grep over Read when searching for a term rather than reading for comprehension.
