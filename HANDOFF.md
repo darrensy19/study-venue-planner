@@ -6,24 +6,24 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: none yet
-- **Work type**: —
-- **State**: —
-- **Primary route**: —
-- **Verification route**: —
-- **Route triggers**: —
-- **Baseline commit**: —
-- **Artifact under review**: —
-- **Objective**: —
-- **Scope exclusions**: —
-- **Acceptance criteria**: —
-- **Required verification**: —
+- **ID**: `IMP-001`
+- **Work type**: implementation
+- **State**: `draft`
+- **Primary route**: `claude_sonnet` — Sonnet, effort high
+- **Verification route**: `codex_terra` — Terra, effort medium
+- **Route triggers**: correctness depends on fail-closed paths (`UNKNOWN`/`NONE` distinction, `AT_LEAST(0)` sum type) — mandatory Codex per hard trigger list
+- **Baseline commit**: `f6aa4f0`
+- **Artifact under review**: `web/ranking.js` (new)
+- **Objective**: Implement `web/ranking.js`'s `resolve_hours`, `effective_close` and feasibility-tier machinery per `plan.md`'s decision model and `CLAUDE.md`'s hours-resolution contract.
+- **Scope exclusions**: `fetch_hours.py`, `fetch_busyness.py`, `build/refresh.py`, `app.js`, `index.template.html`, `seat_confidence`/`backup_strength`/Plan A-B (deferred to later assignments)
+- **Acceptance criteria**: `tests/js/` covers the resolve_hours/effective_close/feasibility-tier cases listed in `CLAUDE.md`'s Testing section (multi-day decomposition, window handling, continuity across the window edge, source authority, the lazy walk, `NONE` vs `UNKNOWN`, `AT_LEAST(0)` accessors, tier boundaries)
+- **Required verification**: `node --test tests/js/` passing; no DOM imports or `fetch()` in `ranking.js`; every `surplus_*` use goes through an accessor
 - **Claude gate result**: —
-- **Independent review**: `not_required | required | deferred`
+- **Independent review**: `required`
 - **Gate evidence**: —
 - **Review record**: —
 - **User decisions required**: —
-- **Next action**: —
+- **Next action**: Primary (Claude Sonnet) implements `web/ranking.js`'s hours/feasibility core, writes `tests/js/` coverage, then runs the gate.
 
 <!--
 When State is `blocked_on_user`, add exactly these two fields (still inside the 25-line cap):

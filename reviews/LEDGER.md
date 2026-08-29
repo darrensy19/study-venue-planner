@@ -14,3 +14,4 @@ event history the sampling audit reads instead.
 
 | ID | Allocated | Work type | Objective (one line) |
 | --- | --- | --- | --- |
+| `IMP-001` | 2026-08-30 | implementation | ranking.js hours-resolution & feasibility-tier core (resolve_hours, effective_close, tiers) |
