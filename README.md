@@ -100,9 +100,13 @@ record, including two real bugs found and fixed in the spread analysis after an 
 `data/venues_meta.json` carries `venue_type`/`area` for all 28. **Phase 1 is next** — fetchers, the
 refresh orchestrator, and Plan A/B. Concrete opening steps, in order:
 
-1. Resolve the multi-day-period design gap in `resolve_hours` before writing any fetcher code —
-   3 venues have an opening period spanning multiple calendar days, which breaks the one-day
-   lookback `CLAUDE.md` currently specifies. This is a design decision, not a bug fix.
+1. ~~Resolve the multi-day-period design gap in `resolve_hours`.~~ **Done, 2026-08-29.** Resolving it
+   turned up four more defects in the same hours-ingestion step, and all five are settled together —
+   see `decisions.md`, "Hours ingestion: five defects resolved as one contract". The fetcher now has a
+   written contract to be built against: decompose multi-day periods at ingestion, treat a 24-hour
+   venue as an unbounded period rather than one closing at midnight, read `truncated` as a window
+   edge, compute and validate the seven-day window, and materialise every date in it. No code was
+   written; this was a design decision.
 2. Fill in `baseline_seatability` by hand for at least one venue in `data/venues_meta.json` (every
    venue is currently `unknown`) — Phase 1's second acceptance test needs at least one non-`unknown`
    venue to produce a Plan A at all.

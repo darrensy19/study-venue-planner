@@ -330,30 +330,30 @@ Every symbol used in a formula below resolves to one of these:
 
 ### `resolve_hours(venue, target_date)`
 
-Hours resolution is a **function of an arbitrary date**, not of the user's selected date. It is called for *every* date whose periods might matter — which, because of after-midnight closing, is always at least two.
+Hours resolution is a **function of an arbitrary date**, not of the user's selected date. It is called for *every* date whose periods might matter. Because of after-midnight closing that is often two dates, but **not always** — the source-authority rules below decide whether the previous date is admitted at all, and a session crossing midnight can pull in a following date as well.
 
 ```
 resolve_hours(venue, target_date) -> {state, periods}
 
     target_weekday = weekday(target_date, tz="Asia/Singapore")
 
-    if venue.hours.date_overrides[target_date] exists:
-        return it                                         # authoritative for that date
-    elif target_date <= venue.hours.overrides_valid_through:
-        return regular_hours[target_weekday]              # in horizon, no override = normal day
+    if current_hours_valid_from <= target_date <= current_hours_valid_through:
+        return venue.hours.current_hours_by_date[target_date]   # every date in the window is materialised
     elif target_date is in holidays.json:
-        return {state: "unknown", periods: []}            # beyond horizon, known holiday
+        return {state: "unknown", periods: []}            # beyond the window, known holiday
     else:
         return regular_hours[target_weekday]
 ```
 
 **Every date goes through this function — never through `regular_hours` directly.** An earlier draft wrote the resolution inline against `selected_date` and then had the active-period lookup pull "periods recorded on" the arrival and previous dates, bypassing overrides and holiday handling for both. A venue with a date override on the previous day, or a previous day that is a holiday beyond the horizon, would have had the wrong periods — or fabricated ones — silently used for a post-midnight arrival.
 
-**A known public holiday beyond the override horizon yields `unknown` hours, never inferred regular hours.** `currentOpeningHours` from the Places API covers roughly seven days; past that, a holiday's hours are genuinely not known, and guessing the regular weekday schedule on a day when malls close early is the exact failure this tool exists to prevent.
+**A known public holiday beyond the current-hours window yields `unknown` hours, never inferred regular hours.** `currentOpeningHours` covers exactly seven days including the request date; past that, a holiday's hours are genuinely not known, and guessing the regular weekday schedule on a day when malls close early is the exact failure this tool exists to prevent.
 
 **`unknown` propagates only when no known candidate period matches the arrival.** A known matching period returns `open` even if the sibling date is `unknown` — see the precedence in "Deriving the active period" below, which is authoritative. `unknown` is never resolved to `closed`.
 
-`overrides_valid_through` makes the horizon explicit so the UI can say "beyond this date, regular schedule only".
+**The current-hours window is computed, then validated.** `current_hours_valid_from` and `current_hours_valid_through` are derived from the request's local date — start date through start + 6 days — per Google's documented contract: *"the next seven days (including today) … starts at midnight on the date of the request and ends at 11:59 pm six days later."* Every period endpoint date is then validated against that window, so a future change in Google's behaviour fails loudly instead of silently. This makes the window explicit for the UI ("beyond this date, regular schedule only"), and replaces an earlier rule that derived the horizon from the latest date a period *opened* — which understated it at 4 of 28 venues.
+
+**Every date inside the window is materialised**, explicitly `known` or `closed`, including dates covered by a period that spans in from an earlier date. Inside the window, a **missing entry is malformed data** and is surfaced as such — never silently treated as "use regular hours". That fallback was a real defect: a special closure has no opening period, so it produced no entry at all, and the regular schedule was silently resurrected on a day the venue is shut.
 
 ### One coordinate system: absolute minutes
 
@@ -369,7 +369,9 @@ For a period `{open, close}` recorded on date `D`:
 
 ```
 period_start_abs = abs(D, open)
-period_end_abs   = abs(D, close)        # close > 1440 rolls into D+1 naturally
+period_end_abs   = UNBOUNDED            if p.always_open
+                   abs(D, close)        otherwise
+                                        # close > 1440 rolls into D+1 naturally
 ```
 
 Worked example — Monday period `{open: 450, close: 1500}` spans `abs(Mon, 450)` to `abs(Mon, 1500)`, i.e. Monday 07:30 to Tuesday 01:00. A Tuesday 00:30 arrival is `abs(Tue, 30)` = `abs(Mon, 1470)`, which lies inside `[abs(Mon,450), abs(Mon,1500))`. It matches, as it must.
@@ -382,27 +384,58 @@ Worked example — Monday period `{open: 450, close: 1500}` spans `abs(Mon, 450)
 arrival_abs   = abs(departure_date, leave_at) + travel_minutes
 arrival_date  = date(arrival_abs)
 
-# 1. Resolve hours for both candidate dates.
-candidates = { arrival_date:          resolve_hours(venue, arrival_date),
-               arrival_date - 1 day:  resolve_hours(venue, arrival_date - 1 day) }
+# 1. Resolve the arrival date, and note the AUTHORITY it was resolved under.
+#    authority = "current" when the date is inside the current-hours window,
+#                "regular" otherwise. Current outranks regular.
+arrival_hours = resolve_hours(venue, arrival_date)
 
-# 2. Build periods from every date whose state is known or closed.
+# 2. Decide whether the previous date may contribute at all.
+if authority(arrival_date) == "current":
+    # The materialised entry is COMPLETE — it already includes coverage from
+    # periods spanning in from earlier dates. Admitting lower-authority regular
+    # carry-in here would let a 24/7 regular schedule override an explicit
+    # current-hours closure.
+    candidates = { arrival_date: arrival_hours }
+
+elif arrival_date is a known holiday outside the window:
+    # The holiday rule is a positive assertion of ignorance about THIS date.
+    # A regular overnight period from the previous date must not overturn it.
+    return unknown
+
+else:
+    candidates = { arrival_date:         arrival_hours,
+                   arrival_date - 1 day: resolve_hours(venue, arrival_date - 1 day) }
+
+# 3. Build periods from every date whose state is known or closed.
 #    (a closed date contributes zero periods, but contributes certainty)
-candidate_periods = [ [abs(d, p.open), abs(d, p.close))
+candidate_periods = [ [abs(d, p.open), period_end_abs(d, p))
                       for d, h in candidates if h.state in ("known", "closed")
                       for p in h.periods ]
 
-# 3. A known period containing the arrival settles it.
-active_period = the P where P.period_start_abs <= arrival_abs < P.period_end_abs
-if active_period exists:
-    venue_close_abs = active_period.period_end_abs
+    where period_end_abs(d, p) = UNBOUNDED        if p.always_open
+                                 abs(d, p.close)  otherwise
+
+# 4. A known period containing the arrival settles it.
+#    UNBOUNDED compares greater than every arrival, so an always-open period
+#    contains any arrival at or after its open.
+matches = [ P for P in candidate_periods
+            where P.period_start_abs <= arrival_abs < P.period_end_abs ]
+
+if matches is non-empty:
+    # Several may match — decomposed chain entries all encode the same close.
+    if the matches do NOT all share one period_end_abs:
+        # Contradictory source data. Do NOT pick one; the venue is not ranked.
+        raise validation failure   # per-venue: flag, keep last-known-good, stale
+    # All ends are equal; the minimum is a deterministic tie-break over identicals.
+    active_period   = the P in matches with the smallest period_end_abs
+    venue_close_abs = active_period.period_end_abs        # may be UNBOUNDED
     return open
 
-# 4. Nothing matched — was that certainty, or ignorance?
+# 5. Nothing matched — was that certainty, or ignorance?
 if any(h.state == "unknown" for h in candidates):
     return unknown
 
-# 5. Every contributing date was definite and none contained the arrival.
+# 6. Every contributing date was definite and none contained the arrival.
 return closed
 ```
 
@@ -418,12 +451,23 @@ The precedence above encodes the distinction that makes this work:
 
 So a failed match is only `closed` when every contributing date was *definite*. If any was `unknown`, the honest answer is `unknown` — the arrival might have fallen inside a period nobody could see.
 
-- **Both dates go through `resolve_hours`.** The previous day's periods are resolved with the same override and holiday logic as the arrival day — not read raw from `regular_hours`. A date override or an out-of-horizon holiday on the previous day changes which after-midnight period exists, and must be honoured.
-- **Boundary rule is `open <= arrival < close`.** Arriving exactly at opening is fine; arriving exactly at closing is not open.
-- **The previous date must always be a candidate** — an arrival shortly after midnight belongs to yesterday's after-midnight period, not to today's.
+- **Both dates go through `resolve_hours`** *when the previous date is admitted at all*. It is resolved with the same window and holiday logic as the arrival day, never read raw from `regular_hours`.
+- **Source authority governs whether the previous date is admitted.** Current hours outrank regular hours, and the precedence is not merely about which entry wins for a single date — it decides which dates may contribute periods at all:
+  - **Arrival date inside the current-hours window** → its materialised entry is **complete and authoritative**, already including coverage from periods spanning in from earlier dates. The previous date is **not** admitted. Without this, a venue whose regular schedule is 24/7 would have its unbounded regular period match an arrival on a date the current hours explicitly record as **closed** — and positive-evidence precedence would return `open` on a day the venue is shut.
+  - **Arrival date is a known holiday outside the window** → return `unknown` immediately. The holiday rule is a positive assertion of ignorance about *that specific date*, and a regular overnight period carried in from the previous day must not be allowed to overturn it. A Monday 22:00–02:00 regular pattern is evidence about ordinary Mondays, not about the eve of a holiday.
+  - **Otherwise** → both dates are admitted under compatible regular authority, and the ordinary previous-date lookup applies.
+- **This does not weaken the positive-evidence rule**, which concerns a *known* arrival date with an `unknown` sibling — that still returns `open`. The cases above are the reverse: they stop a *lower-authority* sibling from manufacturing `open` for an arrival date whose own hours are authoritative or deliberately unknown.
+- **Boundary rule is `period_start_abs <= arrival_abs < period_end_abs`.** Arriving exactly at opening is fine; arriving exactly at closing is not open. Stated through `period_end_abs`, never through a raw `close`, because an `always_open` period has no `close` — its end is `UNBOUNDED`, which compares greater than every arrival.
+- **The previous date is a candidate whenever the authority rules admit it** — an arrival shortly after midnight belongs to yesterday's after-midnight period, not to today's, so under compatible regular authority it must always be resolved. It is *not* admitted when the arrival date's own hours come from the complete materialised current-hours entry, which already contains that span-in coverage.
 - **`unknown` is never silently treated as `closed`.** A venue whose hours could not be resolved is surfaced as hours-unknown, not filtered out as shut.
 - **Travel can cross midnight**: `arrival_abs` is computed from the *departure* date plus travel, then the *arrival* date is read back off it. **Hours resolve for the arrival date and the date before it — never for the departure date alone.** Note that when travel crosses midnight those coincide: `arrival_date - 1` *is* the departure date, so it does get resolved — as the previous-date candidate, not as the anchor. The rule is that the departure date never drives resolution on its own.
-- **Split periods** are handled by the same scan: at most one period can contain a given instant, so a match is unambiguous. Arrival in the gap between two *known* periods resolves by the same precedence as any other non-match — `closed` only when neither candidate date is `unknown`, since an unknown date could have held a period covering that apparent gap.
+- **Several candidate periods may contain one instant, and they must agree on `period_end_abs`.** An earlier draft claimed at most one period can contain a given instant. That is false once a multi-day period is decomposed: a Tuesday arrival at UTown matches both Tuesday's `{0, 6810}` and Monday's `{0, 8250}`. Both resolve to `abs(Tue, 6810)` — the same real close — so the overlap is benign. The policy is explicit, and the two halves must not be confused:
+
+  - **Equal matching ends — valid.** This is the normal decomposed-chain case. Selecting the minimum is a deterministic tie-break over identical values; it changes nothing and simply makes the choice reproducible.
+  - **Unequal matching ends — validation failure.** This is contradictory source data, and it is **not** resolved by taking the smallest. The venue is **not ranked**: it goes through the per-venue failure path (flag loudly, retain last-known-good, `status: stale`), exactly as two overlapping `known` periods on the *same* weekday do.
+
+An earlier draft said the minimum was "pessimistic if they ever disagree, which matches this project's bias against the wasted trip". **That was wrong** — it would silently rank a venue on data known to be self-contradictory. Choosing the safer of two numbers you have no reason to trust is not caution; it is guessing quietly. The minimum is a tie-break among equals, never a resolution of disagreement.
+- **Split periods** are handled by the same scan. Arrival in the gap between two *known* periods resolves by the same precedence as any other non-match — `closed` only when neither candidate date is `unknown`, since an unknown date could have held a period covering that apparent gap.
 - **If no period matches**, the result depends on why: `closed` (and filtered out) **only when neither candidate date is `unknown`**; otherwise `unknown`, and surfaced as hours-unknown rather than filtered.
 
 ### Travel: two derived values
@@ -442,21 +486,129 @@ Using the midpoint everywhere would pretend a ±2.5 minute estimate is exact. Us
 **The two bounds must be resolved separately, all the way through.** A later arrival can fall into a *different* period, or into no period at all — so reusing the midpoint's closing time for the upper-bound test is wrong near closing, across midnight, and with split periods.
 
 ```
-arrival_mid          = abs(departure_date, leave_at) + travel_minutes_mid
-active_period_mid    = period containing arrival_mid           (may be none)
-venue_close_mid      = active_period_mid.period_end_abs
+arrival_mid           = abs(departure_date, leave_at) + travel_minutes_mid
+active_period_mid     = period containing arrival_mid           (may be none)
+required_end_mid      = arrival_mid   + duration + closing_buffer
+effective_close_mid   = NONE if active_period_mid is none else
+                        effective_close(venue, active_period_mid,
+                                        arrival_mid,   required_end_mid)
 
-arrival_upper        = abs(departure_date, leave_at) + travel_minutes_upper
-active_period_upper  = period containing arrival_upper         (may be none)
-venue_close_upper    = active_period_upper.period_end_abs
+arrival_upper         = abs(departure_date, leave_at) + travel_minutes_upper
+active_period_upper   = period containing arrival_upper         (may be none)
+required_end_upper    = arrival_upper + duration + closing_buffer
+effective_close_upper = NONE if active_period_upper is none else
+                        effective_close(venue, active_period_upper,
+                                        arrival_upper, required_end_upper)
 
-usable_minutes  = max(0, min(venue_close_mid - closing_buffer, arrival_mid + duration) - arrival_mid)
-surplus_mid     = (venue_close_mid   - closing_buffer) - (arrival_mid   + duration)
-surplus_upper   = (venue_close_upper - closing_buffer) - (arrival_upper + duration)
-latest_leave_at = (venue_close_mid   - closing_buffer) - duration - travel_minutes_mid
+# effective_close(venue, active_period, arrival_abs, required_end_abs)
+#
+#   Takes `venue` so it can call resolve_hours() and read source authority for
+#   any date it needs — it must not depend on unstated surrounding variables.
+#   Takes required_end_abs so it knows exactly how far coverage must be proven.
+#   NEVER called with active_period == none; the caller returns NONE instead.
+#
+#   Returns exactly one of THREE outcomes — never UNBOUNDED, which is a
+#   period-level containment value and never a feasibility result:
+#     an absolute minute  — a real close, REACHED and authoritatively validated
+#     COVERED             — required_end_abs authoritatively covered, and no close
+#                           was reached at or before it. A close may well exist
+#                           STRICTLY BEYOND required_end_abs; the walk deliberately
+#                           did not look, so nothing may be claimed about it.
+#                           A close exactly AT required_end_abs is NOT this case —
+#                           it is returned as a finite close (exact surplus 0).
+#     UNKNOWN             — the run reached a date boundary it could not
+#                           authoritatively resolve, BEFORE required_end_abs
+#   NONE is NOT in that set. It is produced by the CALLER when active_period is
+#   missing, in which case effective_close is not invoked at all. It means "not
+#   open at this arrival" — a definite fact, not unresolved hours.
+#
+#   THE WALK IS SEQUENTIAL AND LAZY, AND STOPS AT THE FIRST OF:
+#     1. a known close inside the span      -> return that close
+#     2. required_end_abs covered           -> return COVERED
+#     3. an unresolvable date boundary      -> return UNKNOWN
+#
+#   A following date is resolved ONLY when the known open run actually reaches
+#   that date boundary AND required_end_abs lies beyond it. A date the run never
+#   reaches is never consulted and can never contribute UNKNOWN.
+#
+#   Each bound resolves its own run independently, on its own arrival date.
+
+# BRANCH ON THE OUTCOME BEFORE ANY ARITHMETIC.
+# Subtracting from effective_close_* while it may hold COVERED, NONE or UNKNOWN
+# is a type error, not a shortcut — these are tagged outcomes, not numbers.
+
+case effective_close_mid:
+
+  UNKNOWN:
+      -> hours-unknown. No tier, no metrics. usable_minutes, surplus_mid and
+         latest_leave_at are all undefined and MUST NOT be computed or shown.
+
+  NONE:
+      -> not open at that arrival. Metrics undefined; the venue cannot be tight
+         and falls to shorter. This is definite, not unresolved — it does not
+         unrank the venue.
+
+  COVERED:
+      usable_minutes  = duration
+      surplus_mid     = AT_LEAST(0)
+      latest_leave_at = UNDETERMINED
+
+  a finite absolute close C:
+      usable_minutes  = max(0, min(C - closing_buffer, arrival_mid + duration) - arrival_mid)
+      surplus_mid     = (C - closing_buffer) - (arrival_mid + duration)
+      latest_leave_at = (C - closing_buffer) - duration - travel_minutes_mid
+
+case effective_close_upper:
+
+  UNKNOWN:                  -> hours-unknown, as above
+  NONE:                     -> fails robust; the midpoint is still evaluated
+  COVERED:                  -> surplus_upper = AT_LEAST(0)
+  a finite absolute close C -> surplus_upper = (C - closing_buffer) - (arrival_upper + duration)
+
+# effective_close_* == UNKNOWN -> hours-unknown; the venue is NOT ranked, and no
+#                                 surplus is computed for it at all
+#
+# effective_close_* == NONE    -> no active period at that arrival:
+#     upper NONE  -> fails robust, but the MIDPOINT is still evaluated for tight
+#     mid   NONE  -> cannot be tight; falls to shorter
+#   NONE is a definite "not open then", NOT unresolved hours — it never unranks
+#   the venue on its own. Only UNKNOWN does that.
+#
+# effective_close_* == COVERED -> surplus_*       = AT_LEAST(0)
+#                                 usable_minutes  = duration
+#                                 latest_leave_at = UNDETERMINED
+#
+#   COVERED proves the required span is open — hence surplus >= 0, enough to pass
+#   the tier tests, but NOT an exact figure. Note it does NOT prove a close exists
+#   beyond required_end_abs: an always-open period may have no close at all.
+#
+#   UNDETERMINED is NOT "there is no latest departure". The walk stopped once
+#   required_end_abs was covered and deliberately looked no further, so a close
+#   may well exist beyond it. The UI says "no known closing constraint within the
+#   verified span". A later close that was never reached and validated must not be
+#   used for exact surplus or later-departure advice.
 ```
 
 `surplus_upper` is **undefined** when `active_period_upper` is none — that is not a shortfall of zero, it is "the venue is shut by the time you could plausibly arrive", and it fails `robust` outright.
+
+#### `AT_LEAST(0)` is a tagged outcome, not a number
+
+`surplus_*` is therefore a **sum type**: either a real integer margin, or the tag `AT_LEAST(0)`. It is never an ordinary number that happens to be zero, and code must not compare, subtract from, or format it as one. Three derived accessors, and **only** these three, may consume it:
+
+| Accessor | `AT_LEAST(0)` yields | A finite surplus `s` yields |
+| --- | --- | --- |
+| `passes_feasibility()` — the `surplus >= 0` test | **true** | `s >= 0` |
+| `finite_shortfall()` — minutes short, for the tolerance test | **not applicable — rejects the tag** | `-s` (only when `s < 0`) |
+| `sort_key()` — the final `surplus_mid` tiebreak | **`0`** | `s` |
+| `display()` — UI margin text | **no numeric margin**; "fits — margin not established" | `"3h spare"` |
+
+**Every comparison goes through an accessor; no tier test touches `surplus_*` directly.** Writing `surplus_upper >= 0` or `-surplus_mid <= FEASIBILITY_TOLERANCE_MINUTES` is a type error — the second literally negates a tag.
+
+**`finite_shortfall()` is a partial function on the finite variant only**, and rejects `AT_LEAST(0)` rather than coercing it. It can never be reached with the tag anyway: `passes_feasibility(AT_LEAST(0))` is `true`, so the `OR` short-circuits before it. The rejection is a guard against a future refactor reordering those operands, not a live path.
+
+`sort_key()` returning the proven lower bound is deliberate: it **never overstates** the margin against a venue with a real measured surplus, so a `COVERED` venue can never out-rank a genuinely-verified one on a tiebreak it did not earn. And `display()` must never fall back to `sort_key()` — rendering `AT_LEAST(0)` as the number "0" would claim a venue is closing exactly at your deadline when in fact its closing time was never established. **The two failure modes are opposite and both are wrong**; that is why display and sorting are separate accessors rather than one value.
+
+**`UNBOUNDED` is a runtime value, never a serialised one.** JSON has no `Infinity` literal — it is not valid JSON and `JSON.parse` rejects it — so the stored form of an always-open period is simply **the absence of a `close` key**, plus `always_open: true`. `ranking.js` derives the unbounded end when it builds `candidate_periods`, and nothing writes a sentinel number into `venues.json`. Any code that reads `p.close` directly, rather than going through `period_end_abs(d, p)`, is a bug: it will read `undefined` on exactly the venues that are open the longest.
 
 **Arrival is per-venue**, because travel time is. Three consequences, all easy to get wrong:
 
@@ -469,13 +621,90 @@ latest_leave_at = (venue_close_mid   - closing_buffer) - duration - travel_minut
 ### Feasibility tiers
 
 ```
-robust  : active_period_upper exists AND surplus_upper >= 0
-tight   : not robust, AND active_period_mid exists,
-          AND (surplus_mid >= 0 OR -surplus_mid <= FEASIBILITY_TOLERANCE_MINUTES)
-shorter : otherwise
+hours-unknown : effective_close_mid == UNKNOWN OR effective_close_upper == UNKNOWN
+                -> surfaced as hours-unknown and NOT ranked; no tier is assigned
+                   (UNKNOWN only — a NONE on either bound does NOT unrank)
+
+robust  : effective_close_upper is not NONE
+          AND passes_feasibility(surplus_upper)
+
+tight   : not robust
+          AND effective_close_mid is not NONE
+          AND ( passes_feasibility(surplus_mid)
+                OR finite_shortfall(surplus_mid) <= FEASIBILITY_TOLERANCE_MINUTES )
+
+shorter : otherwise — including effective_close_mid == NONE
 ```
 
 `robust` requires the **upper-bound arrival to land inside a genuinely open period** and the whole requested session to fit before that period's closing buffer. `tight` is judged on the midpoint plus the named tolerance.
+
+#### Continuous known coverage, including across the window edge
+
+Being open *on arrival* does not prove the session fits. A `known` state on each spanned date is necessary but **not sufficient** — the next date may be known and closed, or known and reopening later, and a period ending at a window edge is not a real close. For the midpoint and upper bounds **independently**:
+
+1. **Walk forward sequentially from the active period, and stop at the first of three outcomes** — a known close, a covered `required_end_abs`, or an unresolvable date boundary. `required_end_abs = arrival_abs + duration + closing_buffer`.
+
+   ```
+   1. Start at the active period.
+   2. If a known close C falls before the next date boundary:
+        if C <= required_end_abs                            -> return C;
+        else (required_end_abs < C)                         -> return COVERED.
+   3. If required_end_abs is covered                        -> return COVERED.
+   4. If the run REACHES the next date boundary and
+      required_end_abs lies beyond it:
+        resolve that following date;
+        if it cannot be authoritatively resolved            -> return UNKNOWN;
+        if it joins (period begins exactly 00:00)           -> continue the walk;
+        otherwise the run ends at the boundary              -> return that close.
+   ```
+
+   **The `required_end_abs` boundary is inclusive on the close side.** A finite close at exactly `required_end_abs` is **returned as a finite close**, not folded into `COVERED` — which makes its `surplus` exactly `0`, a real measured zero rather than the `AT_LEAST(0)` tag. Only a close *strictly beyond* `required_end_abs` yields `COVERED`, because that is the case the walk genuinely did not reach and cannot speak for. The distinction matters: an exact `0` is a verified thin margin and displays as one; `AT_LEAST(0)` is an unestablished margin and must not.
+
+   **The walk is lazy: a date the run never reaches is never resolved, and therefore can never contribute `UNKNOWN`.** This is load-bearing, and an earlier draft got it backwards by resolving every date intersected by the span up front. Worked counterexample:
+
+   > Arrival Monday 18:00; the venue has a **known** Monday close at 22:00; `required_end` is Tuesday 00:30; Tuesday is an out-of-window known holiday and therefore `unknown`.
+
+   The correct answer is a **known shortfall** measured against the Monday 22:00 close — `tight` or `shorter` depending on its size. Tuesday is **irrelevant**, because the continuous open run ended at 22:00, before Tuesday began. Resolving Tuesday eagerly would have returned `hours-unknown` and unranked a venue whose closing time is perfectly well known. Ignorance about a date you never reach is not ignorance about your session.
+
+   Where a period ends at a boundary flagged `continues_beyond_window`, the walk resolves the next date and attempts to join, exactly as step 4 describes.
+
+   **The walk applies to every period shape, without exception** — ordinary overnight, multi-day, truncated and `always_open` alike. **A period's own extent is never evidence about a date it merely crosses** *and actually reaches*. The source period records what the venue's schedule *says*; it cannot speak for a date whose authority differs:
+
+   | Active period | Crossing into | Naive result | Correct result |
+   | --- | --- | --- | --- |
+   | Finite overnight, Mon 22:00–Tue 02:00 (regular) | Tuesday, an out-of-window known holiday | `known` coverage to 02:00 | **hours-unknown** |
+   | Finite multi-day suffix entry (regular) | a crossed date that is an out-of-window known holiday | `known` coverage to the chain's close | **hours-unknown** |
+   | `always_open` (regular 24/7) | an out-of-window known holiday | `robust` forever | **hours-unknown** |
+
+   An earlier draft scoped this walk to `always_open` and `continues_beyond_window` periods only, which left the first two rows broken: a perfectly ordinary Monday-night regular period would have established known Tuesday coverage on a day nobody can vouch for.
+
+   **`always_open` specifically means *"this source period records no known close"*, not "open forever regardless of what other dates say".** A 24/7 *regular* schedule says nothing about a date the current-hours window explicitly closes, nor about a known holiday beyond that window. An `always_open` period therefore yields `COVERED` — never a claim of no close — and only once every date the run actually reaches has agreed.
+2. **Join only if the next date's known period begins exactly at 00:00.** The run then continues into that period, and `effective_close` becomes whatever the walk ultimately returns — a later known close, or `COVERED` once `required_end_abs` is passed.
+3. If the next date is known but leaves a gap at 00:00, the run ends there — **the venue genuinely closes at the gap**, and that is a *known* close.
+4. If the run is cut short because hours became **`unknown`** before `arrival + duration + closing_buffer`, feasibility is **hours-unknown**: the venue is surfaced as such and is **not ranked**, in neither the ranked list nor the `shorter` group.
+5. Otherwise the run ended at a known close. **Compute `surplus_*` against `effective_close` and apply the ordinary tiers unchanged.**
+
+**This does not override the feasibility tiers, and in particular does not abolish `tight`.** An earlier draft of this rule demanded that the whole interval be continuously covered, which would have relegated any venue closing even a minute short — silently destroying the `FEASIBILITY_TOLERANCE_MINUTES` band the tier contract deliberately provides. The distinction is between a **known** shortfall and an **unknown** one:
+
+| `effective_close` outcome | Result |
+| --- | --- |
+| `COVERED` (or a sufficient known close) **on the upper bound** | `robust` |
+| `COVERED` on the midpoint only | **not** `robust` — falls to `tight` |
+| Known close, shortfall ≤ `FEASIBILITY_TOLERANCE_MINUTES` | `tight`, with the thin-margin warning |
+| Known close, larger shortfall | `shorter`, in its own group |
+| **`NONE` on the upper bound** | fails `robust`; the **midpoint is still evaluated** and may be `tight` |
+| **`NONE` on the midpoint** | cannot be `tight` → `shorter` |
+| Either bound returns **`UNKNOWN`** | **hours-unknown — not ranked at all** |
+
+**`NONE` and `UNKNOWN` are different and must not be conflated.** `NONE` is a definite fact — the venue is *not open* at that arrival — and it never unranks a venue by itself; an upper-bound `NONE` simply fails `robust` while the midpoint is still assessed. `UNKNOWN` is unresolved hours, and only it removes the venue from ranking entirely.
+
+**`robust` is judged on the upper bound alone.** Full coverage at the midpoint does not make a venue `robust` — that is the whole point of resolving the two bounds independently. A venue that fits comfortably on an optimistic journey but not on a pessimistic one is `tight`, not `robust`, and `active_period_upper` failing to exist fails `robust` outright rather than reading as a zero shortfall.
+
+A known 10-minute shortfall is still `tight`. Only ignorance removes a venue from the ranking — never a small, measured shortfall. `closing_buffer` is inside the span deliberately: it can cross midnight even when the requested session itself does not.
+
+**This is bounded to at most two calendar dates**, because `duration + closing_buffer` is under 24 hours. It is not a general lookahead and needs no cycle bound.
+
+Both branches occur in the real venue set. A 24-hour venue joins, because the next date resolves to the `always_open` form beginning at 00:00. An ordinary venue whose Friday period was clipped at the window edge does **not** join, because Saturday reopens at 07:30 — so it correctly closes at Saturday 00:00, which its own `regular_hours` independently confirms.
 
 **`FEASIBILITY_TOLERANCE_MINUTES = 15`, provisional**, a named constant in `ranking.js`. Bands are five minutes wide, so the midpoint carries ±2.5. Fifteen minutes is roughly **4-8% of a supported session** — about 8% of a three-hour one and about 4% of a six-hour one. A shortfall worth flagging, not worth relegating. Adjust after real use.
 
@@ -638,16 +867,23 @@ The generation step is **not** a build system in this sense — a Python script 
         "last_attempt_at": "2026-08-29T10:00:00+08:00",
         "last_success_at": "2026-08-29T10:00:00+08:00",
         "status": "ok",
-        "overrides_valid_through": "2026-09-05",
+        "current_hours_valid_from": "2026-08-29",
+        "current_hours_valid_through": "2026-09-04",
         "regular_hours": {
           "mon": {"state": "known", "periods": [{"open": 450, "close": 1320}]},
           "tue": {"state": "known", "periods": [{"open": 450, "close": 1500}]},
           "wed": {"state": "closed", "periods": []},
           "thu": {"state": "unknown", "periods": []}
         },
-        "date_overrides": {
+        "current_hours_by_date": {
+          "2026-08-29": {"state": "known", "periods": [{"open": 450, "close": 1320}]},
+          "2026-08-30": {"state": "known", "periods": [{"open": 450, "close": 1320}]},
           "2026-08-31": {"state": "known", "periods": [{"open": 600, "close": 1080}]},
-          "2026-09-01": {"state": "closed", "periods": []}
+          "2026-09-01": {"state": "closed", "periods": []},
+          "2026-09-02": {"state": "known", "periods": [{"open": 450, "close": 1320}]},
+          "2026-09-03": {"state": "known", "periods": [{"open": 450, "close": 1320}]},
+          "2026-09-04": {"state": "known", "periods": [
+            {"open": 450, "close": 1440, "continues_beyond_window": true}]}
         }
       },
       "histogram": {
@@ -665,11 +901,17 @@ The generation step is **not** a build system in this sense — a Python script 
 }
 ```
 
-**Hours state:** `known` (periods authoritative) · `closed` (confirmed, periods empty) · `unknown` (source silent, fetch failed, or beyond the override horizon on a known holiday — **never treated as closed**).
+**Hours state:** `known` (periods authoritative) · `closed` (confirmed, periods empty) · `unknown` (source silent, fetch failed, or beyond the current-hours window on a known holiday — **never treated as closed**).
 
-`open`/`close` are **integer minutes from local midnight of the period's start date**. `close > 1440` means after-midnight (`{"open": 450, "close": 1500}` = 07:30 to 01:00 next day). A 24-hour venue is `{"open": 0, "close": 1440}`.
+`open`/`close` are **integer minutes from local midnight of the period's start date**. `close > 1440` means after-midnight (`{"open": 450, "close": 1500}` = 07:30 to 01:00 next day).
 
-`date_overrides` holds Google's date-specific `currentOpeningHours`; `overrides_valid_through` records how far that data reaches.
+**`close` can legitimately reach `7 * 1440`.** A single Places period can span several calendar days — e.g. Sunday 07:30 through the following Saturday 17:30. The fetcher decomposes it at ingestion into one entry per calendar day it touches, each still expressed as minutes from *that entry's own* midnight: the anchor day keeps its real open time, every other touched day gets `open: 0`, and each carries a `close` equal to the true remaining distance to the actual close. Nothing caps it at 2880, and a large `close` is not evidence of a parse error. `resolve_hours` and its one-day lookback are unchanged by this, because every touched day's entry is self-contained.
+
+**A 24-hour venue has no `close` at all** — `{"open": 0, "always_open": true}`. The period **records no known close**, which is a statement about that source period and not a promise about any other date. Once the walk has covered the required span without reaching a close, `effective_close` is **`COVERED`** — not a promise that the venue never closes. `closing_buffer` has nothing to apply against *within the verified span*, `surplus_*` is `AT_LEAST(0)` rather than a figure, and `latest_leave_at` is `UNDETERMINED`, meaning **no known closing constraint within the verified span** — never "there is no latest departure". The walk stopped at `required_end_abs` and deliberately looked no further, so nothing may claim what lies past it. `UNBOUNDED` remains a **period-level** value used only for containment, and never travels into a feasibility claim. An earlier draft wrote `{"open": 0, "close": 1440}`, which fabricated a midnight close and relegated genuinely 24-hour venues to the `shorter` group every evening. **The unbounded result is a property of the resolved period, not of the venue** — a current-hours closure or an `unknown` date still overrides the regular 24/7 schedule.
+
+`current_hours_by_date` holds Google's date-specific `currentOpeningHours` as a **complete schedule** for every date in the window, not a sparse list of exceptions — which is why it is no longer called `date_overrides`. `continues_beyond_window: true` marks an endpoint that is a window artifact rather than a real closing event; see the truncation rule below.
+
+**`truncated` endpoints are window edges, never events.** Google clips periods at the window boundary and flags the clipped endpoint. `open.truncated` is valid only at the window's first date, 00:00; `close.truncated` only at the final date's boundary. A truncated close reported as 23:59 normalises to the **exclusive next midnight** and carries `continues_beyond_window: true`. Interior or inconsistent truncation fails validation rather than being guessed through. This affects 7 of the 28 venues — including one with no unusual hours at all, since truncation is a property of the window, not of the venue.
 
 **Timezones are recorded separately** for hours and histogram — different sources, may not agree. Phase 0 confirms each independently.
 
@@ -831,17 +1073,17 @@ Terms-of-service note: automated scraping of Google Maps is against Google's ToS
 
 1. **Resolve each supplied name + brand to a Google Place ID**, then assign a stable `venue_id`, and record `venue_type` and `area` in `venues_meta.json`. **Answered, 2026-08-29.** 28/28 resolved to a confident Place ID (`data/phase0/place_ids.csv`); `venue_type` and `area` recorded for all 28 in `data/venues_meta.json`.
 2. **Confirm the Places API path works for a non-Starbucks brand** as well as Starbucks — the multi-brand claim rests on one interface covering all of them. **Answered, 2026-08-29.** Confirmed on Coffee Bean & Tea Leaf (3 venues) and Baker & Cook (1 venue) — same interface, same result shape, no brand-specific handling needed.
-3. **Confirm `currentOpeningHours` returns date-specific overrides**, and record the real horizon that `overrides_valid_through` will carry. **Answered, 2026-08-29.** Confirmed present. The horizon is **not a fixed constant** — it varied 1–7 days ahead depending on the venue.
+3. **Confirm `currentOpeningHours` returns date-specific overrides**, and record the real window it covers. **Answered, 2026-08-29 — and the first answer was wrong.** Confirmed present. Phase 0 reported the horizon as "not a fixed constant — 1 to 7 days ahead depending on the venue"; that spread was an artifact of deriving it from the latest date a period *opened*. Measured across all 28 saved payloads, every venue covers 2026-08-29 through 2026-09-04 — a **flat seven-day window**, matching Google's documented contract. The per-venue field survives, now holding a computed-and-validated window. See `decisions.md`, 2026-08-29, "Hours ingestion: five defects."
 4. **Confirm both timezones independently.** `hours_timezone` and `histogram_timezone` are separate fields because the sources may differ. **Answered, 2026-08-29.** Both are `Asia/Singapore` (UTC+480). `hours_timezone` came directly from the Places API response; `histogram_timezone` has no field to read at all, so it was confirmed indirectly (first non-zero busyness hour vs. each venue's own opening hour) — 0h offset on every eligible venue. They agree.
 5. **Confirm the busyness source works** for venues of each brand. **Answered, 2026-08-29.** Confirmed for all three: 22/24 `starbucks`, 3/3 `coffee_bean`, 1/1 `baker_and_cook` have real Popular Times data (26/28 overall; the 2 without were independently confirmed absent by checking Google Maps directly, not just an empty API response — see `decisions.md`, 2026-08-29, "Popular Times coverage, take two").
-6. **Check real hours shapes.** Any after-midnight closing, 24-hour operation, or split periods? Determines whether the periods array and previous-date lookup earn their complexity. **Answered, 2026-08-29 — and the answer is a real gap, not a clean bill of health.** All three shapes occur (24-hour: 3 venues; after-midnight: several; split periods: none observed). More importantly, **3 of 28 venues run a single period spanning several calendar days** (e.g. Sunday 07:30 through the following Saturday 17:30), which the previous-date-only lookup in `CLAUDE.md` cannot resolve as written. See `decisions.md`, 2026-08-29, "`build/phase0_hours.py` run live" — this needs a decision before Phase 1's fetcher is built, not after.
+6. **Check real hours shapes.** Any after-midnight closing, 24-hour operation, or split periods? Determines whether the periods array and previous-date lookup earn their complexity. **Answered, 2026-08-29 — and the answer is a real gap, not a clean bill of health.** All three shapes occur (24-hour: 3 venues; after-midnight: several; split periods: none observed). More importantly, **3 of 28 venues run a single period spanning several calendar days** (e.g. Sunday 07:30 through the following Saturday 17:30), which the previous-date-only lookup in `CLAUDE.md` cannot resolve as written. See `decisions.md`, 2026-08-29, "`build/phase0_hours.py` run live". **Resolved 2026-08-29** — the fetcher decomposes a multi-day period at ingestion into one self-contained suffix entry anchored to each touched day — the entries are *not* bounded to a single day; each carries the true remaining distance to the real close — leaving `resolve_hours` and its one-day lookback unchanged. Resolving it surfaced four further defects in the same ingestion step (a fabricated midnight close on 24-hour venues, truncated endpoints read as real events, a miscomputed window, and a sparse current-hours map that let a special closure fall back to regular hours). All five are settled together in `decisions.md`, 2026-08-29, "Hours ingestion: five defects."
 7. **Measure the Popular Times spread and set `N` and `P`.** Per venue and weekday: max−min, IQR, distance from median to max, and **hourly coverage** (to validate or revise `MIN_HISTOGRAM_HOURS = 6`). Record `N` and `P` in `decisions.md` with the evidence.
 
    Also check for repeatable troughs around `2N` below median — that, and only that, would justify `very_quiet` later.
 
    A curve inspected while planning ran roughly 60-100% of peak all day with only a mild evening peak. **If the median venue's range is under ~20 points, banding will barely discriminate** — most venues will read `typical` and `baseline_seatability` will carry the ranking. A legitimate finding to record, not a problem to fix by shrinking `N` until the bands look busy.
 
-**Acceptance:** one venue's hours and histogram printed and matching the Maps app; both timezones confirmed; date-override horizon recorded; a spread and coverage table across all venues; proposed `N` and `P` with justification.
+**Acceptance:** one venue's hours and histogram printed and matching the Maps app; both timezones confirmed; the current-hours window recorded; a spread and coverage table across all venues; proposed `N` and `P` with justification.
 
 **This measures the histogram's shape. It does not validate that Popular Times predicts seat availability** — nothing in Phase 0 can establish that, and no Phase 0 output should be read as evidence for it.
 
@@ -907,11 +1149,27 @@ Show **uncertainty**, never a bare probability. This is where cross-venue compar
 Deliberately small. No mocking frameworks, no live-network tests.
 
 **`tests/js/` — `node --test`**, importing `ranking.js` directly from source:
-- **`resolve_hours(venue, target_date)` as a pure function of any date** — a date override winning, the `overrides_valid_through` horizon boundary, a holiday beyond the horizon yielding `unknown`, a holiday *inside* the horizon with no override resolving to regular hours, and `selected_weekday` derived in `Asia/Singapore`
-- **`resolve_hours` applied to the previous date too** — a date override on the previous day changing which after-midnight period exists
+- **`resolve_hours(venue, target_date)` as a pure function of any date** — a current-hours date winning, the `current_hours_valid_from` / `current_hours_valid_through` window boundaries, a holiday beyond the window yielding `unknown`, a holiday *inside* the window resolving from the materialised entry, and `selected_weekday` derived in `Asia/Singapore`
+- **multi-day decomposition** — a `day_gap` of 6 and of 2 reproducing the anchor entry unchanged, every touched weekday present and `known`, the close-day entry an ordinary same-day close, untouched weekdays explicitly `closed`, and `day_gap == 0` with `close == open` rejected
+- **the current-hours window** — all seven dates materialised, a date covered only by a period spanning in from an earlier date marked `known` rather than `closed`, a missing entry inside the window treated as malformed rather than as regular hours, and interior truncation failing validation
+- **continuity across the window edge** — a final-window-day arrival joining into continuous next-day regular hours; the same arrival meeting a known midnight gap and closing at the gap; the same arrival meeting an `unknown` next date and resolving hours-unknown; a session ending before midnight whose `closing_buffer` crosses it; and midpoint and upper bounds resolving differently at the boundary
+- **known shortfall versus unknown boundary** — a **known** 10-minute shortfall still ranking as `tight` with its thin-margin warning, while an `unknown` boundary is **not ranked at all**. These must not collapse into one outcome
+- **source authority across the date boundary** — a venue whose *regular* hours are 24/7 whose arrival date is inside the window and explicitly `closed` must resolve **closed**, not `open` via the previous date's unbounded regular period; and a known holiday outside the window must resolve **unknown**, not `open` via a regular overnight period carried in from the previous day
+- **unbounded periods** — an `always_open` period containing an arrival, `effective_close` returning `COVERED` (never a claim of no close), `surplus_*` as `AT_LEAST(0)` passing the tier test but never displayed as a figure, `usable_minutes` equal to the full duration, **`latest_leave_at` == `UNDETERMINED`** (not a computed time), and the serialised JSON containing **no** `Infinity` and no `close` key
+- **the lazy walk stops at the first known close** — arrival Monday 18:00, a **known** Monday close at 22:00, `required_end` Tuesday 00:30, and Tuesday an out-of-window known holiday: the result is a **known shortfall** ranked `tight` or `shorter` against the 22:00 close, **never hours-unknown**. Tuesday must never be resolved, since the run ends before it
+- **`NONE` versus `UNKNOWN`** — an upper-bound `NONE` failing `robust` while the midpoint is still evaluated and can be `tight`; a midpoint `NONE` falling to `shorter`; and `UNKNOWN` on either bound unranking the venue. `NONE` must never unrank on its own
+- **the exact `required_end_abs` boundary** — a finite close landing **exactly** on `required_end_abs` returns a **finite close** with `surplus == 0` (an exact, displayable zero), while a close one minute **beyond** it returns `COVERED` with `surplus == AT_LEAST(0)`. The two must be distinguishable: the first displays its margin, the second must not
+- **`AT_LEAST(0)` accessors** — `passes_feasibility()` true, `sort_key()` == 0, and `display()` emitting **no numeric margin**; plus a guard that `display()` never renders the tag as "0", which would claim a deadline-exact close that was never established
+- **the tier tests go through accessors, never raw comparison** — a `COVERED` upper bound reaching `robust` via `passes_feasibility(surplus_upper)`, and `finite_shortfall()` **rejecting `AT_LEAST(0)`** rather than coercing it. A tier test that compares `surplus_*` numerically, or negates it, must fail the suite
+- **case dispatch before arithmetic** — `UNKNOWN`, `NONE` and `COVERED` must each be handled without any subtraction from `effective_close_*`, proving the metrics are branched on the tag rather than computed and discarded
+- **no period shape may outrank a later date's authority** — all three must resolve **hours-unknown** when the session crosses into an **out-of-window known holiday**: (a) a **finite overnight** regular period, Mon 22:00–Tue 02:00; (b) a **finite multi-day** regular suffix entry; (c) a **24/7 `always_open`** regular period, which must never inherit `robust` from its unbounded end. The first two are the cases an earlier draft's `always_open`-only walk left broken
+- **the formulas read the effective closes** — `usable_minutes`, `surplus_mid`, `surplus_upper` and `latest_leave_at` computed against an `effective_close` **extended by a join** across a `continues_beyond_window` boundary, proving they do not read `active_period.period_end_abs` directly; and an `UNKNOWN` effective close producing **no tier and no surplus at all**
+- **`robust` is upper-bound only** — a venue with full coverage at the midpoint but a shortfall at the upper bound ranks `tight`, never `robust`
+- **minimum-`period_end_abs` selection is a tie-break among equals only** — a decomposed chain whose matching ends are equal resolves deterministically to that end; a synthetic pair whose ends **disagree** is a **validation failure** and the venue is **rejected, not ranked** (per-venue flag, last-known-good retained, `status: stale`). Asserting the smallest end here instead would be a bug, and the test must assert rejection
+- **`resolve_hours` applied to the previous date too** — a current-hours entry on the previous day changing which after-midnight period exists
 - **the open/unknown/closed precedence** — a known period containing the arrival returning `open` **even when the sibling date is `unknown`**; no match with a sibling `unknown` returning `unknown`; no match with both dates definite (`known` or `closed`) returning `closed`; and a `closed` date contributing certainty rather than doubt
 - **absolute-minute conversion** — that a Tuesday 00:30 arrival matches a Monday `{open: 450, close: 1500}` period, the case that motivated the coordinate system
-- **active-period lookup** — arrival inside a period, in the gap between split periods, before opening, after closing; previous-date after-midnight periods; travel crossing midnight; the exact `open <= arrival < close` boundary at both ends
+- **active-period lookup** — arrival inside a period, in the gap between split periods, before opening, after closing; previous-date after-midnight periods; travel crossing midnight; the exact `period_start_abs <= arrival_abs < period_end_abs` boundary at both ends, including an `always_open` period whose `UNBOUNDED` end contains every later arrival
 - **independent mid/upper resolution** — a case where `arrival_mid` and `arrival_upper` fall in *different* periods, and one where `arrival_upper` falls in **no** period (which must fail `robust`, not read as zero shortfall)
 - `usable_minutes` / `surplus_mid` / `surplus_upper` / `latest_leave_at`, including closing-buffer, past-closing, zero and negative cases
 - feasibility tiers — `robust` / `tight` / `shorter` boundaries, and the `FEASIBILITY_TOLERANCE_MINUTES` edge
@@ -925,7 +1183,8 @@ Deliberately small. No mocking frameworks, no live-network tests.
 - area grouping, the log→venue join, and "last visit" resolved from row order
 
 **`tests/python/` — pytest, fixture-based**, using small trimmed real responses:
-- hours parsing — cross-midnight, 24-hour, split periods, missing fields, date overrides
+- hours parsing — cross-midnight, 24-hour (no `close`), split periods, missing fields, **multi-day periods** (`day_gap` 2 and 6), **truncated endpoints** (both ends, one end, and interior truncation failing validation), and the **materialised seven-date current-hours map**
+- fixtures trimmed from the saved Phase 0 payloads: a 24/7 venue with both-end-truncated current hours; a Sunday→Saturday span with clipped endpoints; a Friday→Sunday span mixed with ordinary weekday periods; and an **ordinary** venue with a truncated final-window close, which is the case proving truncation is a property of the window rather than of unusual venues. A special-closure fixture must be **synthetic and labelled so** — no saved payload contains `specialDays`
 - popular-times parsing
 - `unknown` vs `closed` never conflated
 - independent source failure; last-known-good retention; `ok`/`stale`/`failed` assignment
