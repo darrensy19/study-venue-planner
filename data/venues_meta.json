@@ -3,168 +3,168 @@
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "starbucks-singhealth-tower": {
     "brand": "starbucks",
     "venue_type": "hospital_cafe",
     "area": "Outram",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "dependable"
   },
   "starbucks-wisma-atria": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-utown": {
     "brand": "starbucks",
     "venue_type": "campus_cafe",
     "area": "Kent Ridge",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "starbucks-chinatown-food-street": {
     "brand": "starbucks",
     "venue_type": "tourist_cafe",
     "area": "Chinatown",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "dependable"
   },
   "starbucks-fusionopolis": {
     "brand": "starbucks",
     "venue_type": "office_cafe",
     "area": "one-north",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "starbucks-rochester-park": {
     "brand": "starbucks",
     "venue_type": "standalone_cafe",
     "area": "one-north",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-west-mall": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Bukit Batok",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-hillv2": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Hillview",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "poor"
   },
   "starbucks-hometeamns-bukit-batok": {
     "brand": "starbucks",
     "venue_type": "clubhouse_cafe",
     "area": "Bukit Batok",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "starbucks-united-square": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Novena",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-tekka-place": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Little India",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "starbucks-the-central": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Clarke Quay",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "starbucks-valley-point": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "River Valley",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-ue-square": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Robertson Quay",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-the-cathay": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Dhoby Ghaut",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-one-holland-village": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Holland Village",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-jurong-point": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Jurong West",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "starbucks-hillion-mall": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Bukit Panjang",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-chinatown-point": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Chinatown",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "starbucks-ion-orchard": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-delfi-orchard": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "starbucks-orchard-gateway": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "starbucks-takashimaya": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "mixed"
   },
   "baker-cook-eng-kong-park": {
     "brand": "baker_and_cook",
     "venue_type": "independent_cafe",
     "area": "Bukit Timah",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "coffee-bean-west-mall": {
     "brand": "coffee_bean",
     "venue_type": "mall_cafe",
     "area": "Bukit Batok",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "coffee-bean-imm": {
     "brand": "coffee_bean",
     "venue_type": "mall_cafe",
     "area": "Jurong East",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   },
   "coffee-bean-balmoral-plaza": {
     "brand": "coffee_bean",
     "venue_type": "strip_mall_cafe",
     "area": "Bukit Timah",
-    "baseline_seatability": "unknown"
+    "baseline_seatability": "usually_available"
   }
 }
