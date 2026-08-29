@@ -26,4 +26,5 @@ data/phase0/raw/
 # human-readable record of which tooling this project uses and why.
 .claude/settings.json
 .claude/skills/
+.claude/RESUME.md
 .agents/

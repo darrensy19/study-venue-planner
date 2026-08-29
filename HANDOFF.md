@@ -23,7 +23,7 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Gate evidence**: —
 - **Review record**: —
 - **User decisions required**: —
-- **Next action**: Primary (Claude Sonnet) implements `web/ranking.js`'s hours/feasibility core, writes `tests/js/` coverage, then runs the gate.
+- **Next action**: Implementation and tests done (38/38 passing), staged but uncommitted. Run the pre-gate next (brief already generated via `.cross-agent-workflow/gate_brief.py HANDOFF.md`), then route to `review_requested` (`codex_terra`) once `GATE_PASS` lands, since a hard trigger already fired.
 
 <!--
 When State is `blocked_on_user`, add exactly these two fields (still inside the 25-line cap):
