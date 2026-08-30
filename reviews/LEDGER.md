@@ -18,3 +18,4 @@ event history the sampling audit reads instead.
 | `ARCH-001` | 2026-08-30 | architecture/high-level | Session-end/return-transport feasibility requirement |
 | `WF-001` | 2026-08-31 | workflow amendment | Sync WORKFLOW.md/AGENTS.md/CLAUDE.md/reviews/TEMPLATE.md and `.cross-agent-workflow/` scripts to the updated skill templates |
 | `IMP-002` | 2026-08-31 | implementation | Implement ARCH-001's session-end return-transport design in ranking.js |
+| `IMP-003` | 2026-08-31 | implementation | relative_busyness banding and seat_confidence lookup in ranking.js |
