@@ -3,39 +3,181 @@
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "40-45m",
+          "rank": 16
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "20-25m",
+          "rank": 10
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-orchard-gateway",
+        "mode": "walk",
+        "travel_band": "0-5m"
+      },
+      {
+        "venue_id": "starbucks-takashimaya",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-wisma-atria",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-tekka-place",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-the-cathay",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-ion-orchard",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-ue-square",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      },
+      {
+        "venue_id": "starbucks-delfi-orchard",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 6,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-singhealth-tower": {
     "brand": "starbucks",
     "venue_type": "hospital_cafe",
     "area": "Outram",
-    "baseline_seatability": "dependable"
+    "baseline_seatability": "dependable",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "50-55m",
+          "rank": 26
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "20-25m",
+          "rank": 11
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-chinatown-food-street",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      },
+      {
+        "venue_id": "starbucks-chinatown-point",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 1,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-wisma-atria": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "50-55m",
+          "rank": 25
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "20-25m",
+          "rank": 12
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-takashimaya",
+        "mode": "walk",
+        "travel_band": "0-5m"
+      },
+      {
+        "venue_id": "starbucks-ion-orchard",
+        "mode": "walk",
+        "travel_band": "0-5m"
+      },
+      {
+        "venue_id": "starbucks-delfi-orchard",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-orchard-gateway",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-centrepoint",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-valley-point",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "coffee-bean-balmoral-plaza",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      }
+    ],
+    "preference": 5,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-utown": {
     "brand": "starbucks",
     "venue_type": "campus_cafe",
     "area": "Kent Ridge",
     "baseline_seatability": "usually_available",
-    "preference": 1,
+    "preference": 3,
     "closing_buffer_minutes": null,
     "holiday_policy": "substitute_sun",
     "access": {
       "origin_a": {
         "transit": {
-          "rank": 4,
-          "band": "30-35m"
+          "band": "30-35m",
+          "rank": 7
         }
       },
       "origin_b": {
         "transit": {
-          "rank": 4,
-          "band": "45-50m"
+          "band": "45-50m",
+          "rank": 27
         }
       }
     },
@@ -45,43 +187,157 @@
     "brand": "starbucks",
     "venue_type": "tourist_cafe",
     "area": "Chinatown",
-    "baseline_seatability": "dependable"
+    "baseline_seatability": "dependable",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "45-50m",
+          "rank": 21
+        }
+      },
+      "origin_b": {
+        "walk": {
+          "band": "5-10m",
+          "rank": 2
+        },
+        "transit": {
+          "band": "5-10m",
+          "rank": 2
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-chinatown-point",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-the-central",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-singhealth-tower",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      },
+      {
+        "venue_id": "starbucks-ue-square",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 4,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-fusionopolis": {
     "brand": "starbucks",
     "venue_type": "office_cafe",
     "area": "one-north",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "cycle": {
+          "band": "40-45m",
+          "rank": 9
+        },
+        "transit": {
+          "band": "35-40m",
+          "rank": 10
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "30-35m",
+          "rank": 17
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-rochester-park",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      }
+    ],
+    "preference": 2,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-rochester-park": {
     "brand": "starbucks",
     "venue_type": "standalone_cafe",
     "area": "one-north",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "cycle": {
+          "band": "35-40m",
+          "rank": 6
+        },
+        "transit": {
+          "band": "35-40m",
+          "rank": 11
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "35-40m",
+          "rank": 19
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-fusionopolis",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-one-holland-village",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 8,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-west-mall": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Bukit Batok",
     "baseline_seatability": "mixed",
-    "preference": 2,
+    "preference": 9,
     "closing_buffer_minutes": null,
     "holiday_policy": "substitute_sun",
     "access": {
       "origin_a": {
         "cycle": {
-          "rank": 3,
-          "band": "30-35m"
+          "band": "30-35m",
+          "rank": 5
         },
         "transit": {
-          "rank": 1,
-          "band": "20-25m"
+          "band": "20-25m",
+          "rank": 2
         }
       },
       "origin_b": {
         "transit": {
-          "rank": 2,
-          "band": "40-45m"
+          "band": "40-45m",
+          "rank": 21
         }
       }
     },
@@ -108,24 +364,24 @@
     "venue_type": "mall_cafe",
     "area": "Hillview",
     "baseline_seatability": "poor",
-    "preference": 3,
+    "preference": 16,
     "closing_buffer_minutes": null,
     "holiday_policy": "substitute_sun",
     "access": {
       "origin_a": {
         "cycle": {
-          "rank": 1,
-          "band": "25-30m"
+          "band": "25-30m",
+          "rank": 3
         },
         "transit": {
-          "rank": 3,
-          "band": "20-25m"
+          "band": "20-25m",
+          "rank": 4
         }
       },
       "origin_b": {
         "transit": {
-          "rank": 1,
-          "band": "40-45m"
+          "band": "40-45m",
+          "rank": 20
         }
       }
     },
@@ -151,121 +407,733 @@
     "brand": "starbucks",
     "venue_type": "clubhouse_cafe",
     "area": "Bukit Batok",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "cycle": {
+          "band": "45-50m",
+          "rank": 10
+        },
+        "transit": {
+          "band": "35-40m",
+          "rank": 12
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "55-60m",
+          "rank": 28
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [],
+    "preference": 7,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-united-square": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Novena",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "35-40m",
+          "rank": 13
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "20-25m",
+          "rank": 13
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "coffee-bean-balmoral-plaza",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 24,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-tekka-place": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Little India",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "50-55m",
+          "rank": 22
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "15-20m",
+          "rank": 7
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-centrepoint",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-the-cathay",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      }
+    ],
+    "preference": 10,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-the-central": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Clarke Quay",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "50-55m",
+          "rank": 24
+        }
+      },
+      "origin_b": {
+        "walk": {
+          "band": "10-15m",
+          "rank": 3
+        },
+        "transit": {
+          "band": "10-15m",
+          "rank": 3
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-chinatown-point",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-ue-square",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-chinatown-food-street",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-the-cathay",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 19,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-valley-point": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "River Valley",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "55-60m",
+          "rank": 28
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "15-20m",
+          "rank": 6
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-ion-orchard",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-takashimaya",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-wisma-atria",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      }
+    ],
+    "preference": 22,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-ue-square": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Robertson Quay",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "45-50m",
+          "rank": 19
+        }
+      },
+      "origin_b": {
+        "walk": {
+          "band": "15-20m",
+          "rank": 4
+        },
+        "transit": {
+          "band": "15-20m",
+          "rank": 9
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-the-central",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-the-cathay",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-orchard-gateway",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-centrepoint",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      },
+      {
+        "venue_id": "starbucks-chinatown-food-street",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 20,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-the-cathay": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Dhoby Ghaut",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "40-45m",
+          "rank": 18
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "10-15m",
+          "rank": 4
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-orchard-gateway",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-centrepoint",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-tekka-place",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-ue-square",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-the-central",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      },
+      {
+        "venue_id": "starbucks-takashimaya",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 15,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-one-holland-village": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Holland Village",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "cycle": {
+          "band": "40-45m",
+          "rank": 8
+        },
+        "transit": {
+          "band": "30-35m",
+          "rank": 9
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "30-35m",
+          "rank": 18
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-rochester-park",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 13,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-jurong-point": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Jurong West",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "35-40m",
+          "rank": 14
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "40-45m",
+          "rank": 23
+        }
+      }
+    },
+    "fallbacks": [],
+    "preference": 27,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-hillion-mall": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Bukit Panjang",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "cycle": {
+          "band": "40-45m",
+          "rank": 7
+        },
+        "transit": {
+          "band": "25-30m",
+          "rank": 6
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "45-50m",
+          "rank": 26
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [],
+    "preference": 26,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-chinatown-point": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Chinatown",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "40-45m",
+          "rank": 17
+        }
+      },
+      "origin_b": {
+        "walk": {
+          "band": "5-10m",
+          "rank": 1
+        },
+        "transit": {
+          "band": "5-10m",
+          "rank": 1
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-chinatown-food-street",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-the-central",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-singhealth-tower",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 14,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-ion-orchard": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "50-55m",
+          "rank": 23
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "15-20m",
+          "rank": 5
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-wisma-atria",
+        "mode": "walk",
+        "travel_band": "0-5m"
+      },
+      {
+        "venue_id": "starbucks-takashimaya",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-delfi-orchard",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-orchard-gateway",
+        "mode": "cycle",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-valley-point",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "coffee-bean-balmoral-plaza",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-centrepoint",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      }
+    ],
+    "preference": 18,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-delfi-orchard": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "45-50m",
+          "rank": 20
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "25-30m",
+          "rank": 16
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-ion-orchard",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-wisma-atria",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-orchard-gateway",
+        "mode": "cycle",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-takashimaya",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "coffee-bean-balmoral-plaza",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-centrepoint",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 25,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-orchard-gateway": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "40-45m",
+          "rank": 15
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "15-20m",
+          "rank": 8
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-centrepoint",
+        "mode": "walk",
+        "travel_band": "0-5m"
+      },
+      {
+        "venue_id": "starbucks-ion-orchard",
+        "mode": "cycle",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-takashimaya",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-delfi-orchard",
+        "mode": "cycle",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-wisma-atria",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-the-cathay",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-ue-square",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      }
+    ],
+    "preference": 17,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "starbucks-takashimaya": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Orchard",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "50-55m",
+          "rank": 27
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "20-25m",
+          "rank": 14
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-wisma-atria",
+        "mode": "walk",
+        "travel_band": "0-5m"
+      },
+      {
+        "venue_id": "starbucks-ion-orchard",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-orchard-gateway",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-centrepoint",
+        "mode": "walk",
+        "travel_band": "5-10m"
+      },
+      {
+        "venue_id": "starbucks-valley-point",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-delfi-orchard",
+        "mode": "walk",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-the-cathay",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 11,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "baker-cook-eng-kong-park": {
     "brand": "baker_and_cook",
     "venue_type": "independent_cafe",
     "area": "Bukit Timah",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "walk": {
+          "band": "10-15m",
+          "rank": 1
+        },
+        "cycle": {
+          "band": "5-10m",
+          "rank": 1
+        },
+        "transit": {
+          "band": "10-15m",
+          "rank": 1
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "45-50m",
+          "rank": 25
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [],
+    "preference": 12,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "coffee-bean-west-mall": {
     "brand": "coffee_bean",
     "venue_type": "mall_cafe",
     "area": "Bukit Batok",
     "baseline_seatability": "usually_available",
-    "preference": 4,
+    "preference": 21,
     "closing_buffer_minutes": null,
     "holiday_policy": "substitute_sun",
     "access": {
       "origin_a": {
         "cycle": {
-          "rank": 2,
-          "band": "30-35m"
+          "band": "30-35m",
+          "rank": 4
         },
         "transit": {
-          "rank": 2,
-          "band": "20-25m"
+          "band": "20-25m",
+          "rank": 3
         }
       },
       "origin_b": {
         "transit": {
-          "rank": 3,
-          "band": "40-45m"
+          "band": "40-45m",
+          "rank": 22
         }
       }
     },
@@ -291,12 +1159,78 @@
     "brand": "coffee_bean",
     "venue_type": "mall_cafe",
     "area": "Jurong East",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "cycle": {
+          "band": "25-30m",
+          "rank": 2
+        },
+        "transit": {
+          "band": "25-30m",
+          "rank": 5
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "40-45m",
+          "rank": 24
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [],
+    "preference": 28,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   },
   "coffee-bean-balmoral-plaza": {
     "brand": "coffee_bean",
     "venue_type": "strip_mall_cafe",
     "area": "Bukit Timah",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "band": "30-35m",
+          "rank": 8
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "band": "20-25m",
+          "rank": 15
+        }
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-ion-orchard",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-delfi-orchard",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-wisma-atria",
+        "mode": "cycle",
+        "travel_band": "10-15m"
+      },
+      {
+        "venue_id": "starbucks-united-square",
+        "mode": "walk",
+        "travel_band": "15-20m"
+      }
+    ],
+    "preference": 23,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "unknown"
   }
 }

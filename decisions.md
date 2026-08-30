@@ -1928,7 +1928,7 @@ Filled `preference`, `closing_buffer_minutes`, `holiday_policy`, `access`, `wet_
 
 Three reusable policy calls, to apply consistently when filling the remaining 24 venues:
 
-- **Cycling is only viable from `origin_a` (home), never from `origin_b` (work)** — the work commute is far enough that cycling is never an option regardless of measured time. `access.origin_b` should never carry a `cycle` key.
+- **Cycling is only viable from `origin_a` (home), never from `origin_b` (work)** — a hard physical constraint (no bicycle kept at work), not a distance judgment. This holds regardless of measured time, even for venues that happen to be a fast cycle from work (e.g. the Chinatown/CBD cluster near work, some under 10 minutes by the routing engine). `access.origin_b` should never carry a `cycle` key.
 - **Max cycle time is ~1 hour one-way from home, but subject to a round-trip sanity check per venue** — `starbucks-utown` measured at 59-min one-way (technically under the cutoff) but was rejected because the round trip is 2 hours; a one-way threshold alone isn't sufficient.
 - **Rain always reverts `cycle` → `transit`** — the default `wet_weather_mode.origin_a` entry for any venue with a viable home cycle route, not assessed per-venue.
 
