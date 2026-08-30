@@ -6,24 +6,24 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: `IMP-001`
-- **Work type**: implementation
+- **ID**: `ARCH-001`
+- **Work type**: architecture/high-level
 - **State**: `completed`
-- **Primary route**: `claude_sonnet` — Sonnet, effort high
-- **Verification route**: `codex_terra` — Terra, effort medium
-- **Route triggers**: correctness depends on fail-closed paths (`UNKNOWN`/`NONE` distinction, `AT_LEAST(0)` sum type) — mandatory Codex per hard trigger list
-- **Baseline commit**: `f6aa4f0`
-- **Artifact under review**: `web/ranking.js` (new), commit `1677066`
-- **Objective**: Implement `web/ranking.js`'s `resolve_hours`, `effective_close` and feasibility-tier machinery per `plan.md`'s decision model and `CLAUDE.md`'s hours-resolution contract.
-- **Scope exclusions**: `fetch_hours.py`, `fetch_busyness.py`, `build/refresh.py`, `app.js`, `index.template.html`, `seat_confidence`/`backup_strength`/Plan A-B (deferred to later assignments)
-- **Acceptance criteria**: `tests/js/` covers the resolve_hours/effective_close/feasibility-tier cases listed in `CLAUDE.md`'s Testing section (multi-day decomposition, window handling, continuity across the window edge, source authority, the lazy walk, `NONE` vs `UNKNOWN`, `AT_LEAST(0)` accessors, tier boundaries)
-- **Required verification**: `node --test tests/js/*.test.js` passing; no DOM imports or `fetch()` in `ranking.js`; every `surplus_*` use goes through an accessor
-- **Claude gate result**: `GATE_PASS`
+- **Primary route**: `claude_opus` — Opus, effort high
+- **Verification route**: `codex_sol` — Sol, effort medium
+- **Route triggers**: architecture/methodology change to the decision model; primary route is `claude_opus` — both are hard triggers, Codex mandatory
+- **Baseline commit**: `9e19ebc`
+- **Artifact under review**: `plan.md` (new "Getting home: session-end return transport" section, plus the amendments it forces) and `CLAUDE.md` (non-negotiables). Design only, no code. `decisions.md` gets its summary entry at close, per `WORKFLOW.md`'s boundary rules.
+- **Objective**: Design the session-end/return-transport feasibility requirement — the decision model currently checks only that a venue is open at arrival, never whether transport still runs for the trip home afterward.
+- **Scope exclusions**: implementation (a follow-up `IMP-###`); the existing arrival-side `resolve_hours`/`effective_close` machinery, unchanged unless the design requires it
+- **Acceptance criteria**: a recorded design covering what return-transport data is needed per origin/fallback, how "transport still runs home" is evaluated for Plan A and Plan B, how it composes with the existing feasibility tiers, and how it degrades when return data is unknown (must fail open to `unknown`, never assume last-mile transport is always available) — consistent with `CLAUDE.md`'s non-negotiables (no live data, no numeric seat probability, `AT_LEAST(0)`/`UNKNOWN` semantics)
+- **Required verification**: design cross-checked for internal consistency against `plan.md`'s decision model and every relevant `CLAUDE.md` non-negotiable; no contradiction with frozen invariants
+- **Claude gate result**: `GATE_FAIL` (invocation 2 of 2; a third invocation is prohibited, so the assignment routes to Codex per `WORKFLOW.md`'s retry rule)
 - **Independent review**: `required`
-- **Gate evidence**: `reviews/IMP-001-gate.md` (invocation 1, 2026-08-30)
-- **Review record**: `reviews/IMP-001.md` (round 1: `CHANGES_REQUESTED`, `IMP-001-R1-F01`; round 2: `APPROVE`, no findings)
+- **Gate evidence**: `reviews/ARCH-001-gate.md`, invocations 1 and 2. Invocation 1: 4 findings, all corrected. Invocation 2: 1 uncorrected privacy leak (`plan.md` second `basis` example) plus 1 doc-consistency gap — both corrected afterwards and therefore **ungated**.
+- **Review record**: `reviews/ARCH-001.md` — sealed. Round 5 (`codex_sol`) `APPROVE`, no findings; all ten findings across five rounds `resolved`. `decisions.md` summary entry and the `reviews/AUDIT-LOG.md` `completed` row are written.
 - **User decisions required**: —
-- **Next action**: User approved and authorized close 2026-08-30. `decisions.md` and `reviews/AUDIT-LOG.md` updated per `WORKFLOW.md`'s boundary rules. `IMP-001` is closed — a new assignment needs a new ID. Phase 1 step 2 meta fields (`access`/`preference`/`fallbacks`/`holiday_policy`/`closing_buffer_minutes`) are now complete for all 28 venues (2026-08-30, outside the assignment system — see `decisions.md`), and the naming-collision rename is done (`bf2c0a5`). Two real candidates remain: (1) an `ARCH-###` for the flagged session-end/return-transport feasibility requirement — not yet designed; (2) `seat_confidence`/`backup_strength`/Plan A-B, excluded from `IMP-001`'s scope, still unimplemented.
+- **Next action**: None — terminal. A new task requires a new assignment ID.
 
 <!--
 When State is `blocked_on_user`, add exactly these two fields (still inside the 25-line cap):

@@ -13,6 +13,7 @@ an old one. Dates are ISO `YYYY-MM-DD`.
 | Date | Event | Assignment ID | Verification route | Detail |
 | --- | --- | --- | --- | --- |
 | 2026-08-30 | completed | IMP-001 | codex_terra | |
+| 2026-08-31 | completed | ARCH-001 | codex_sol | |
 
 ## Event vocabulary
 

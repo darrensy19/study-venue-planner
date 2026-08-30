@@ -280,9 +280,19 @@ The requested session is 3-6 hours. A fallback offering 90 minutes may still res
 
 | Strength | Rule |
 | --- | --- |
-| `strong` | a fallback where **the requested session fits** — `robust` or `tight` at its delayed arrival — with confidence at least `PLAN_B_MIN_CONFIDENCE` |
-| `salvage` | at least `PLAN_B_MIN_SESSION_MINUTES` remains and confidence is at least `PLAN_B_MIN_CONFIDENCE`, **but the requested session does not fit** |
+| `strong` | a fallback where **the requested session fits** — `robust` or `tight` at its delayed arrival — with confidence at least `PLAN_B_MIN_CONFIDENCE`, **and a `robust` or `tight` `return_tier`** |
+| `salvage` | at least `PLAN_B_MIN_SESSION_MINUTES` remains and confidence is at least `PLAN_B_MIN_CONFIDENCE`, **but the requested session does not fit** — or it fits and the way home is `unverified` |
 | `none` | less than `PLAN_B_MIN_SESSION_MINUTES` remains, or confidence is below `PLAN_B_MIN_CONFIDENCE`, or no fallback is valid at all |
+
+The minutes counted against `PLAN_B_MIN_SESSION_MINUTES`, and the duration a `salvage` option states, are the **return-capped** `usable_minutes` — see "Getting home: session-end return transport". A rescue that strands you is not a rescue, and "gives 1h40m" is a lie if the last train leaves in forty minutes.
+
+**"The requested session fits" means the fallback's `overall_tier` is `robust` or `tight`**, not its hours tier alone. The three cases this settles, which are otherwise easy to leave unstated:
+
+| Fallback's hours tier | Fallback's `return_tier` | `overall_tier` | `backup_strength` |
+| --- | --- | --- | --- |
+| `robust` / `tight` | `robust` / `tight` | `robust` / `tight` | `strong`, if confidence clears the floor |
+| `robust` / `tight` | `shorter` | `shorter` | **`salvage`** if the return-capped minutes clear `PLAN_B_MIN_SESSION_MINUTES`, else `none` — the requested session does not fit, because you have to leave to catch the last way home |
+| `robust` / `tight` | `unverified` | `unverified` | **capped at `salvage`**, labelled as an unverified way home rather than a short session |
 
 `salvage` replaces the earlier `weak`, which was too vague to act on — it conflated "a bit further away" with "you'll get half the session you wanted", which are entirely different problems.
 
@@ -323,6 +333,15 @@ Every symbol used in a formula below resolves to one of these:
 | `plan_a_arrival_mid`, `plan_a_arrival_upper` | derived | Plan A's own `arrival_mid` and `arrival_upper` |
 | `arrival_date`, `today`, `yesterday` | derived | `date(arrival_abs)`, and `resolve_hours` for that date and the one before |
 | `fallback_travel_minutes_mid`, `fallback_travel_minutes_upper` | derived | `venues_meta.fallbacks[].travel_band` |
+| `RETURN_CORE_FROM_MINUTES` = 420, `RETURN_CORE_UNTIL_MINUTES` = 1290 | constant (**maintained assumption** — neither provisional nor frozen; see "The claim, its basis, its scope, and its maintenance") | `ranking.js` |
+| `RETURN_SERVICE_DAY_START_MINUTES` = 240 | constant | `ranking.js` |
+| `RETURN_TOLERANCE_MINUTES` = 10 | constant (provisional) | `ranking.js` |
+| `RETURN_CYCLE_LATEST_MINUTES` = `null` | constant (provisional) | `ranking.js` |
+| `session_end_mid`, `session_end_upper` | derived | `arrival_*` + `duration` |
+| `last_departure_mid`, `last_departure_upper` | derived | `venues_meta.return_transport[dest][mode].last_departure_band` — named for the **bound** that consumes it, as every other pair here is; `last_departure_upper` takes the band's **lower** edge |
+| `return_margin_mid`, `return_margin_upper` | derived | `last_departure_*` − `session_end_*`, as the `surplus_*` sum type — or `AT_LEAST(0)` on a `core_span` / `schedule_free` pass. There is no other variant: the pre-dawn case returns `unverified`, never a margin |
+| `bicycle_with_you` | derived | `outbound_mode == "cycle"` for Plan A; **Plan A's value, unchanged**, for Plan B |
+| `binding_limit_mid`, `binding_limit_upper` | derived | `min(effective_close_* − closing_buffer, last_departure_*)` |
 
 `duration` is the requested session length in minutes. `closing_buffer` is always the resolved value, never the raw nullable field.
 
@@ -616,7 +635,7 @@ case effective_close_upper:
 2. `relative_busyness` is read at *that venue's* `arrival_mid` hour.
 3. Arrival hours are rarely round. **The busyness bucket is chosen by flooring** — 16:25 reads hour 16.
 
-`latest_leave_at` answers "when must I leave for the session to still fit". It does **not** account for the busyness band worsening at a later arrival.
+`latest_leave_at` answers "when must I leave for the session to still fit". As defined here it is the **hours-side** answer only; the published value is the minimum of this and the return-side deadline — see "Getting home: session-end return transport", which is what makes the plan's second query correct on any evening where the last departure binds before the closing time. It does **not** account for the busyness band worsening at a later arrival.
 
 ### Feasibility tiers
 
@@ -710,7 +729,798 @@ Both branches occur in the real venue set. A 24-hour venue joins, because the ne
 
 `robust` and `tight` are both ranked, `robust` first. `shorter` drops to the separate group showing what it does give ("4h of 6h — closes 8pm").
 
+**This is the hours tier, not the whole feasibility answer.** The session must also be one you can get home from; the return tier and the combined `overall_tier` that actually drives ranking are defined in "Getting home: session-end return transport" below.
+
 This replaces the hard cliff at `surplus >= 0`, which relegated 5h59m while ranking 6h00m despite the boundary being noisier than the arithmetic implied.
+
+---
+
+## Getting home: session-end return transport
+
+Everything above answers one question — **is the venue open for the whole session?** It never asks
+the second one: **when the session ends, does anything still run to take me home?**
+
+A six-hour session leaving at 18:00 ends around 00:30. A venue open until 02:00 clears every test
+above, ranks `robust`, and still strands you. That is the same failure this tool exists to prevent —
+a wasted trip — arriving from the far end of the evening instead of the near end, and it is arguably
+worse, because by then the trip has already been spent.
+
+The return question is therefore a **second feasibility constraint on the same session**, resolved
+with the same machinery: hand-maintained data, coarse bands, absolute minutes, two independently
+resolved bounds, tagged outcomes, and positive evidence before silence.
+
+### What it is not
+
+- **Not a transit API.** No live data of any kind, per the non-goals. Return service is
+  hand-maintained in `venues_meta.json`, exactly like `access`.
+- **Not a routing engine.** One number per venue per destination per mode — *the latest departure
+  from the venue that still gets you home* — not a journey plan.
+- **Not a hard filter.** "You can go, but leave by 23:10" is actionable advice, not a
+  disqualification. The constraint shortens the session; it rarely removes the venue.
+
+### The return leg is not the outbound leg reversed
+
+Three things differ, and all three matter.
+
+**The destination is home, not the origin.** Sessions start from `origin_a` (home) or `origin_b`
+(work); they end by going home. The return leg is therefore evaluated against
+`access[origin_a]` — the modes and routes recorded for the *home* leg — regardless of which origin
+the trip started from. *Assumption, stated deliberately:* the session always ends by going home. A
+return-destination control is a plausible later addition; nothing in this design forbids it, which is
+why `return_transport` is keyed by destination rather than hard-coding `origin_a`.
+
+**The bicycle is a physical object.** `decisions.md`, 2026-08-30 already records that cycling is
+viable only from home, because that is where the bicycle is kept. The return leg inherits the
+consequence: **`cycle` is an admissible return mode only if `bicycle_with_you`.** If you took transit
+from work, the bicycle is at home and cannot carry you back to it — and it is still at home when you
+walk on to Plan B, which is why `bicycle_with_you` is threaded rather than re-derived per leg.
+
+**The pessimistic edge flips.** For travel duration, pessimism is the band's **upper** edge — the
+journey took longer. For a last departure, pessimism is the band's **lower** edge — service ended
+earlier than the midpoint suggested. The two bounds still resolve independently, and the pessimistic
+pairing is `session_end_upper` against `last_departure_upper`: a longer journey ends the session
+later *and* is tested against the earlier plausible last service. **Every derived value is named for
+the bound that consumes it** — `last_departure_upper` is the value the *upper bound* uses, and it is
+the band's *lower* edge. Naming any of them after the edge instead would break the `_mid`/`_upper`
+convention that every other pair in this document follows.
+
+### Schedule-free modes versus schedule-bound modes
+
+| Mode | Kind | Return availability |
+| --- | --- | --- |
+| `walk` | schedule-free | Available whenever it is recorded as viable at all |
+| `cycle` | schedule-free | Available whenever it is recorded as viable **and** `bicycle_with_you` **and** the rain toggle is off, subject to `RETURN_CYCLE_LATEST_MINUTES` |
+| `transit` | schedule-bound | Available until that service day's last departure |
+
+This split is what keeps the hand-maintained burden proportionate: **only `transit` needs a recorded
+last departure.** A schedule-free mode's viability is already encoded by its presence in `access` —
+no new data, no new judgement, no second contract to keep in sync.
+
+A schedule-free admissible mode is **positive evidence** and settles the question, exactly as a known
+period containing the arrival settles the hours question even when the sibling date is `unknown`.
+Missing transit data only produces an unresolved answer when nothing else can carry you home.
+
+**Rain removes `cycle` from the return set**, mirroring `wet_weather_mode`'s outbound substitution.
+When the toggle is on, `wet_weather_mode` has already replaced the outbound `cycle` with `transit`,
+so the bicycle is at home anyway and the rule is consistent rather than merely parallel. Rain that
+starts *after* departure is not modelled — there is no weather source, by design — and this is the
+case where the return constraint bites hardest, so the UI must say which mode it is counting on.
+
+### Admissible return modes
+
+A **total function of explicit inputs.** It reads nothing from surrounding scope — the same rule
+`effective_close(venue, active_period, arrival_abs, required_end_abs)` already follows, and for the
+same reason: it is resolved **per bound**, so an implicit `session_end` would silently collapse the
+two bounds into one.
+
+```
+return_destination = origin_a                       # see the assumption above
+
+admissible_return_modes(venue, bicycle_with_you, raining,
+                        session_end_abs, service_date) -> set of modes
+
+    modes = { m for m in access[return_destination] if the entry is present and not null }
+
+    if not bicycle_with_you:  modes -= {"cycle"}     # the bicycle is elsewhere
+    if raining:               modes -= {"cycle"}     # same substitution as wet_weather_mode
+
+    if RETURN_CYCLE_LATEST_MINUTES is not null:
+        # A CLOCK-TIME OFFSET, resolved against the service date like every other
+        # offset in this model. > 1440 means after midnight (1500 == 01:00 the
+        # next day). Comparing a raw offset against an absolute minute would be
+        # the exact coordinate-system error the periods array already forbids.
+        cycle_cutoff_abs = abs(service_date, RETURN_CYCLE_LATEST_MINUTES)
+        if session_end_abs > cycle_cutoff_abs:
+            modes -= {"cycle"}
+
+    return modes
+```
+
+**`bicycle_with_you` is threaded, not inferred.** For Plan A it is `outbound_mode == "cycle"`. For
+Plan B it is **Plan A's** value, unchanged — the bicycle is wherever you rode it, and a fallback leg
+does not put it back at home. Two consequences, both of which must be implemented:
+
+- Plan B's return set is computed with Plan A's `bicycle_with_you`, never with `fallbacks[].mode`.
+- **A `fallbacks[].mode == "cycle"` link is only viable when `bicycle_with_you` is true.** This is a
+  pre-existing gap in the Plan B contract that this design exposes rather than creates: 22 of the
+  current fallback links are `cycle`, and every one of them is unusable on a trip that started by
+  transit. Plan B must drop such a link exactly as it drops a fallback closed at the delayed arrival.
+
+An **empty** admissible set means no recorded way home. That is `unverified`, not `closed`:
+`access` is hand-maintained and incomplete by construction, so its silence is silence, never a
+negative — the same distinction the hours model draws between an `unknown` date and a `closed` one.
+**No later branch may overturn an empty set** — see "Evaluating one bound", where the admissible set
+is derived first, before anything else is consulted.
+
+### The service day starts at 04:00, not at midnight
+
+A last departure is a property of a **night**, and nights straddle midnight. Storing it as an offset
+from the service day's local midnight — with `> 1440` meaning after midnight, exactly as `close`
+already does — keeps one coordinate system and one convention.
+
+Which night applies is then decided by a **service-day boundary**, not by the calendar date:
+
+```
+service_date(t) = date(t - RETURN_SERVICE_DAY_START_MINUTES)          # 04:00
+last_departure_abs = abs(service_date, last_departure_offset)         # offset may exceed 1440
+```
+
+Anchoring on the calendar date would compare a session ending at 03:30 on Saturday against
+*Saturday night's* last departure, some twenty hours away, and cheerfully report a comfortable
+margin. The 04:00 boundary puts that session on Friday night's service, where it belongs.
+
+### `resolve_return_service(venue, destination, mode, service_date)`
+
+The return leg's counterpart to `resolve_hours` — a **total function of an arbitrary service date**,
+never inline logic against the session's own date, and the single place the precedence among
+`holiday_return_policy`, `by_weekday` and `default` is decided.
+
+```
+resolve_return_service(venue, destination, mode, service_date)
+    -> PRESENT(entry) | MISSING | MALFORMED(reason)
+
+    block = venue.return_transport?[destination]?[mode]
+    if block is absent:
+        return MISSING
+
+    # The weekday is that of the SERVICE DATE, already chosen by the 04:00
+    # boundary — never the weekday of session_end.
+    target_weekday = weekday(service_date, tz="Asia/Singapore")
+
+    # 1. Holidays first, exactly as resolve_hours puts the holiday rule ahead of
+    #    the regular weekday schedule.
+    if service_date is in holidays.json:
+        if venue.holiday_return_policy == "substitute_sun":
+            entry = block.by_weekday?["sun"] or block.default
+        else:                                   # "unknown", the default
+            return MISSING                      # -> unverified, never guessed
+    # 2. A weekday override outranks the default.
+    elif block.by_weekday?[target_weekday] is present:
+        entry = block.by_weekday[target_weekday]
+    # 3. Otherwise the default.
+    elif block.default is present:
+        entry = block.default
+    else:
+        return MISSING
+
+    if entry has no last_departure_band:                 return MISSING
+
+    # Normalise BEFORE validating -- see "From clock string to service-day
+    # offset" below. Validating the raw clock numbers would reject every
+    # legitimate after-midnight band.
+    lo, hi = normalise_band(entry.last_departure_band)   # may return MALFORMED
+    if either is MALFORMED:                              return MALFORMED(reason)
+    if not (lo < hi):                                    return MALFORMED("edges not increasing after normalisation")
+
+    return PRESENT(entry with lo, hi)
+```
+
+#### From clock string to service-day offset
+
+The band is stored as `HH:MM-HH:MM` because that is what a timetable shows and what a human
+maintains. Turning it into an offset is **not** "parse the digits": a last departure at `00:30`
+belongs to the night that began the previous evening, so it is offset **1470**, not **30**. Leaving
+that to the implementer is the ambiguity this section exists to remove — two conforming readings of
+the earlier text picked 30 and 1470 and selected different absolute departures.
+
+The rule reuses the service-day boundary already defined above, and nothing else:
+
+```
+normalise_edge(HH:MM) -> offset | MALFORMED
+
+    if the string is not HH:MM with 00 <= HH <= 23 and 00 <= MM <= 59:
+        return MALFORMED("unparseable edge")
+
+    raw = HH * 60 + MM                                   # 0 .. 1439
+
+    # One boundary, one rule: a clock time before the service day starts belongs
+    # to the FOLLOWING calendar date, which is the same night.
+    offset = raw + 1440   if raw < RETURN_SERVICE_DAY_START_MINUTES
+             raw          otherwise
+
+    return offset                                        # always in [240, 1680)
+
+normalise_band("A-B") -> (lo, hi) | MALFORMED
+    lo = normalise_edge(A);  hi = normalise_edge(B)
+    both must normalise, and lo < hi must hold AFTER normalisation.
+```
+
+| Band | `lo` | `hi` | Note |
+| --- | --- | --- | --- |
+| `23:20-23:25` | 1400 | 1405 | Ordinary evening |
+| `23:55-00:05` | 1435 | 1445 | Straddles midnight; **increasing only after normalisation** — validating the raw digits would read `1435 > 5` and wrongly reject it |
+| `00:30-00:35` | 1470 | 1475 | Wholly after midnight |
+| `03:58-04:02` | 1678 | 242 | **`MALFORMED`** — the band straddles the service-day boundary, so it names two different nights. The `lo < hi` check catches it; no separate rule is needed |
+| `25:00-25:05` | — | — | **`MALFORMED`** — offsets are written as clock times, never as pre-added values |
+
+**The resulting range is `[240, 1680)` — the service day, exactly.** The earlier `[0, 2 × 1440)`
+bound was both too loose (it admitted 0-239, which no service day contains) and, because it was
+checked before normalisation, unreachable in the cases that mattered.
+
+`abs(service_date, offset)` then converts to absolute minutes for every comparison, exactly as
+`period_end_abs` does for a `close` above 1440. No comparison anywhere mixes the two.
+
+#### `edge(band, b)` — which end each bound takes
+
+```
+edge((lo, hi), b) = lo                        if b == upper     # pessimistic
+                    floor((lo + hi) / 2)      if b == mid       # representative
+```
+
+The **upper** bound takes `lo` because pessimism on a last departure is *earlier* service — the
+mirror of a travel band, where pessimism is a *longer* journey and therefore the upper edge. The
+**mid** bound takes the midpoint, **floored to an integer minute**, which is the conservative
+direction here: rounding a last departure down can only make the tool warn sooner, never later.
+Every offset downstream is an integer, per the project's integer-minutes rule.
+
+**Three outcomes, and they are not interchangeable.**
+
+| Outcome | Meaning | Result |
+| --- | --- | --- |
+| `PRESENT` | A usable band for this service date | Feeds the comparison |
+| `MISSING` | Nothing recorded — including the honest holiday default | Contributes nothing; if **every** admissible mode is `MISSING`, the bound is `unverified` |
+| `MALFORMED` | A recorded value that cannot be true | **Per-venue validation failure**: flag loudly, do **not** rank the venue |
+
+`MALFORMED` is a validation failure rather than a quiet `unverified` for the same reason two
+contradictory `period_end_abs` values are: degrading self-contradictory data to "unknown" hides a
+typo in a hand-maintained file, and this file has no fetcher to re-derive it from. It takes the same
+per-venue failure path as a contradictory hours record.
+
+**But `resolve_return_service` cannot be where that contract is enforced**, because two of the
+evaluation branches deliberately return before it is ever called. Enforcement lives in the stage
+below; the `MALFORMED` outcome here is a redundant runtime guard, and it should be unreachable
+whenever that stage has run.
+
+#### Whole-file validation is a mandatory stage, not a test obligation
+
+The core-span and schedule-free branches never read `return_transport` — that is the point of them —
+so a malformed band on such a venue would never be classified at all, and "malformed means unranked"
+would be a promise nothing kept. A structural check that exists only in the test suite is not a
+pipeline: it fails a build, it does not mark a venue.
+
+So `return_transport` validation is an **explicit mandatory stage over the whole file**, run once per
+generation, independent of any bound's evaluation path:
+
+```
+validate_return_transport(venues_meta) -> {venue_id: status}
+
+    ONLY A PRESENT BAND IS VALIDATED. Traversal mirrors resolve_return_service's
+    MISSING semantics exactly, so the stage can never turn absent service
+    information into a validation failure.
+
+    for each venue:
+        failures = []
+        for each destination, for each mode:
+            block = venue.return_transport?[destination]?[mode]
+            if block is absent:                      continue     # MISSING
+            for each entry in {default} + every by_weekday value:
+                if the entry is absent:              continue     # MISSING
+                if entry has no last_departure_band: continue     # MISSING
+                r = normalise_band(entry.last_departure_band)
+                if r is MALFORMED:
+                    failures += "<mode>/<day key>: <what failed>"
+
+        status[venue] = {"state": "ok"}                        if failures empty
+                        {"state": "invalid", "reason": <all>}  otherwise
+```
+
+**The three `MISSING` shapes, spelled out, because conflating any of them with
+`MALFORMED` breaks the fail-open requirement:**
+
+| Shape | Stage result | Evaluation-time result |
+| --- | --- | --- |
+| No `return_transport` block at all | `ok` | `unverified` (`no_data`) unless other evidence settles it |
+| Block present, this destination/mode absent | `ok` | as above |
+| Entry selected but carrying no `last_departure_band` | `ok` | `MISSING` from the resolver → `unverified` |
+
+Only a **present** `last_departure_band` that fails `normalise_band` yields `invalid`. This is the
+same three-way split `resolve_return_service` already draws — `PRESENT` / `MISSING` / `MALFORMED` —
+and the stage must not draw it differently, or the two would disagree about the same record.
+
+- **Where it runs, and that it never aborts.** `build/refresh.py`, as a numbered step in the ordered
+  pipeline below, after the merge and before the atomic replace. It validates hand-maintained
+  metadata, so it is **not conditional on any fetch succeeding**; a fully failed refresh still runs
+  it. **The stage completes successfully whatever it finds** — including when every venue is
+  `invalid`. It is a *classifier*, not a gate: its job is to label each venue, and the labels are
+  written atomically with the rest of `venues.json`, so the generated page always carries the stamp
+  the ranking contract requires. **Malformed metadata never blocks the write**, and this is the whole
+  failure model — see "One failure model: per-venue, never global" below.
+- **What it emits.** `return_transport_status` on each venue object in the generated
+  `data/venues.json`, exactly as the per-source `ok` / `stale` / `failed` fields are stamped there.
+- **What ranking does with it.** `ranking.js` **reads the stamped field; it never re-derives it.**
+  The check is a precondition on the *venue*, evaluated once before either bound:
+
+  ```
+  # STEP 0 -- a precondition on the venue, not a branch inside a bound.
+  if venue.return_transport_status is absent
+     or venue.return_transport_status.state != "ok":
+         the venue is NOT RANKED -- per-venue validation failure, reason surfaced
+  ```
+
+  **Absent counts as invalid.** A record with no stamp means the mandatory stage did not run, so the
+  data is unvalidated and must not be ranked. This is the one place the return design fails *closed*,
+  and the distinction is deliberate: missing *service information* fails open to `unverified`, while
+  missing *validation* fails closed, exactly as a missing in-window hours entry is malformed data
+  rather than a fallback to the regular schedule.
+
+Every branch of "Evaluating one bound" therefore runs on a venue already known to be structurally
+valid, and the early returns stay lookup-free — the two properties the design needs at once.
+
+#### One failure model: per-venue, never global
+
+A malformed band is a **per-venue** fact and is handled exactly like every other per-venue failure in
+this project. Stating it once, unambiguously, because two readings were possible and they are
+mutually exclusive:
+
+| | |
+| --- | --- |
+| **Stage outcome** | Always success. An `invalid` status is a *result*, not an error — the stage cannot fail as a whole |
+| **The write** | Always proceeds. Statuses are written atomically with the rest of `venues.json`; malformed metadata never withholds a generation |
+| **Scope of the damage** | One venue. Every other venue generates, ranks and displays normally |
+| **What ranking does** | Drops that venue at `STEP 0` |
+| **What the user sees** | A **loud, visible diagnostic** — see below. Never a silent disappearance |
+
+The alternative — abort generation and retain the previous page — was considered and rejected. It
+would make the `invalid` stamp unreachable, contradicting the schema and the ranking contract that
+depend on it; it would let one typo in one venue's metadata withhold an entire refresh; and it has no
+counterpart anywhere else in this pipeline, where a per-source failure degrades one field and a
+`businessStatus` change flags one venue.
+
+**The diagnostic is required, not optional.** A venue removed at `STEP 0` must be surfaced with the
+same prominence as a `stale` source or a non-`OPERATIONAL` venue:
+
+- Every venue dropped at `STEP 0` is listed, by name, with its `reason` string — or with "return
+  transport data was never validated" when the stamp is **absent** rather than `invalid`.
+- The listing appears **in the page itself**, not only in a console message or the refresh log,
+  because the deployed artifact is what the user actually reads.
+- It is a **removal notice**, distinct from the `unverified` group: `unverified` means "we could not
+  establish a way home"; this means "this venue's return data is broken and needs fixing". The fixes
+  are different, so the wording must be too.
+
+"Degradation must be visible" already governs the per-source freshness fields. This is the same rule
+applied to the one removal path this design adds, and it is what stops a missing validation stage
+from silently emptying the board.
+
+**A `MISSING` holiday is not a bug.** `holiday_return_policy: unknown` is the default and it is a
+positive assertion of ignorance about that date, exactly as the out-of-window holiday rule is for
+hours. It yields `unverified`, and that is the intended answer until someone records the pattern.
+
+### The core service span waives the timetable lookup, never the route
+
+Most sessions end in the middle of the day and raise no transport question at all. Requiring
+per-venue return data for a session ending at 15:00 would make the whole feature unadoptable — 28
+venues of data to answer a question nobody asked.
+
+```
+RETURN_CORE_FROM_MINUTES  = 420    # 07:00
+RETURN_CORE_UNTIL_MINUTES = 1290   # 21:30
+```
+
+**What the span does and does not license, stated precisely, because the difference is the whole
+safety property:**
+
+| The span answers | The span does not answer |
+| --- | --- |
+| *When* scheduled service runs on the network | *Whether a route home is recorded for this venue* |
+| So the per-venue **timetable lookup** may be waived | So the per-venue **route** may never be assumed |
+
+A session end inside the span therefore passes **only when an admissible return mode already exists**
+in `access[return_destination]` for this venue. With no recorded route the answer is `unverified` at
+every hour of the day — a clock cannot supply a route it has never been told about. This is why
+"Evaluating one bound" derives the admissible set **before** consulting the span at all.
+
+**The recorded route is `access`, not `return_transport`.** Inside the span, **no `return_transport`
+entry is required and none is read** — that is precisely what "waives the timetable lookup" means,
+and it is why a daytime session needs no per-venue return data at all. The two files answer the two
+halves of the question and must not be confused:
+
+| File | Answers | Required inside the span? |
+| --- | --- | --- |
+| `access[origin_a]` | Is there a route home from this venue at all? | **Yes** — unconditionally, at every hour |
+| `return_transport` | When does the last service on that route leave? | **No** — the span answers it |
+
+An earlier draft required a `PRESENT` `return_transport` entry before the in-span pass. That
+contradicted this section, Phase 1's acceptance criteria and the test obligations all at once, and it
+quietly reinstated the 28 venues of timetable maintenance the span was introduced to avoid.
+
+#### The claim, its basis, its scope, and its maintenance
+
+**Claim.** On an ordinary day, scheduled public transport across the Singapore network is running
+between 07:00 and 21:30 local time.
+
+| | |
+| --- | --- |
+| **Sources** | [LTA rail network](https://www.lta.gov.sg/content/ltagov/en/getting_around/public_transport/rail_network.html) and [LTA service announcements](https://www.lta.gov.sg/content/ltagov/en/map/announcement.html) |
+| **Checked** | 2026-08-30, by the `ARCH-001` round-1 reviewer (`codex_sol`), against the two pages above. Not independently re-checked by the primary; recorded here as the review's finding, not as the primary's own measurement. |
+| **What they support** | A broad network-level norm of roughly 05:30 to around midnight, with an explicit instruction to check operator changes. 07:00 and 21:30 sit well inside that norm at both edges. |
+| **Scope** | Network-level and ordinary-day only. **Not** proof of a route between any particular venue and any particular origin, and **not** proof against a temporary altered operating hour or a substitute shuttle, both of which LTA publishes and this design does not model. |
+| **Maintenance** | Re-check annually and after any known network-wide service change. **If the norm is ever found not to hold, the shortcut is withdrawn** — every out-of-core session then needs per-venue data, and this section says so rather than leaving a stale constant in place. |
+
+This is deliberately **a maintained assumption, not a frozen invariant.** It is the only place the
+design assumes anything about service existing at all, it is stated where a reviewer can attack it,
+and it is bounded on the other side by the route prerequisite above — so even at its most generous
+it can never manufacture a way home out of nothing.
+
+Outside the span, per-venue data is required, and its absence is `unverified`.
+
+### Evaluating one bound
+
+**Precondition, checked once per venue before either bound:** `return_transport_status.state == "ok"`.
+A venue whose stamp is missing or `invalid` is unranked and never reaches this function at all — see
+"Whole-file validation is a mandatory stage, not a test obligation". Nothing below re-derives it,
+which is what lets steps 3 and 4 return without reading `return_transport` while the "malformed means
+unranked" contract still holds.
+
+For each bound `b` in `{mid, upper}` — resolved independently, all the way through, as everywhere
+else in this model:
+
+```
+session_end_b  = arrival_b + duration                  # the instant you stand up
+clock_b        = session_end_b - abs(date(session_end_b), 0)      # local clock offset
+service_date_b = date(session_end_b - RETURN_SERVICE_DAY_START_MINUTES)
+
+# 1. THE ROUTE PREREQUISITE, FIRST AND UNCONDITIONALLY.
+#    Nothing below may run without a recorded, currently-admissible way home.
+#    No clock, no span, no default can supply a route that was never recorded.
+modes = admissible_return_modes(venue, bicycle_with_you, raining,
+                                session_end_b, service_date_b)
+if modes is empty:
+    return UNVERIFIED(basis: "no_recorded_route")
+
+# 2. A schedule-free admissible mode is positive evidence and settles it.
+#    Strongest available answer: no timetable is involved at all.
+if any m in modes is schedule-free:
+    return PASS(basis: "schedule_free", mode: m, margin: AT_LEAST(0))
+
+#    EVERYTHING BELOW THIS LINE RUNS ON A SCHEDULE-BOUND-ONLY MODE SET.
+#    That is what scopes step 4: a schedule-free mode has no first service to
+#    wait for, so the pre-dawn gap is not its problem and never was.
+
+# 3. Inside the core service span the TIMETABLE is waived. Step 1 has already
+#    established a recorded route; the span supplies WHEN service runs, never
+#    WHETHER a route exists. NO return_transport lookup happens here -- that is
+#    the entire point of the span, and the reason it does not reinstate 28
+#    venues of timetable maintenance for a session that ends at 15:00.
+if RETURN_CORE_FROM_MINUTES <= clock_b <= RETURN_CORE_UNTIL_MINUTES:
+    return PASS(basis: "core_span", margin: AT_LEAST(0))
+
+# 4. The pre-dawn gap, on a schedule-bound-only set: last night's service has
+#    finished and this morning's has not started. No last departure can answer
+#    that, so nothing is looked up -- see "The pre-dawn gap is not modelled".
+if RETURN_SERVICE_DAY_START_MINUTES <= clock_b < RETURN_CORE_FROM_MINUTES:
+    return UNVERIFIED(basis: "pre_dawn_gap")
+
+# 5. Only now is return_transport read at all.
+resolved = [ (m, resolve_return_service(venue, return_destination, m, service_date_b))
+             for m in modes ]                  # every m here is schedule-bound
+
+if any result is MALFORMED:
+    return VALIDATION_FAILURE(reason)          # per-venue; the venue is not ranked
+
+present = [ entry for (m, r) in resolved if r is PRESENT(entry) ]
+if present is empty:
+    return UNVERIFIED(basis: "no_data")
+
+# 6. Compare against the latest last departure available to you.
+last_departure_b = MAX over present of edge(last_departure_band, b)   # b=upper -> EARLIER edge
+return MARGIN(last_departure_b - session_end_b, basis: "last_departure")
+```
+
+**Step 1 is the safety property of this whole section**, and its position is load-bearing. An earlier
+draft put the core-span shortcut first, which let a venue with no `access[origin_a]` entry at all —
+or only `null` ones, or none currently admissible — pass as `robust` between 07:00 and 21:30 on the
+strength of a city-wide clock. All 28 current records happen to carry a non-null `origin_a.transit`
+entry, so the defect was invisible in the data and live in the contract; the schema permits the
+absent case and Plan B evaluates each fallback independently.
+
+**Only step 5 touches `return_transport`.** Steps 3 and 4 both return before any lookup, which is
+what makes "the span waives the timetable lookup" literally true rather than merely intended. An
+earlier draft resolved and validated every entry *before* the span check and then required a
+`PRESENT` entry to pass — which reinstated the whole maintenance burden the span exists to avoid,
+while still calling it waived.
+
+**A malformed band is caught before any of this runs**, by the mandatory
+`validate_return_transport` stage — see "Whole-file validation is a mandatory stage, not a test
+obligation". That is what lets steps 3 and 4 return without reading anything while the
+"malformed means unranked" contract still holds: the venue was already marked invalid and never
+reached step 1. `MALFORMED` at step 5 stays as a redundant runtime guard and should be unreachable
+whenever the stage has run.
+
+`MAX` in step 6 is correct and is not the same shape as the hours model's minimum tie-break: several
+modes may be admissible, you would take whichever runs latest, and they are independent facts rather
+than the decomposed encodings of one fact.
+
+#### The pre-dawn gap is not modelled
+
+Step 4 is deliberately terminal. An earlier draft carried an optional `first_departure_band` and
+returned `MARGIN(session_end_b - first_departure_b)` here. **That was a type error dressed as a
+feature**, and it is removed rather than patched:
+
+- **The monotonicity is reversed.** Against a last departure, ending the session *earlier* creates
+  margin — which is exactly what `shorter` means and what makes "leave earlier" actionable. Against a
+  first departure, ending earlier makes it *worse*. Feeding both into one `return_margin_*`, one
+  `binding_limit`, and one `shorter` tier would have labelled "you finish 65 minutes before anything
+  runs" as a session you could fix by cutting it short.
+- **The binding limit has no row for it.** `min(effective_close − closing_buffer, last_departure)` is
+  an upper bound on when you must leave. A first departure is a *lower* bound on when you may leave.
+  They do not compose, and no row of the binding-limit table was ever written for one.
+- **One first departure is not a service interval.** Knowing the first bus leaves at 06:05 does not
+  establish that service runs continuously from 06:05 to 07:00; the design records no headway or
+  continuity rule, and inventing one would be the guess this whole feature exists to avoid.
+
+So a session ending between 04:00 and 07:00 is `unverified` **whenever the way home depends on a
+timetable at all**. The scope matters and is not a hedge:
+
+| Admissible return set | Session ends 05:00 | Why |
+| --- | --- | --- |
+| Contains a schedule-free mode (`walk`, or `cycle` with the bicycle) | `robust`, basis `schedule_free` | A walk has no first service to wait for. The pre-dawn gap is a **timetable** phenomenon, and a schedule-free mode is not subject to one — that is what "schedule-free" means |
+| Schedule-bound only (`transit`) | `unverified`, basis `pre_dawn_gap` | No recorded last departure can speak for an instant before service resumes |
+
+The branch order in "Evaluating one bound" is what enforces this: the schedule-free check returns at
+step 2, so step 4 is only ever reached with a schedule-bound-only set. **Suppressing schedule-free
+evidence pre-dawn would be a policy change — that you may not walk home at 05:00 — and it is not
+adopted here.** It is not a change that could be made silently by branch ordering, which is why the
+scope is written into the contract rather than left to the reader.
+
+That is honest, it is safe, and it costs almost nothing: the remaining case needs an overnight
+session at one of the three 24-hour venues with no walkable or cyclable way home.
+Closing it properly means modelling the **wait** as its own outcome — neither `shorter` nor a binding
+limit — with a recorded service-interval claim behind it. That is a separate assignment, and this
+section is the record of why it cannot be folded into this one.
+
+### The return tier
+
+`return_margin_*` reuses the existing `surplus_*` sum type unchanged — a finite integer margin, or
+`AT_LEAST(0)` — and therefore reuses `passes_feasibility()`, `finite_shortfall()` and `sort_key()`
+without modification. Only `display()` needs a return-specific sibling, because the wording differs
+("last train 23:35 — 40m spare", "no last-service constraint (cycle home)").
+
+```
+return_tier =
+  invalid    : either bound returned VALIDATION_FAILURE   -- checked FIRST
+  unverified : either bound returned UNVERIFIED
+  robust     : passes_feasibility(return_margin_upper)
+  tight      : not robust
+               AND ( passes_feasibility(return_margin_mid)
+                     OR finite_shortfall(return_margin_mid) <= RETURN_TOLERANCE_MINUTES )
+  shorter    : otherwise
+```
+
+`invalid` is **not a tier value and never reaches `overall_tier`.** It takes the existing per-venue
+validation-failure path — flag loudly, do not rank — exactly as a contradictory `period_end_abs` pair
+does on the hours side. It is checked first so a malformed record can never be laundered into
+`unverified` and quietly ranked last instead of being fixed.
+
+**The contract is enforced by `validate_return_transport`'s STEP 0 precondition, not by this tier
+value.** A venue whose stamp is missing or `invalid` never reaches a bound at all, so it never
+reaches this table either; `invalid` here is the redundant guard for a record that somehow slipped
+past the stage. Placing the enforcement in the tier alone would have left it unreachable on exactly
+the branches that skip the resolver.
+
+Deliberately the same four-position shape as the hours tier, with **one asymmetry that must not be
+lost**: the hours model's `UNKNOWN` removes a venue from ranking entirely, because feasibility is
+then undecidable. `unverified` does **not** remove a venue. It is a *tier value*, ranked last, and it
+is named `unverified` rather than `unknown` solely so the two can never be confused in code, in
+prose, or in the UI. What it shares with `UNKNOWN` is the part that matters: **it never resolves to
+`robust`, and missing data never reads as "service exists."**
+
+`unverified` if **either** bound is unresolved, including the common boundary case where
+`session_end_mid` lands inside the core span and `session_end_upper` lands outside it. That is the
+honest reading — the optimistic journey is fine and the pessimistic one is unchecked — and it is what
+will prompt the data to be filled in around 21:30, where it actually matters.
+
+### Composing with the existing feasibility tiers
+
+The two axes stay **separate fields** and are combined into **one ordering key**:
+
+```
+overall_tier = worse_of(hours_tier, return_tier)
+               robust > tight > shorter > unverified
+```
+
+`hours_tier` never takes `unverified`, and `return_tier` never takes `hours-unknown`. Two outcomes are
+already gone before this composition is reached and are **not** positions in the ordering: a venue
+whose hours are `UNKNOWN`, and a venue whose return data is `MALFORMED` — both are unranked, by
+different paths, for different reasons.
+
+The ordering places a **known** partial session above an **unverified** way home: "gives 4h of the 6h
+you asked for, and you can get home" beats "gives the full 6h, and nobody has checked whether you can
+get home." That is the project's standing bias against the wasted trip, applied to the return leg.
+
+**The metrics compose through a single binding limit**, computed per bound and only when
+`return_tier` is not `unverified`:
+
+Informally:
+
+```
+binding_limit_b ~= min( effective_close_b - closing_buffer,  last_departure_b )
+```
+
+That line is a summary, **not the contract** — both operands can hold tags, so it is not something
+any code may execute. The table below is the contract: branch on the tags first, exactly as
+everywhere else in this model, and only then is there a number to take a minimum of.
+
+| `effective_close_b` | Return side | `binding_limit_b` | `binding_constraint` | `latest_leave_at` |
+| --- | --- | --- | --- | --- |
+| finite `C` | finite last departure | `min(C - closing_buffer, last_departure_b)` | whichever won | finite |
+| finite `C` | `AT_LEAST(0)` (core span / schedule-free) | `C - closing_buffer` | `venue_close` | finite |
+| `COVERED` | finite last departure | `last_departure_b` | `last_departure` | **finite** |
+| `COVERED` | `AT_LEAST(0)` | none — `surplus_b = AT_LEAST(0)` | `none` | `UNDETERMINED` |
+| `NONE` | any | metrics undefined, as today | — | undefined |
+| `UNKNOWN` | any | venue unranked, as today | — | undefined |
+
+**All three metrics read `binding_limit_*`, never a raw `effective_close_*`.** The table above is
+where the tags are branched; everything below it operates on the finite value that branching
+produced, or on the explicit "none" row. Subtracting `closing_buffer` from `effective_close_mid`
+again down here would be the exact type error the tag discipline exists to prevent.
+
+```
+# Only reached on the first four rows of the table; the NONE and UNKNOWN rows
+# never get here.
+
+binding_limit_b is finite:
+    usable_minutes  = max(0, min(binding_limit_mid, arrival_mid + duration) - arrival_mid)
+    surplus_b       = binding_limit_b - (arrival_b + duration)
+    latest_leave_at = binding_limit_mid - duration - travel_minutes_mid
+
+binding_limit_b is the "none" row (COVERED hours AND an AT_LEAST(0) return):
+    usable_minutes  = duration
+    surplus_b       = AT_LEAST(0)
+    latest_leave_at = UNDETERMINED
+```
+
+Two consequences worth stating plainly:
+
+- **A `COVERED` venue can now have a real `latest_leave_at`.** `UNDETERMINED` means "no known
+  *closing* constraint within the verified span"; a known last departure is a different constraint
+  and does determine a latest departure. That is not a numeric `min` against `UNDETERMINED` — it is
+  the third row of the table above, where a `COVERED` hours side contributes no candidate at all and
+  `binding_limit_b` simply *is* the last departure. `UNDETERMINED` survives only on the fourth row,
+  where neither side bounds the session. A 24-hour venue is exactly where this matters most.
+- **This finally makes the plan's second query answerable correctly.** "I want six hours today — when
+  do I need to leave?" was previously answered against the venue's closing time alone, which is the
+  wrong constraint on any evening where the last train binds first.
+
+When `return_tier` is `unverified`, the metrics are computed from the hours side alone **and labelled
+as such**. They are not wrong; they are incomplete, and the UI must not present them as a verified
+session length.
+
+### Where it enters the pipeline
+
+`overall_tier` replaces `feasibility tier` as ranking key 3. Nothing else in the order moves:
+being stranded is a feasibility failure, not a comfort one, and it belongs above seat confidence for
+the same reason hours do.
+
+**A venue whose `overall_tier` is `unverified` can never be Plan A.** This is the same rule that
+already forbids promoting a `poor` or `unknown` `seat_confidence` into a confident-looking
+recommendation, applied to the return leg. Where nothing has a verified way home, the tool says so in
+its own words rather than borrowing the seat-confidence refusal:
+
+> **No option with a verified way home for a session ending at 00:30.**
+
+...shown with the candidates, their venue-side tiers, and exactly which return data is missing.
+
+### Plan B
+
+Plan B is evaluated with the **same machinery at the fallback venue**, using the fallback's own
+`return_transport` block and its own `access[origin_a]` mode set — never Plan A's. Plan B's session
+end is `plan_b_arrival_* + duration`, so its later arrival pushes it later into the evening, which is
+precisely when the return constraint starts to bind. A rescue option that strands you is not a rescue.
+
+`backup_strength` is amended in two places, both following from the grading rule already stated —
+*whether the requested session survives*:
+
+- **`strong` additionally requires the fallback's `return_tier` to be `robust` or `tight`.** An
+  `unverified` return **caps `backup_strength` at `salvage`**, and the salvage label states why.
+- **`salvage`'s stated duration is the return-capped `usable_minutes`**, never the hours-capped one.
+  "Gives 1h40m, not the 6h you asked for" is a lie if the last train leaves in forty minutes. The
+  existing requirement that a `salvage` option state its actual duration is what forces this.
+
+### Data contract
+
+A new hand-maintained block in `data/venues_meta.json`, alongside `access` and subject to every rule
+that governs that file — never written by a script, merged at generation time, bands rather than
+exact values.
+
+```json
+"return_transport": {
+  "origin_a": {
+    "transit": {
+      "default":    {"last_departure_band": "23:20-23:25"},
+      "by_weekday": {"fri": {"last_departure_band": "23:50-23:55"},
+                     "sat": {"last_departure_band": "23:50-23:55"},
+                     "sun": {"last_departure_band": "23:05-23:10"}},
+      "basis": "last train from the venue's own station, plus the walk to the platform; rechecked 2026-08"
+    }
+  }
+},
+"holiday_return_policy": "unknown"
+```
+
+| Field | Meaning |
+| --- | --- |
+| `last_departure_band` | The latest departure **from the venue** that still gets you home, as a five-minute clock band. Includes the walk to the stop — the number is about leaving your table, not about being on the platform. |
+| *(no first-departure field)* | Deliberately absent. A lower-bound constraint cannot share this type, and a schedule-bound way home in the pre-dawn window is `unverified` instead — see "The pre-dawn gap is not modelled". |
+| `by_weekday` | Optional per-weekday overrides, keyed by the existing `WEEKDAYS` abbreviations and by the weekday of the **service date**, not of the session end. Absent keys fall back to `default`. Precedence is fixed by `resolve_return_service`: holiday policy → `by_weekday` → `default` → `MISSING`. |
+| `basis` | Free text naming *what kind of source* the band came from and when it was last checked, so a maintainer can re-derive it. Not consumed by any code. **Subject to the same privacy rule as every other field in this file: no exact times, no line or direction names, no route toward an origin.** A free-text field is not a privacy exemption — it is the easiest place to leak, precisely because nothing validates it. |
+| `holiday_return_policy` | `unknown` (default) or `substitute_sun`. Venue-level, exactly like `holiday_policy`. |
+
+**`holiday_return_policy` is a separate field from `holiday_policy` on purpose.** `holiday_policy`
+governs which *busyness* curve substitutes on a holiday. Reusing it for transport would make one
+field mean two things — the precise mistake `preference` and `baseline_seatability` were split to
+avoid. On a date in `holidays.json`, the default `unknown` yields `unverified`, which is the honest
+answer: holiday service patterns are a real thing and nobody has checked them.
+
+**Offsets, not clock strings, once parsed.** The band is stored in clock form because that is what a
+timetable shows and what a human maintains. It is converted to minutes-from-service-day-midnight at
+load by the rule in "From clock string to service-day offset" — a clock time before
+`RETURN_SERVICE_DAY_START_MINUTES` gains 1440, so `00:30` is `1470` — and every comparison thereafter
+is in absolute minutes, the same storage-versus-arithmetic split the periods array already uses.
+
+**The privacy rule binds `basis` as hard as it binds the bands.** "Last train Beauty World toward
+X at 23:31" in a free-text note publishes exactly what the five-minute band was chosen to withhold,
+and it publishes the *direction*, which the band does not. Record the kind of source and the date it
+was checked; never the timetable entry itself.
+
+**Bands, not exact times — and the same privacy trade already accepted.** A last departure toward
+home is weaker information than a travel duration to home: it is dominated by the *venue* end for
+most venues, and the repo already publishes venue coordinates and `access` bands to `origin_a`, which
+is the far stronger trilateration signal. What it does add is a hint about the home end, since the
+binding constraint on a long journey is often the last connection there. Coarsened to a five-minute
+band and accepted deliberately, on the same reasoning recorded for `access`.
+
+### New constants
+
+| Constant | Value | Status |
+| --- | --- | --- |
+| `RETURN_CORE_FROM_MINUTES` | 420 (07:00) | **Maintained assumption**, not provisional and not frozen — source, checked date, scope and re-check rule recorded in "The core service span waives the timetable lookup, never the route". Waives the timetable lookup only; never the route |
+| `RETURN_CORE_UNTIL_MINUTES` | 1290 (21:30) | Same |
+| `RETURN_SERVICE_DAY_START_MINUTES` | 240 (04:00) | Structural, not a judgement — it names which night a departure belongs to |
+| `RETURN_TOLERANCE_MINUTES` | 10 | Provisional, and **separate from `FEASIBILITY_TOLERANCE_MINUTES`** |
+| `RETURN_CYCLE_LATEST_MINUTES` | `null` | Provisional; `null` means no limit. A **clock-time offset** resolved against the service date (`> 1440` after midnight), never compared raw against an absolute minute. **Needs a real-world answer** — see Open questions |
+
+`RETURN_TOLERANCE_MINUTES` is deliberately not `FEASIBILITY_TOLERANCE_MINUTES`. Fifteen minutes short
+of a closing time costs fifteen minutes of study; fifteen minutes short of a last train costs a taxi
+or a night out. The band exists to flag *"your margin is inside the measurement noise"* — five-minute
+bands carry ±2.5 at each end — not to excuse a real miss, so it is tighter and it warns rather than
+reassures.
+
+### What this design deliberately does not do
+
+- **It does not model the outbound mirror.** Whether transport still runs *to* the venue at the
+  departure time is the same question from the other side, and the same data shape would serve it.
+  It is out of scope here and is flagged as a separate assignment rather than folded in.
+- **It does not model the pre-dawn gap for a schedule-bound way home.** A session ending between
+  04:00 and 07:00 on a schedule-bound-only mode set is `unverified` — see "The pre-dawn gap is not
+  modelled". A schedule-free mode still settles it, at step 2, because it has no first service to
+  wait for. An earlier draft carried an optional `first_departure_band`; it is removed, because a
+  lower-bound constraint cannot share the last-departure type, the binding limit, or the `shorter`
+  tier.
+- **It does not model service continuity or headway.** Every claim is about a single instant — the
+  session end — against a single recorded last departure.
+- **It does not model weather after departure**, connection reliability, taxi or ride-hail
+  availability, or walking home as a last resort from an unrecorded route.
+- **It does not add a fetcher.** No live transit source, now or later, per the non-goals.
 
 ---
 
@@ -718,16 +1528,18 @@ This replaces the hard cliff at `surplus >= 0`, which relegated 5h59m while rank
 
 1. **Hard filter — reachability.** A **missing** `access` entry for the selected origin/mode means the mode isn't viable there. Excluded.
 2. **Hard filter — open on arrival**, at that venue's own arrival, against its active period.
-3. **Feasibility tier** — `robust` before `tight`; `shorter` moves to its own group.
+3. **Feasibility tier** — `overall_tier`, the worse of the hours tier and the return tier: `robust` before `tight`, then `shorter`, then `unverified`. `shorter` and `unverified` move to their own groups.
 4. **`seat_confidence` tier**, best first.
 5. **`backup_strength`**, `strong` → `salvage` → `none`.
 6. **Travel burden** (`travel_minutes_mid`), least first.
 7. **`preference`**, best first.
 8. **`surplus_mid`**, most first — final tiebreak only.
 
-Feasibility comes first because a venue that can't hold the session isn't a candidate at any confidence. Seat confidence is next because it is the objective. Backup strength ranks above travel because the whole point is minimising the cost of being wrong.
+Feasibility comes first because a venue that can't hold the session isn't a candidate at any confidence — and "can't hold the session" now includes "can't get you home afterwards", which is why `overall_tier` and not the hours tier alone is the key. Seat confidence is next because it is the objective. Backup strength ranks above travel because the whole point is minimising the cost of being wrong.
 
-A **thin-margin warning** appears on any `tight` venue.
+A **thin-margin warning** appears on any `tight` venue, naming which constraint is thin — the venue's closing time or the last departure home.
+
+**A venue whose `overall_tier` is `unverified` is ranked, but can never be Plan A.** See "Getting home: session-end return transport" — this is the same rule that forbids promoting a `poor` or `unknown` `seat_confidence` into a confident-looking recommendation.
 
 ### Venues that cannot be ranked
 
@@ -746,6 +1558,12 @@ When no venue reaches at least `mixed` confidence, the correct output is:
 > **No low-risk option found for the requested session.**
 
 ...shown with the reasons and the best of a bad set, rather than promoting something weak into Plan A. A confident-looking recommendation built on nothing is worse than an honest refusal.
+
+There is a **second refusal**, for the return leg, and it must not borrow the first one's wording — the two say different things and have different fixes:
+
+> **No option with a verified way home for a session ending at 00:30.**
+
+...shown with the candidates, their venue-side tiers, and exactly which `return_transport` entries are missing. The first refusal means "nowhere is likely to seat you"; the second means "nobody has recorded whether you can get back", and the fix for it is filling in data rather than choosing a different day.
 
 ---
 
@@ -779,7 +1597,9 @@ Plan B is then re-evaluated from scratch using **exactly the same machinery as P
 - `active_period_mid` resolved at `plan_b_arrival_mid`, and `active_period_upper` resolved **independently** at `plan_b_arrival_upper` — each through the absolute-minutes lookup, on its own arrival date, since either can roll past midnight
 - its own `robust` / `tight` / `shorter` tier, computed by the same rule (`robust` requires `active_period_upper` to exist **and** the session to fit before that period's buffer)
 - `seat_confidence` at the **delayed** hour taken from `plan_b_arrival_mid`, which can cross a band boundary
-- rain and `wet_weather_mode` effects on a leg that may differ from the origin leg
+- its own `return_tier`, from **its own** `return_transport` block and **its own** `access[origin_a]` mode set — never Plan A's, and evaluated at `plan_b_arrival_* + duration`, which is later into the evening and therefore exactly where the return constraint starts to bind
+- **Plan A's `bicycle_with_you`, unchanged** — the bicycle is wherever you rode it, so a trip that started by transit has no `cycle` return at the fallback either. The same input also makes a `fallbacks[].mode == "cycle"` link **unviable** on such a trip, and Plan B must drop it exactly as it drops a fallback closed at the delayed arrival
+- rain and `wet_weather_mode` effects on a leg that may differ from the origin leg — including the removal of `cycle` from the return set
 
 Plan B is not a simplified calculation. Anything less and the fallback would be recommended on weaker evidence than the option it is meant to rescue.
 
@@ -790,7 +1610,9 @@ Both thresholds are **provisional**:
 - **`PLAN_B_MIN_SESSION_MINUTES = 90`** — below an hour and a half the trip isn't worth making.
 - **`PLAN_B_MIN_CONFIDENCE = mixed`** — a `poor` or `unknown` fallback is not a plan.
 
-These set the floor for `salvage`. Clearing the floor is **not** the same as satisfying the request: a fallback only reaches `strong` when the requested session actually fits. If nothing clears the floor, `backup_strength` is `none` and the UI says so rather than inventing a fallback.
+These set the floor for `salvage`. Clearing the floor is **not** the same as satisfying the request: a fallback only reaches `strong` when the requested session actually fits **and its way home is verified**. An `unverified` return caps `backup_strength` at `salvage`, with the reason stated. If nothing clears the floor, `backup_strength` is `none` and the UI says so rather than inventing a fallback.
+
+The minutes measured against `PLAN_B_MIN_SESSION_MINUTES` are **return-capped**, not hours-capped.
 
 ### Presentation
 
@@ -801,11 +1623,30 @@ Plan A
 Starbucks Holland Village
 High seat confidence · full 6h session · 27m from origin
 Baseline: dependable · Adjustment: typical for this venue
+Home by transit — last departure ~23:35, 55m spare
 
 If full: Plan B
 Coffee Bean Holland Village
 6-10m from Plan A · medium confidence · full 6h session
 Baseline: usually available · Adjustment: busy for this venue
+Home by transit — last departure ~23:30, 20m spare
+```
+
+A venue the return constraint shortens, with the binding constraint named:
+
+```
+Starbucks Somewhere
+Full session doesn't fit — gives 4h20m of the 6h you asked for
+Open until 02:00, but the last way home leaves 23:35
+Leave the venue by 23:35 · leave home by 17:15 for the full 6h
+```
+
+An `unverified` way home — ranked, flagged, and never Plan A:
+
+```
+Starbucks Somewhere
+Open until 02:00 · full 6h session on hours alone
+No return-transport data for a session ending 00:30 — way home unverified
 ```
 
 A `salvage` Plan B — labelled, with the real duration stated:
@@ -831,13 +1672,13 @@ The generation step is **not** a build system in this sense — a Python script 
 
 **Controls:** date, leave-at time, session duration, origin, travel mode, raining toggle.
 
-**Result:** Plan A and Plan B, then "More alternatives" expanding to the full ranked list grouped by area — each row showing `seat_confidence` with its two components, feasibility tier, `usable_minutes`, `latest_leave_at`, travel, `backup_strength`, preference, and my own visit history (Phase 2). Tap a venue for its day curve with the session window shaded.
+**Result:** Plan A and Plan B, then "More alternatives" expanding to the full ranked list grouped by area — each row showing `seat_confidence` with its two components, both feasibility tiers and the `overall_tier`, the **binding constraint** and the return mode being counted on, `usable_minutes`, `latest_leave_at`, travel, `backup_strength`, preference, and my own visit history (Phase 2). Tap a venue for its day curve with the session window shaded.
 
 ### Constraints — write vanilla in a React-shaped way
 
 1. **One state object. Never read state back out of the DOM.**
 2. **One `render(state)` function.**
-3. **Pure data functions in `ranking.js`, importing nothing DOM-related** — ranking, time and date arithmetic, hours resolution, active-period lookup, the busyness band, the `seat_confidence` lookup, feasibility tiers, Plan B recalculation, backup strength, the venues/meta merge, holiday policy, area grouping, the log→venue join.
+3. **Pure data functions in `ranking.js`, importing nothing DOM-related** — ranking, time and date arithmetic, hours resolution, active-period lookup, the busyness band, the `seat_confidence` lookup, feasibility tiers, return-transport resolution and the return tier, the binding-limit composition, Plan B recalculation, backup strength, the venues/meta merge, holiday policy, area grouping, the log→venue join.
 4. **CSS in a stylesheet with plain class names.**
 
 `ranking.js` stays a real file specifically so `node --test` can import it; the generator copies its contents into the artifact.
@@ -862,6 +1703,7 @@ The generation step is **not** a build system in this sense — a Python script 
       "lat": 1.3412,
       "lng": 103.7757,
       "business_status": "OPERATIONAL",
+      "return_transport_status": {"state": "ok"},
       "hours": {
         "source": "places_api",
         "last_attempt_at": "2026-08-29T10:00:00+08:00",
@@ -925,6 +1767,8 @@ The generation step is **not** a build system in this sense — a Python script 
 
 `business_status` catches permanently-closed or relocated venues — surfaced loudly, never silently ranked.
 
+**`return_transport_status` is stamped by the mandatory validation stage**, `{"state": "ok"}` or `{"state": "invalid", "reason": …}` — see "Whole-file validation is a mandatory stage, not a test obligation". It is the *only* thing `ranking.js` consults about return-data integrity; it never re-derives the check. **A venue whose stamp is absent or `invalid` is not ranked**, because an absent stamp means the stage did not run and the data is unvalidated. A venue with no `return_transport` block at all is `ok` — absence is `MISSING`, which yields `unverified` at evaluation time, not a validation failure.
+
 ### `data/venues_meta.json` — hand-maintained, never written by any script
 
 ```json
@@ -944,6 +1788,17 @@ The generation step is **not** a build system in this sense — a Python script 
                    "walk": null}
     },
     "wet_weather_mode": {"origin_a": {"cycle": "transit"}},
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default":    {"last_departure_band": "23:20-23:25"},
+          "by_weekday": {"fri": {"last_departure_band": "23:50-23:55"},
+                         "sat": {"last_departure_band": "23:50-23:55"}},
+          "basis": "last train from the venue's own station, plus the walk to the platform; rechecked 2026-08"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown",
     "fallbacks": [
       {"venue_id": "coffee-bean-beauty-world", "mode": "walk", "travel_band": "5-10m"}
     ],
@@ -966,6 +1821,8 @@ The generation step is **not** a build system in this sense — a Python script 
 - **`access`** — ordinal rank plus a coarse band, never exact minutes. **Missing** mode key = not viable. Explicit **`null`** = not yet measured.
 - **`wet_weather_mode`** — which mode replaces which when the rain toggle is on, per origin. Without this the toggle's effect is undefined; with it, disabling `cycle` for `origin_a` explicitly selects `transit`, and the resulting later arrival is a visible consequence rather than a silent reorder. A mode with no wet-weather substitute is simply unavailable in the rain.
 - **`fallbacks`** — hand-picked links to plausible nearby venues only. Not a matrix; most venues will have zero, one or two.
+- **`return_transport`** — the latest departure **from the venue** that still gets you home, per destination and per schedule-bound mode, as a five-minute clock band. Only `transit` needs an entry; `walk` and `cycle` are schedule-free and their viability is already carried by `access`. Optional `by_weekday` overrides, resolved by `resolve_return_service`. Absent means **`unverified`**, never "service exists"; malformed means a **per-venue validation failure**, not `unverified`. Full contract in "Getting home: session-end return transport".
+- **`holiday_return_policy`** — `unknown` (default) or `substitute_sun`. **A separate field from `holiday_policy`**, which governs the busyness curve: one field meaning two things is the mistake `preference` and `baseline_seatability` were split to avoid.
 
 **Privacy: bands, not exact minutes.** This file is committed to a public repo. Exact travel times from `home` and `work` to venues whose coordinates are published would trilaterate both origins. Rank plus a five-minute band gives the pipeline what it consumes — ordering, a midpoint, and an upper bound — while widening the inference considerably. Origins are `origin_a` / `origin_b`; the mapping is not committed. A reduction in precision, not a guarantee, accepted deliberately.
 
@@ -986,7 +1843,7 @@ Dates only. **The busyness substitution rule is per venue**, in `venues_meta.jso
 
 A global Sunday substitution was the earlier rule. It is plausible for mall cafés and wrong for office cafés, kiosks and independents — and multi-brand scope makes a global rule weaker still. `unknown` is the honest default; substitution is an explicit per-venue claim.
 
-Hours are handled separately, by the resolution order above.
+Hours are handled separately, by the resolution order above. **Return transport is handled separately again**, by `holiday_return_policy` — see "Getting home: session-end return transport". Three different questions about the same date, three explicit answers.
 
 ### `data/seatlog.csv` — committed, deliberately coarsened
 
@@ -1033,8 +1890,18 @@ fetch_busyness(place_id) -> Histogram   # SerpApi, fragile
 3. **Validate** against the contract.
 4. **Merge** with existing `venues.json`, retaining **last-known-good** for any failed source.
 5. Record `last_attempt_at`, `last_success_at`, `status` per source.
-6. Write to a temp file and **replace atomically** only after validation passes.
-7. Regenerate `web/index.html` — inline the data (unicode-escaping every `<`), `ranking.js` then `app.js` into one module script with `app.js`'s import stripped, and `style.css`.
+6. **Validate `return_transport` across the whole of `venues_meta.json`** and stamp
+   `return_transport_status` on every venue — `validate_return_transport()`, defined in "Getting
+   home: session-end return transport". This step is **mandatory and unconditional**: it checks
+   hand-maintained metadata, not fetched data, so a fully failed refresh still runs it. It is what
+   makes "a malformed band means the venue is not ranked" true on the evaluation branches that never
+   read `return_transport` at all. **It classifies; it never aborts.** An `invalid` status is a
+   result, not an error, and it does not withhold the write — one venue's typo must not cost every
+   other venue its refresh.
+7. Write to a temp file and **replace atomically** only after step 3's contract validation of the
+   **fetched** data passes. Step 6's per-venue statuses are written *with* that data, never against
+   it: they are outputs of the generation, not a precondition for it.
+8. Regenerate `web/index.html` — inline the data (unicode-escaping every `<`), `ranking.js` then `app.js` into one module script with `app.js`'s import stripped, and `style.css`.
 
 A busyness failure still refreshes hours, and vice versa. Degradation must be visible.
 
@@ -1096,7 +1963,8 @@ Requirements:
 - Date picker, not a weekday picker.
 - Plan A and Plan B, with Plan B recalculated from Plan A's delayed arrival using the same active-period and dual-bound machinery, and a `salvage` fallback labelled as such with its actual duration stated.
 - `seat_confidence` shown **with its baseline and adjustment components**.
-- Feasibility tier shown; thin-margin warning on `tight`.
+- Feasibility tier shown; thin-margin warning on `tight`, naming which constraint is thin.
+- **Return transport evaluated at session end**, with the binding constraint named (venue close or last departure), `latest_leave_at` composed from both, an `unverified` way home flagged and barred from Plan A, and the second refusal message when nothing has a verified way home.
 - Per-source freshness with `ok` / `stale` / `failed` distinguished.
 - Missing busyness falls back to baseline with a lower-evidence warning — **never treated as `typical`**.
 - "No low-risk option found for the requested session" when nothing reaches `mixed`.
@@ -1108,7 +1976,7 @@ Requirements:
 **Acceptance, in two parts** — because every venue starts at `baseline_seatability: unknown`, which correctly yields no Plan A at all:
 
 1. **With no baselines assessed**, the app returns "No low-risk option found for the requested session", showing the candidates and why each is unknown. This is the correct behaviour, not a failure.
-2. **Once at least one venue has an assessed baseline**, the app produces a Plan A, and a Plan B where a viable fallback exists, and I can see why each was chosen — without thinking hard.
+2. **Once at least one venue has an assessed baseline**, the app produces a Plan A, and a Plan B where a viable fallback exists, and I can see why each was chosen — without thinking hard. **For a session ending inside the core service span this requires no `return_transport` data at all**; for a session ending outside it, a Plan A additionally requires that venue's `return_transport` entry, and its absence correctly yields the second refusal rather than a recommendation.
 
 **Phase 1 is independently useful.** If Phases 2 and 3 never happen, this was still worth building.
 
@@ -1178,8 +2046,43 @@ Deliberately small. No mocking frameworks, no live-network tests.
 - the `seat_confidence` lookup across **every** baseline × band combination, clamping at both ends, `unknown` propagation
 - **Plan B's dual-bound arrival chain** — that `plan_b_arrival_upper` derives from `plan_a_arrival_upper` (not from the midpoint), that both bounds resolve their own `active_period` independently, and a case where `plan_b_arrival_upper` rolls past midnight onto a different date than `plan_b_arrival_mid`
 - **`backup_strength` three-way** — `strong` only when the requested session fits at the fallback; `salvage` when the floor is cleared but the session does not fit; `none` below the floor, below `PLAN_B_MIN_CONFIDENCE`, or when a nearby fallback is closed by delayed arrival
-- ranking order, the `shorter` split, and the "no low-risk option" condition
-- venues/meta merge, `closing_buffer_minutes` default, per-venue `holiday_policy`, `wet_weather_mode` substitution
+- **the core service span short-circuits, and only inside itself** — a session end at 20:00 resolving `robust` with basis `core_span` on a venue whose `return_transport` is **entirely absent**, with `resolve_return_service` never called (assert the call count, not just the outcome); the same venue with a session end at 22:00 resolving `unverified` (basis `no_data`)
+- **schedule-free modes are positive evidence** — an admissible `walk` or `cycle` return resolving `robust` with `AT_LEAST(0)` even when the `transit` entry is missing entirely; and the same venue resolving `unverified` once that mode is inadmissible
+- **the bicycle is a physical object** — `cycle` admissible as a return mode when `bicycle_with_you`, and **inadmissible** when the outbound mode was `transit` from `origin_b`, even though `access.origin_a.cycle` exists
+- **rain removes `cycle` from the return set**, and a venue whose only schedule-free return was `cycle` falls from `robust` to whatever `transit` gives — never silently staying `robust`
+- **the return leg reads `access[origin_a]`, not the outbound origin** — a trip from `origin_b` whose return mode set comes from `origin_a`; and a venue with **no** `origin_a` entry at all resolving `unverified`, never `closed`
+- **the 04:00 service-day boundary** — a session ending 03:30 Saturday tested against **Friday** night's last departure and resolving `shorter`, not against Saturday night's and resolving `robust`. Anchoring on the calendar date must fail this test
+- **the pre-dawn gap is terminal for a schedule-bound-only set, and only then** — a session ending 05:00 on a `transit`-only admissible set resolving `unverified` (basis `pre_dawn_gap`) **regardless of what `return_transport` contains**, with `resolve_return_service` never called, and never producing a `return_margin_*`, a `binding_limit_*` or a `shorter` tier; and **the same 05:00 session with an admissible `walk` resolving `robust` (basis `schedule_free`)**. A test asserting `unverified` for the walk case is asserting a policy this design does not adopt
+- **the pessimistic edge flips** — the upper bound taking the band's **lower** edge for `last_departure_band` while travel bands keep taking the **upper** edge. A test that passes with one shared edge rule is not testing this
+- **the route prerequisite comes first** — a venue with **no** `access[origin_a]` entry, and one with only `null` entries, resolving `unverified` (basis `no_recorded_route`) for a session ending at **13:00, inside the core span**. This is the ordering defect the core-span shortcut caused; a test placed only outside the span cannot catch it
+- **the core span waives the timetable, not the route** — at 13:00, a venue with an admissible `access[origin_a].transit` entry and **no** `return_transport` at all resolving `robust` (basis `core_span`); the same venue with **no usable `access[origin_a]`** resolving `unverified` (basis `no_recorded_route`) at the same hour. The two files answer different halves of the question and the test must separate them
+- **band normalisation, before validation** — `23:20-23:25` → `(1400, 1405)`; `23:55-00:05` → `(1435, 1445)`, which a pre-normalisation increasing check would wrongly reject; `00:30-00:35` → `(1470, 1475)`, **not** `(30, 35)`; `03:58-04:02` → `MALFORMED`, since it straddles the service-day boundary and names two nights; and `25:00-25:05` → `MALFORMED`. Every normalised offset lies in `[240, 1680)`
+- **`edge()` takes opposite ends for opposite bounds** — the upper bound taking `lo` and the mid bound taking `floor((lo + hi) / 2)`, with the floored midpoint an integer; and a travel band in the same test still taking its **upper** edge, proving the two rules are not shared
+- **`validate_return_transport` covers every reachable entry** — `default` and every `by_weekday` key, for every destination and mode, across the whole of `data/venues_meta.json`; a malformed band under a `by_weekday` key that no current session would ever select still marks the venue invalid
+- **`resolve_return_service` precedence** — holiday-with-`unknown`-policy yielding `MISSING` even when `default` exists; holiday-with-`substitute_sun` taking `by_weekday.sun` and falling back to `default` when `sun` is absent; a `by_weekday` entry outranking `default` on an ordinary date; and the weekday taken from the **service date**, proved by a 03:30 Saturday end selecting the **`fri`** override
+- **malformed return data is a validation failure, not `unverified`** — each of these unranking the venue through the per-venue failure path: a **syntactically invalid** edge (`23:5`, `2360`, `24:00`, `23:60`); a band whose edges are **equal** after normalisation (`23:20-23:20`); and a **plainly inverted** band (`23:25-23:20` → `(1405, 1400)`). A test asserting `unverified` for any of these is asserting the laundering this rule forbids. Do **not** reuse the `03:58-04:02` or `25:00-25:05` cases here — they are already covered by the normalisation obligation above, and repeating them would make this obligation duplicate rather than extend it
+- **the `[240, 1680)` range is an invariant, so test it as one** — no valid `HH:MM` input can produce an offset outside it, which makes any "supply an out-of-range offset" test vacuous by construction. Assert the property instead: `normalise_edge` over **all 1440 clock values** lands every result in `[240, 1680)`, with both boundaries hit exactly — `04:00` → `240` (inclusive low) and `03:59` → `1679` (one below the exclusive high). The retired `[0, 2 × 1440)` bound must not appear in any test
+- **`validate_return_transport` is a pipeline stage, not a test** — the whole-file validator marking a venue `{"state": "invalid", …}`, and that venue **not appearing in ranked output at any hour**, including a session ending at 13:00 that never reads `return_transport`; a venue with **no** `return_transport` block stamping `{"state": "ok"}` and still resolving `unverified` outside the core span; and a venue record whose `return_transport_status` is **absent entirely** being unranked, proving the stamp fails closed when the stage did not run
+- **the stage mirrors the resolver's `MISSING` semantics** — all three absent shapes stamping `{"state": "ok"}`: no `return_transport` block; a block present with this destination/mode absent; and **a selected `default` or `by_weekday` entry present but carrying no `last_departure_band`** (e.g. `{}`). Each must then resolve `unverified` at evaluation time outside the core span, never `invalid`. A stage that calls `normalise_band` on an absent value fails this test, which is the point of it
+- **the failure model is per-venue and never global** — one venue with a malformed band, and: the stage **returns successfully**; the atomic write **still happens**; every other venue is stamped `ok`, generated and ranked normally; and the malformed venue is absent from ranked output with its diagnostic present. A test in which a malformed band withholds the whole generation is asserting the rejected model
+- **the removal is loud, and distinct from `unverified`** — a venue dropped at `STEP 0` appearing in a visible removal notice naming it and its `reason`; an **absent** stamp producing the "never validated" wording instead; and neither being merged into the `unverified` group, since the two have different fixes
+- **`RETURN_CYCLE_LATEST_MINUTES` is resolved against the service date** — a cutoff of 1500 (01:00 next day) admitting a 00:30 session end and excluding a 01:30 one. Comparing the raw offset against an absolute minute must fail the suite
+- **`bicycle_with_you` is threaded, not re-derived** — Plan B computing its return set from **Plan A's** value, so a transit trip from `origin_b` cannot gain a `cycle` return at the fallback; and a `fallbacks[].mode == "cycle"` link being **dropped as unviable** on that same trip
+- **`admissible_return_modes` reads only its parameters** — the two bounds producing different admissible sets when `session_end_mid` and `session_end_upper` straddle the cycle cutoff, which is impossible if the function closes over a single shared `session_end`
+- **`MAX` over admissible modes, not `MIN`** — two schedule-bound modes with different last departures resolving against the later one
+- **`unverified` never unranks, and `UNKNOWN` always does** — a venue with hours `robust` and return `unverified` still appearing in the ranked output (last, in its own group) while a venue with `effective_close == UNKNOWN` does not appear at all. These two must not collapse
+- **`unverified` is barred from Plan A** — a set where the only `robust`-on-hours venue has an `unverified` return produces the **second refusal**, with its own wording, not the seat-confidence one
+- **either bound unverified makes the tier unverified** — the boundary case where `session_end_mid` lands inside the core span and `session_end_upper` lands outside it
+- **`overall_tier` is the worse of the two** — including that a known `shorter` outranks an `unverified`, which is the ordering decision this design turns on
+- **the binding limit composes both sides, and is branched exactly once** — a `COVERED` venue with a finite last departure yielding a **finite** `latest_leave_at` rather than `UNDETERMINED`; a finite close earlier than the last departure yielding `binding_constraint == "venue_close"`; both unbounded yielding `AT_LEAST(0)`, `latest_leave_at == UNDETERMINED` and `binding_constraint == "none"`; and `usable_minutes`, `surplus_*` and `latest_leave_at` all derived from `binding_limit_*` — a test must fail if any of them subtracts from a raw `effective_close_*`
+- **`backup_strength` is graded on `overall_tier`** — a fallback whose hours tier is `robust` but whose `return_tier` is `shorter` grading `salvage` (or `none` below the floor) rather than `strong`, with its duration return-capped; and the same fallback with an `unverified` return capping at `salvage` and labelled as an unverified way home rather than as a short session
+- **the `basis` field carries no exact times and no direction names** — a lint or review check over `venues_meta.json`, since nothing else validates a free-text field
+- **the return metrics are hours-only when `return_tier` is `unverified`**, and are labelled as such rather than presented as a verified session length
+- **`backup_strength` respects the return leg** — a fallback where the requested session fits but the return is `unverified` capping at `salvage`; a fallback whose `salvage` duration is the **return-capped** `usable_minutes`, not the hours-capped one
+- **Plan B uses its own return data** — a fallback resolving against its own `return_transport` and its own `access[origin_a]`, never Plan A's
+- **`holiday_return_policy` is independent of `holiday_policy`** — a venue with `holiday_policy: substitute_sun` and the default `holiday_return_policy: unknown` resolving `unverified` on a holiday, proving the two fields are not read from one another
+- ranking order, the `shorter` split, the `unverified` split, and both "no option" conditions
+- venues/meta merge, `closing_buffer_minutes` default, per-venue `holiday_policy`, per-venue `holiday_return_policy`, `wet_weather_mode` substitution, and `return_transport` band parsing (clock string to minutes, `> 1440` after midnight, `by_weekday` overriding `default`)
 - area grouping, the log→venue join, and "last visit" resolved from row order
 
 **`tests/python/` — pytest, fixture-based**, using small trimmed real responses:
@@ -1199,7 +2102,9 @@ Deliberately small. No mocking frameworks, no live-network tests.
 - **no `fetch()` for bundled data** — the inlined JSON is read from the DOM, never requested
 - **only one non-inlined asset**, the manifest, and it is referenced relatively
 - **all paths relative** — no absolute `/…` href or src anywhere
-- **the file opens and renders correctly from `file://`**, which is the real test of every point above
+- **every venue in the inlined data carries a `return_transport_status`** — asserted against the real generated `index.html`, since an unstamped record is unrankable and would silently empty the board. Assert the field exists on **all** venues, not that any particular value appears
+- **an `invalid` venue's removal notice renders in the generated page** — generate from a fixture with one malformed band, then assert the emitted HTML contains the venue's name and its `reason`, and that the venue is absent from the ranked list. A diagnostic that exists only in the refresh log fails this
+- **the file opens and renders correctly from `file://`**, which is the real test of every point above — and specifically that the stamp and the removal notice both survive into the AirDropped copy, since that copy has no network and no second chance to explain itself
 - **no top-level name collisions** between `ranking.js` and `app.js`, since concatenation puts them in one module scope
 
 Anything touching the network is excluded.
@@ -1212,6 +2117,7 @@ Anything touching the network is excluded.
 - [ ] Seat-confidence components visible without tapping through
 - [ ] Per-source staleness visible without hunting
 - [ ] Holiday handling stated in the UI
+- [ ] A venue removed for broken return data is visibly named, with its reason, and is not confused with the `unverified` group
 
 ---
 
@@ -1223,7 +2129,7 @@ Anything touching the network is excluded.
 
 **"Open till 10pm" is not "study till 10pm".** That is `closing_buffer_minutes`.
 
-**The rain toggle changes arrival time.** `wet_weather_mode` makes the substitution explicit, but the later arrival can shift the busyness band, downgrade the feasibility tier, and change Plan B's leg. Correct behaviour — but it must be *visible*, not a silent reorder.
+**The rain toggle changes arrival time, and the way home.** `wet_weather_mode` makes the substitution explicit, but the later arrival can shift the busyness band, downgrade the feasibility tier, and change Plan B's leg — and the toggle also removes `cycle` from the **return** mode set, which can turn a settled way home into a last-departure race. Correct behaviour — but it must be *visible*, not a silent reorder.
 
 **Public holidays are handled per venue.** Default `unknown` rather than a global Sunday substitution, which is plausible for mall cafés and wrong for kiosks and independents.
 
@@ -1234,6 +2140,20 @@ Anything touching the network is excluded.
 **Seasonality is washed out and unrecoverable.** The histogram is a multi-month rolling average, and dropping calendar dates means the log can't recover exam periods either. (Visit *ordering* does survive; absolute dates do not.)
 
 **Venue closure drift.** A venue vanishing from a source is a fetch failure, not a closure — so a real closure could persist as stale data if the source simply stops listing it.
+
+**Return-transport data duplicates across venues sharing a station, and will drift.** The five Orchard venues share one interchange; their `last_departure_band` values differ only by the walk to the platform. Nothing enforces that they move together when a timetable changes. A shared station table would fix it and was rejected as premature at 28 venues — revisit if the list grows or if a timetable change is ever missed.
+
+**The pre-dawn service gap is not modelled for a schedule-bound way home.** A session ending between 04:00 and 07:00, at one of the three 24-hour venues, is `unverified` unless a schedule-free mode (a walk, or a cycle with the bicycle) settles it first. That is the honest answer and a safe one, but it is not an answer. Closing it needs the **wait** modelled as its own outcome, with a recorded service-interval claim behind it — a separate assignment, not a field.
+
+**A `cycle` fallback link is unusable on a trip that did not start by cycling.** 22 of the current `fallbacks[]` links are `mode: cycle`, and the bicycle is at home unless you rode it. This design threads `bicycle_with_you` so Plan B drops those links correctly; it is recorded here because it is a defect in the existing Plan B contract that this work exposed rather than introduced.
+
+**Rain after departure is not modelled.** The toggle is set when planning, and the return leg's mode set is fixed from it. A dry-looking 18:00 that rains at midnight removes a `cycle` return the model still assumes. There is no weather source by design, so the mitigation is that the UI names the mode it is counting on.
+
+**Cycling home late at night is treated as unconstrained.** `RETURN_CYCLE_LATEST_MINUTES` exists to bound it and is `null` until there is a real-world answer. Until then, ten venues with a home cycle route will show a verified way home at any hour.
+
+**Holiday return service defaults to `unverified`.** Consistent with `holiday_policy`'s honest default, and it means late sessions on public holidays will refuse until someone records the pattern.
+
+**The core-span assumption is maintained, not frozen.** It rests on a network-level norm checked on a recorded date, and LTA publishes temporary altered operating hours and substitute shuttles that this design does not model. If the norm stops holding, the shortcut must be withdrawn rather than quietly left in place.
 
 **`baseline_seatability` is memory, not measurement, until Phase 3.** Subject to recency bias and the same selection bias as the log. Start venues at `unknown`.
 
@@ -1291,5 +2211,10 @@ Each step reads the previous step's output, so they run in order. `phase0_resolv
 - ~~Do any venues close after midnight, run 24 hours, or have split periods?~~ **Answered, 2026-08-29: yes to the first two, no to split periods** — 3 venues run 24 hours, several close after midnight, no split-period days observed. The real finding here wasn't on this checklist: **3 venues run a single period spanning several calendar days**, which breaks `resolve_hours`'s one-day lookback as written. See item 6 above and `CLAUDE.md`.
 - ~~Do all venues have Popular Times data?~~ **Answered, 2026-08-29: 26 of 28.** The 2 without are `starbucks-singhealth-tower` and `starbucks-utown` — confirmed absent by checking Google Maps directly, not just an empty API response. Worth correcting the guess this question was built on: independents were **not** the ones missing data — `baker_and_cook`, the one non-chain-feeling venue in the set, returned a full histogram on the first try.
 - Is a per-venue `closing_buffer_minutes` ever needed, or does the global 30 hold?
+- ~~**Are `RETURN_CORE_FROM_MINUTES = 420` and `RETURN_CORE_UNTIL_MINUTES = 1290` right?**~~ **Basis recorded, 2026-08-30**, with source, checked date, scope and a re-check rule — see "The core service span waives the timetable lookup, never the route". They remain a *maintained assumption* rather than a frozen invariant; the standing task is the **annual re-check**, not the original question. The route prerequisite is separate and unconditional, so the span can never manufacture a way home on its own.
+- **Is `RETURN_TOLERANCE_MINUTES = 10` right?** Provisional, and deliberately tighter than `FEASIBILITY_TOLERANCE_MINUTES` because the consequence of being wrong is a taxi rather than a shorter session.
+- **Should `RETURN_CYCLE_LATEST_MINUTES` be set, and to what?** Currently `null`, meaning cycling home is treated as available at any hour. This is a real-world judgement about riding home late at night, not something the data can answer, and it changes the verdict for the ten venues with a home cycle route.
+- **Is the return destination always `origin_a`?** Assumed yes — sessions end by going home. `return_transport` is keyed by destination so the assumption can be lifted with a UI control rather than a schema change.
+- **Should the outbound mirror be modelled** — whether transport still runs *to* a venue at a late departure time? Same data shape, other direction. Deliberately out of scope here; flagged for its own assignment.
 - **How many fallback links are actually needed**, and does the hand-maintained set stay maintainable as brands are added?
 - ~~**How many venues in total?**~~ **Answered: 28** — 24 `starbucks`, 3 `coffee_bean`, 1 `baker_and_cook`, final. The consequences are recorded in `decisions.md` — a SerpApi ceiling of 4–8 refreshes a month on the free tier (1–2 calls per venue depending on whether a retry is needed, not a flat count), and 28 venues of hand-maintained meta whose *cross-venue ordinal ranks* are the part that will not scale. Both were open questions; neither is a blocker for Phase 0.
