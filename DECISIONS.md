@@ -1972,3 +1972,27 @@ premises.
 ## 2026-08-31 — IMP-002 closed: session-end return-transport implemented in ranking.js
 
 Implemented `ARCH-001`'s return-transport design in `web/ranking.js`: `resolve_return_service`, `admissible_return_modes`, the six-step `resolveReturnBound` (route prerequisite → schedule-free → core-span → pre-dawn → timetable → `MAX` over present), `overall_tier` composition, the six-row binding-limit table, and `validate_return_transport`, plus 52 new tests (95 total) written test-first. `seat_confidence`/`backup_strength`/Plan A-B stay excluded, matching `IMP-001`'s original scope boundary — `backup_strength` needs `overall_tier`, which this assignment supplies as the dependency, not the consumer. Pre-gate `GATE_PASS`; round 1 (`codex_terra`) found one Medium finding — `IMP-002-R1-F01`, `RETURN_TOLERANCE_MINUTES` declared but never defaulted when `toleranceMinutes` was omitted, silently misranking a ≤10-minute return shortfall as `shorter` instead of `tight` — corrected (a one-line default parameter) with two new regression tests, both watched red before the fix; round 2 (`codex_terra`, narrowly scoped to the correction delta) approved with no findings. User approved and authorized close. Full detail in `reviews/IMP-002.md` and `reviews/IMP-002-gate.md`.
+
+## 2026-08-31 — IMP-003 closed: relative_busyness banding and seat_confidence implemented in ranking.js
+
+Implemented `resolveBusynessBand` and `resolveSeatConfidence` in `web/ranking.js`, split out of
+`IMP-001`'s original excluded scope (`backup_strength` and Plan A/B recalculation remain deferred to
+a later assignment, since they need `seat_confidence` as their own dependency). `resolveBusynessBand`
+filters a weekday's Popular Times buckets to open hours, bands the arrival hour's value into
+`peak`/`busy`/`quiet`/`typical`/`unknown` against `N=15`/`P=5`/`MIN_HISTOGRAM_HOURS=6` — `peak` is a
+refinement of `busy` rather than an independent check against the maximum, so a perfectly flat curve
+lands wholly in `typical` rather than reading `peak` everywhere. `resolveSeatConfidence` is an
+explicit `baseline_seatability` × band lookup, clamped on the `poor`/`mixed`/`usually_available`/
+`dependable` ladder. 13 new tests written test-first, hand-verified against real
+`starbucks-centrepoint` Phase 0 histogram/hours data. Pre-gate `GATE_PASS`; round 1 (`codex_terra`)
+found one High finding — `IMP-003-R1-F01`, malformed (non-finite or out-of-range) and duplicate-hour
+Popular Times records bypassed the coverage floor and fed directly into the median/delta arithmetic,
+fabricating a determined band (e.g. `typical` from `NaN`) instead of the required `unknown` — corrected
+by replacing the raw-array filter with `distinctValidHours()`, which counts an hour toward coverage
+only with exactly one raw record, open, whose value is a finite 0-100 number; 6 new adversarial tests
+added (114 total), all watched red before the fix. Round 2 (`codex_terra`, scoped to the correction
+delta) approved with no findings. Also fixed along the way: a stale `PLAN.md` acceptance-section
+premise (all 28 venues already have an assessed `baseline_seatability`, contradicting the old "starts
+unknown" wording — see the entry above), and an unrelated concurrent doc rename
+(`plan.md`/`decisions.md`/`skills.md` → uppercase) committed as found. User approved and authorized
+close. Full detail in `reviews/IMP-003.md` and `reviews/IMP-003-gate.md`.
