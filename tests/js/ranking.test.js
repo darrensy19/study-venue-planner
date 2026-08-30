@@ -30,6 +30,8 @@ import {
   combineBindingLimit,
   resolveOverallFeasibility,
   validateReturnTransport,
+  resolveBusynessBand,
+  resolveSeatConfidence,
 } from "../../web/ranking.js";
 
 // --- fixture builders ------------------------------------------------------
@@ -97,6 +99,19 @@ function venueWithReturnTransport(returnTransport, holidayReturnPolicy) {
 function venueWithAccess(origin_a) {
   const v = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
   v.access = { origin_a };
+  return v;
+}
+
+/** A venue carrying only regular_hours[weekday] (a single period) and
+ * popularTimes[weekday] (an array of {hour, busyness}), for
+ * resolveBusynessBand tests. validFrom/validThrough sit far in the future so
+ * every arrival date resolves via "regular" authority, matching busyness's
+ * own per-weekday (not per-date) nature. */
+function busynessVenue(weekday, period, entries) {
+  const regular = {};
+  regular[weekday] = known([period]);
+  const v = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07", regular });
+  v.popularTimes = { [weekday]: entries };
   return v;
 }
 
@@ -1182,4 +1197,181 @@ test("resolveFeasibility: a COVERED bound never surfaces a numeric surplus, only
   assert.equal(r.latestLeaveAt, "UNDETERMINED");
   // No Infinity anywhere in a result that would ever reach a consumer/UI.
   assert.doesNotMatch(JSON.stringify(r, (_, v) => (v === Infinity ? "__INF__" : v)), /Infinity/);
+});
+
+// --- resolveBusynessBand / resolveSeatConfidence (IMP-003) ------------------
+//
+// "2024-01-01" is a Monday (see the calendar-arithmetic tests above), so
+// weekday "mon" fixtures anchor there. All fixtures use N=15, P=5,
+// MIN_HISTOGRAM_HOURS=6 (resolveBusynessBand's defaults) unless noted.
+
+test("resolveBusynessBand: peak takes precedence over busy when both conditions hold", () => {
+  // 14 open hours (08:00-22:00), plus closed-hour zero-fill at 0-7/22-23 that
+  // must be excluded from median/max/coverage (see the dedicated test below).
+  const entries = [
+    ...Array.from({ length: 8 }, (_, h) => ({ hour: h, busyness: 0 })),
+    { hour: 8, busyness: 20 }, { hour: 9, busyness: 25 }, { hour: 10, busyness: 30 },
+    { hour: 11, busyness: 35 }, { hour: 12, busyness: 90 }, { hour: 13, busyness: 85 },
+    { hour: 14, busyness: 80 }, { hour: 15, busyness: 75 }, { hour: 16, busyness: 70 },
+    { hour: 17, busyness: 65 }, { hour: 18, busyness: 60 }, { hour: 19, busyness: 55 },
+    { hour: 20, busyness: 50 }, { hour: 21, busyness: 45 },
+    { hour: 22, busyness: 0 }, { hour: 23, busyness: 0 },
+  ];
+  const venue = busynessVenue("mon", { open: 480, close: 1320 }, entries);
+  // Hour 12 (median 57.5, delta 32.5 >= N=15 -> busy AND value 90 >= max-P=85 -> peak).
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 12 * 60));
+  assert.equal(r.band, "peak");
+});
+
+test("resolveBusynessBand: closed-hour zero-fill buckets are excluded from median/max/coverage", () => {
+  const entries = [
+    ...Array.from({ length: 8 }, (_, h) => ({ hour: h, busyness: 0 })),
+    { hour: 8, busyness: 20 }, { hour: 9, busyness: 25 }, { hour: 10, busyness: 30 },
+    { hour: 11, busyness: 35 }, { hour: 12, busyness: 90 }, { hour: 13, busyness: 85 },
+    { hour: 14, busyness: 80 }, { hour: 15, busyness: 75 }, { hour: 16, busyness: 70 },
+    { hour: 17, busyness: 65 }, { hour: 18, busyness: 60 }, { hour: 19, busyness: 55 },
+    { hour: 20, busyness: 50 }, { hour: 21, busyness: 45 },
+    { hour: 22, busyness: 0 }, { hour: 23, busyness: 0 },
+  ];
+  const venue = busynessVenue("mon", { open: 480, close: 1320 }, entries);
+  // Hour 15 (value 75): delta 17.5 >= N -> busy; 75 < max-P=85 -> not peak.
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 15 * 60));
+  assert.equal(r.band, "busy");
+  // If the 16 closed-hour zeros had leaked in, the median/max would be
+  // dragged toward 0 instead of 57.5/90, and coverage would read 30 not 14.
+  assert.equal(r.medianUsed, 57.5);
+  assert.equal(r.coverageHours, 14);
+});
+
+test("resolveBusynessBand: N boundary — delta exactly N is busy, one point short is typical", () => {
+  // 8 open hours (08:00-16:00); a flat baseline of 50 keeps the median at 50
+  // regardless of the one varied hour, and a fixed far-away peak (hour 15:100)
+  // keeps every tested value well clear of the peak threshold (max-P=95).
+  const flat = (busynessAtHour13) => [
+    { hour: 8, busyness: 50 }, { hour: 9, busyness: 50 }, { hour: 10, busyness: 50 },
+    { hour: 11, busyness: 50 }, { hour: 12, busyness: 50 }, { hour: 13, busyness: busynessAtHour13 },
+    { hour: 14, busyness: 50 }, { hour: 15, busyness: 100 },
+  ];
+  const period = { open: 480, close: 960 };
+  const arrivalAbs = absMinutes("2024-01-01", 13 * 60);
+
+  const busy = resolveBusynessBand(busynessVenue("mon", period, flat(65)), arrivalAbs);
+  assert.equal(busy.medianUsed, 50);
+  assert.equal(busy.delta, 15);
+  assert.equal(busy.band, "busy");
+
+  const typical = resolveBusynessBand(busynessVenue("mon", period, flat(64)), arrivalAbs);
+  assert.equal(typical.delta, 14);
+  assert.equal(typical.band, "typical");
+});
+
+test("resolveBusynessBand: P boundary — within P of max is peak, one point further is busy", () => {
+  const flat = (busynessAtHour13) => [
+    { hour: 8, busyness: 50 }, { hour: 9, busyness: 50 }, { hour: 10, busyness: 50 },
+    { hour: 11, busyness: 50 }, { hour: 12, busyness: 50 }, { hour: 13, busyness: busynessAtHour13 },
+    { hour: 14, busyness: 50 }, { hour: 15, busyness: 100 },
+  ];
+  const period = { open: 480, close: 960 };
+  const arrivalAbs = absMinutes("2024-01-01", 13 * 60);
+
+  // max is fixed at 100 (hour 15); max - P = 95.
+  const peak = resolveBusynessBand(busynessVenue("mon", period, flat(95)), arrivalAbs);
+  assert.equal(peak.band, "peak");
+
+  const busy = resolveBusynessBand(busynessVenue("mon", period, flat(94)), arrivalAbs);
+  assert.equal(busy.band, "busy"); // delta 44 >= N=15, but not within P of max
+});
+
+test("resolveBusynessBand: a flat curve lands wholly in typical", () => {
+  const entries = Array.from({ length: 8 }, (_, i) => ({ hour: 8 + i, busyness: 50 }));
+  const venue = busynessVenue("mon", { open: 480, close: 960 }, entries);
+  for (let h = 8; h < 16; h++) {
+    const r = resolveBusynessBand(venue, absMinutes("2024-01-01", h * 60));
+    assert.equal(r.band, "typical", `hour ${h}`);
+    assert.equal(r.delta, 0);
+  }
+});
+
+test("resolveBusynessBand: coverage below MIN_HISTOGRAM_HOURS yields unknown", () => {
+  // Only 3 open hours (08:00-11:00) — below the default floor of 6.
+  const entries = [
+    { hour: 8, busyness: 40 }, { hour: 9, busyness: 50 }, { hour: 10, busyness: 60 },
+  ];
+  const venue = busynessVenue("mon", { open: 480, close: 660 }, entries);
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 9 * 60));
+  assert.equal(r.band, "unknown");
+  assert.equal(r.reason, "insufficient_coverage");
+  assert.equal(r.coverageHours, 3);
+});
+
+test("resolveBusynessBand: no histogram at all for the weekday yields unknown", () => {
+  const venue = makeVenue({
+    validFrom: "2099-01-01",
+    validThrough: "2099-01-07",
+    regular: { mon: known([{ open: 480, close: 1320 }]) },
+  });
+  // venue.popularTimes is entirely absent.
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 12 * 60));
+  assert.equal(r.band, "unknown");
+});
+
+test("resolveBusynessBand: adequate coverage elsewhere but a missing arrival-hour bucket yields unknown", () => {
+  // 8 open hours (08:00-16:00) meet the floor, but hour 12's own bucket is
+  // absent from the data — a real gap, not a closed-hour artifact.
+  const entries = [8, 9, 10, 11, 13, 14, 15].map((h) => ({ hour: h, busyness: 50 }));
+  const venue = busynessVenue("mon", { open: 480, close: 960 }, entries);
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 12 * 60));
+  assert.equal(r.band, "unknown");
+  assert.equal(r.reason, "no_data");
+});
+
+test("resolveBusynessBand: flooring — an arrival mid-hour reads that hour's own bucket, never the next", () => {
+  const entries = [
+    { hour: 8, busyness: 50 }, { hour: 9, busyness: 50 },
+    { hour: 10, busyness: 90 }, // delta 40 and within P of max -> peak
+    { hour: 11, busyness: 10 }, // delta -40 -> quiet
+    { hour: 12, busyness: 50 }, { hour: 13, busyness: 50 },
+    { hour: 14, busyness: 50 }, { hour: 15, busyness: 50 },
+  ];
+  const venue = busynessVenue("mon", { open: 480, close: 960 }, entries);
+  const at = (h, m) => absMinutes("2024-01-01", h * 60 + m);
+
+  assert.equal(resolveBusynessBand(venue, at(10, 25)).band, "peak");
+  assert.equal(resolveBusynessBand(venue, at(10, 59)).band, "peak");
+  assert.equal(resolveBusynessBand(venue, at(11, 0)).band, "quiet");
+});
+
+test("resolveSeatConfidence: full baseline x band lookup matches the explicit table, clamped at both ends", () => {
+  const LADDER = { poor: 1, mixed: 2, usually_available: 3, dependable: 4 };
+  const REVERSE = { 1: "poor", 2: "mixed", 3: "usually_available", 4: "dependable" };
+  const ADJUSTMENT = { quiet: 1, typical: 0, busy: -1, peak: -2 };
+  for (const baseline of Object.keys(LADDER)) {
+    for (const band of Object.keys(ADJUSTMENT)) {
+      const level = Math.min(4, Math.max(1, LADDER[baseline] + ADJUSTMENT[band]));
+      const r = resolveSeatConfidence(baseline, { band });
+      assert.equal(r.confidence, REVERSE[level], `${baseline} + ${band}`);
+      assert.equal(r.evidenceQuality, "normal", `${baseline} + ${band}`);
+    }
+  }
+});
+
+test("resolveSeatConfidence: an unknown baseline always yields unknown confidence, regardless of band", () => {
+  for (const band of ["quiet", "typical", "busy", "peak", "unknown"]) {
+    const r = resolveSeatConfidence("unknown", { band });
+    assert.equal(r.confidence, "unknown");
+    assert.equal(r.evidenceQuality, "normal");
+  }
+});
+
+test("resolveSeatConfidence: unknown busyness leaves baseline confidence unchanged, evidence flagged weak", () => {
+  const r = resolveSeatConfidence("usually_available", { band: "unknown" });
+  assert.equal(r.confidence, "usually_available");
+  assert.equal(r.evidenceQuality, "weak");
+});
+
+test("resolveSeatConfidence: a determined band always yields evidenceQuality normal", () => {
+  for (const band of ["quiet", "typical", "busy", "peak"]) {
+    const r = resolveSeatConfidence("mixed", { band });
+    assert.equal(r.evidenceQuality, "normal");
+  }
 });

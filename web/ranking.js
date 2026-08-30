@@ -23,6 +23,15 @@ const RETURN_SERVICE_DAY_START_MINUTES = 240; // 04:00 — structural
 const RETURN_TOLERANCE_MINUTES = 10; // provisional; distinct from resolveFeasibility's toleranceMinutes
 const RETURN_CYCLE_LATEST_MINUTES = null; // provisional; null = no limit (open policy question)
 
+// relative_busyness / seat_confidence constants (plan.md's decision-model
+// section). N and P were measured from real Phase 0 curves (decisions.md,
+// 2026-08-29); MIN_HISTOGRAM_HOURS is provisional but confirmed generous
+// against real coverage. All three are threaded as overridable parameters,
+// like the return-transport constants above.
+const BUSYNESS_N = 15;
+const BUSYNESS_P = 5;
+const MIN_HISTOGRAM_HOURS = 6;
+
 // --- Calendar-date arithmetic -----------------------------------------
 
 function parseDate(dateStr) {
@@ -499,6 +508,130 @@ export function validateReturnTransport(venuesMeta) {
     status[venueId] = failures.length ? { state: "invalid", reason: failures.join("; ") } : { state: "ok" };
   }
   return status;
+}
+
+// --- relative_busyness / seat_confidence ------------------------------------
+
+/**
+ * Which hours (0-23) count as "open" for a weekday's regular_hours entry, for
+ * the sole purpose of filtering Popular Times buckets — never used for real
+ * feasibility. A closed-hour bucket reads a fabricated busyness of 0 in the
+ * source data (decisions.md, 2026-08-29, "Independent review of the closed
+ * Phase 0") and must be excluded from any median/max/coverage computation.
+ *
+ * This is a per-weekday, hour-of-day concept, deliberately simpler than the
+ * hours-resolution machinery above: a period that crosses midnight is clipped
+ * to this same calendar day (hours past 23 are dropped), since Popular Times
+ * itself buckets by weekday-and-hour-of-day, not by absolute minute. An
+ * always_open period covers all 24 hours.
+ */
+function openHourSet(regularEntry) {
+  const hours = new Set();
+  if (!regularEntry || regularEntry.state !== "known") return hours;
+  for (const period of regularEntry.periods) {
+    if (period.always_open) {
+      for (let h = 0; h < 24; h++) hours.add(h);
+      continue;
+    }
+    const startHour = Math.floor(period.open / 60);
+    const endHour = Math.min(24, Math.ceil(Math.min(period.close, MINUTES_PER_DAY) / 60));
+    for (let h = startHour; h < endHour; h++) hours.add(h);
+  }
+  return hours;
+}
+
+function median(sortedAscending) {
+  const n = sortedAscending.length;
+  const mid = Math.floor(n / 2);
+  return n % 2 === 0 ? (sortedAscending[mid - 1] + sortedAscending[mid]) / 2 : sortedAscending[mid];
+}
+
+/**
+ * resolveBusynessBand(venue, arrivalAbs, {n, p, minHistogramHours})
+ *   -> {band: "unknown", reason, coverageHours}
+ *    | {band: "peak"|"busy"|"quiet"|"typical", delta, medianUsed, coverageHours}
+ *
+ * Reads only venue.hours.regular_hours[weekday] (never resolveHours/holidays
+ * — busyness is a per-weekday historical signal, never date-specific) and
+ * venue.popularTimes[weekday] (an array of {hour, busyness}, 0-100). Uses
+ * only arrival_mid's hour, per plan.md's symbol table — never the upper
+ * bound. The arrival hour is chosen by FLOORING (16:25 reads hour 16).
+ *
+ * peak takes precedence over busy when both conditions hold. unknown busyness
+ * is distinct from a determined band's typical — resolveSeatConfidence relies
+ * on that distinction to flag weaker evidence.
+ */
+export function resolveBusynessBand(venue, arrivalAbs, options = {}) {
+  const { n = BUSYNESS_N, p = BUSYNESS_P, minHistogramHours = MIN_HISTOGRAM_HOURS } = options;
+
+  const weekday = weekdayAbbrev(dateFromAbs(arrivalAbs));
+  const arrivalHour = Math.floor(clockMinutesOfDay(arrivalAbs) / 60);
+
+  const openHours = openHourSet(venue.hours?.regular_hours?.[weekday]);
+  const rawEntries = venue.popularTimes?.[weekday] ?? [];
+  const filtered = rawEntries.filter((e) => openHours.has(e.hour));
+
+  if (filtered.length < minHistogramHours) {
+    return { band: "unknown", reason: "insufficient_coverage", coverageHours: filtered.length };
+  }
+
+  const arrivalEntry = filtered.find((e) => e.hour === arrivalHour);
+  if (!arrivalEntry) {
+    return { band: "unknown", reason: "no_data", coverageHours: filtered.length };
+  }
+
+  const values = filtered.map((e) => e.busyness).sort((a, b) => a - b);
+  const medianUsed = median(values);
+  const max = values[values.length - 1];
+  const delta = arrivalEntry.busyness - medianUsed;
+
+  // peak is a refinement of busy, not an independent check against the
+  // maximum alone — otherwise a perfectly flat curve (every value equal to
+  // its own max, delta 0) would read "peak" everywhere merely by being
+  // trivially close to itself, contradicting "a flat curve lands wholly in
+  // typical" (plan.md). Only a value that already clears the busy threshold
+  // can be promoted to peak.
+  let band;
+  if (delta >= n && arrivalEntry.busyness >= max - p) {
+    band = "peak";
+  } else if (delta >= n) {
+    band = "busy";
+  } else if (delta <= -n) {
+    band = "quiet";
+  } else {
+    band = "typical";
+  }
+
+  return { band, delta, medianUsed, coverageHours: filtered.length };
+}
+
+const SEATABILITY_LADDER = { poor: 1, mixed: 2, usually_available: 3, dependable: 4 };
+const SEATABILITY_FROM_LEVEL = { 1: "poor", 2: "mixed", 3: "usually_available", 4: "dependable" };
+const BUSYNESS_ADJUSTMENT = { quiet: 1, typical: 0, busy: -1, peak: -2, unknown: 0 };
+
+/**
+ * resolveSeatConfidence(baselineSeatability, busynessBand)
+ *   -> {confidence, evidenceQuality: "normal"|"weak"}
+ *
+ * An explicit lookup, never a blended score (plan.md, "4. seat_confidence").
+ * baselineSeatability "unknown" always yields confidence "unknown", regardless
+ * of busyness — it never averages, never resolves upward. Otherwise the
+ * ladder poor(1) < mixed(2) < usually_available(3) < dependable(4) is adjusted
+ * by the busyness band and clamped to [1,4]. An unknown busyness band leaves
+ * baseline unchanged (adjustment 0) but flags evidenceQuality "weak" — the
+ * caller must not treat that reading the same as a determined "typical" band.
+ */
+export function resolveSeatConfidence(baselineSeatability, busynessBand) {
+  if (baselineSeatability === "unknown") {
+    return { confidence: "unknown", evidenceQuality: "normal" };
+  }
+  const level = SEATABILITY_LADDER[baselineSeatability];
+  const adjustment = BUSYNESS_ADJUSTMENT[busynessBand.band];
+  const clamped = Math.min(4, Math.max(1, level + adjustment));
+  return {
+    confidence: SEATABILITY_FROM_LEVEL[clamped],
+    evidenceQuality: busynessBand.band === "unknown" ? "weak" : "normal",
+  };
 }
 
 // --- resolve_hours ------------------------------------------------------
