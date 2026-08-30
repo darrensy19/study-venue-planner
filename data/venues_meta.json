@@ -21,7 +21,25 @@
     "brand": "starbucks",
     "venue_type": "campus_cafe",
     "area": "Kent Ridge",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "preference": 1,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "substitute_sun",
+    "access": {
+      "origin_a": {
+        "transit": {
+          "rank": 4,
+          "band": "30-35m"
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "rank": 4,
+          "band": "45-50m"
+        }
+      }
+    },
+    "fallbacks": []
   },
   "starbucks-chinatown-food-street": {
     "brand": "starbucks",
@@ -45,13 +63,89 @@
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Bukit Batok",
-    "baseline_seatability": "mixed"
+    "baseline_seatability": "mixed",
+    "preference": 2,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "substitute_sun",
+    "access": {
+      "origin_a": {
+        "cycle": {
+          "rank": 3,
+          "band": "30-35m"
+        },
+        "transit": {
+          "rank": 1,
+          "band": "20-25m"
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "rank": 2,
+          "band": "40-45m"
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "coffee-bean-west-mall",
+        "mode": "walk",
+        "travel_band": "0-5m"
+      },
+      {
+        "venue_id": "starbucks-hillv2",
+        "mode": "cycle",
+        "travel_band": "25-30m"
+      }
+    ]
   },
   "starbucks-hillv2": {
     "brand": "starbucks",
     "venue_type": "mall_cafe",
     "area": "Hillview",
-    "baseline_seatability": "poor"
+    "baseline_seatability": "poor",
+    "preference": 3,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "substitute_sun",
+    "access": {
+      "origin_a": {
+        "cycle": {
+          "rank": 1,
+          "band": "25-30m"
+        },
+        "transit": {
+          "rank": 3,
+          "band": "20-25m"
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "rank": 1,
+          "band": "40-45m"
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-west-mall",
+        "mode": "cycle",
+        "travel_band": "25-30m"
+      },
+      {
+        "venue_id": "coffee-bean-west-mall",
+        "mode": "cycle",
+        "travel_band": "25-30m"
+      }
+    ]
   },
   "starbucks-hometeamns-bukit-batok": {
     "brand": "starbucks",
@@ -153,7 +247,45 @@
     "brand": "coffee_bean",
     "venue_type": "mall_cafe",
     "area": "Bukit Batok",
-    "baseline_seatability": "usually_available"
+    "baseline_seatability": "usually_available",
+    "preference": 4,
+    "closing_buffer_minutes": null,
+    "holiday_policy": "substitute_sun",
+    "access": {
+      "origin_a": {
+        "cycle": {
+          "rank": 2,
+          "band": "30-35m"
+        },
+        "transit": {
+          "rank": 2,
+          "band": "20-25m"
+        }
+      },
+      "origin_b": {
+        "transit": {
+          "rank": 3,
+          "band": "40-45m"
+        }
+      }
+    },
+    "wet_weather_mode": {
+      "origin_a": {
+        "cycle": "transit"
+      }
+    },
+    "fallbacks": [
+      {
+        "venue_id": "starbucks-west-mall",
+        "mode": "walk",
+        "travel_band": "0-5m"
+      },
+      {
+        "venue_id": "starbucks-hillv2",
+        "mode": "cycle",
+        "travel_band": "25-30m"
+      }
+    ]
   },
   "coffee-bean-imm": {
     "brand": "coffee_bean",

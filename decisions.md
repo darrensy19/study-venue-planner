@@ -1921,3 +1921,15 @@ Note: the Places API does **not** expose popular times. It does expose opening h
 ## 2026-08-30 — IMP-001 closed: ranking.js hours-resolution and feasibility-tier core
 
 Implemented `resolve_hours`, `effective_close`, and the three feasibility tiers in `web/ranking.js` (commit `1677066`), the first assignment run under the newly-adopted cross-agent-workflow protocol. Pre-gate `GATE_PASS`; independent review (round 1, `codex_terra`) found one low-severity finding — `IMP-001-R1-F01`, a Node-version-dependent test invocation (`node --test tests/js/` failed under Node 24 but not 18) — corrected to the version-independent glob form and reverified on both runtimes; round 2 (`codex_luna`, narrowly scoped) approved. User approved and authorized close. Full detail in `reviews/IMP-001.md` and `reviews/IMP-001-gate.md`.
+
+## 2026-08-30 — Phase 1 step 2 meta fields: first 4 venues, plus reusable access/cycling policy
+
+Filled `preference`, `closing_buffer_minutes`, `holiday_policy`, `access`, `wet_weather_mode`, and `fallbacks` for `starbucks-utown`, `starbucks-west-mall`, `starbucks-hillv2`, and `coffee-bean-west-mall` in `data/venues_meta.json` — the same 4-venue slice an earlier unconsulted session plan had targeted, enough to unblock the Plan A/B acceptance test. `access` bands and `fallbacks[].travel_band` came from Singapore's OneMap SG routing API (free, official, needs a short-lived ~3-day API token from `onemap.gov.sg/apidocs/register`) rather than being estimated by hand — geocoding is unauthenticated, the actual routing endpoint (`/api/public/routingsvc/route`, walk/cycle/pt modes) needs the token.
+
+Three reusable policy calls, to apply consistently when filling the remaining 24 venues:
+
+- **Cycling is only viable from `origin_a` (home), never from `origin_b` (work)** — the work commute is far enough that cycling is never an option regardless of measured time. `access.origin_b` should never carry a `cycle` key.
+- **Max cycle time is ~1 hour one-way from home, but subject to a round-trip sanity check per venue** — `starbucks-utown` measured at 59-min one-way (technically under the cutoff) but was rejected because the round trip is 2 hours; a one-way threshold alone isn't sufficient.
+- **Rain always reverts `cycle` → `transit`** — the default `wet_weather_mode.origin_a` entry for any venue with a viable home cycle route, not assessed per-venue.
+
+`holiday_policy: substitute_sun` applied to all 4 (mall/campus-complex venues where Sunday hours already match public holiday hours, per direct confirmation) rather than the `unknown` default.
