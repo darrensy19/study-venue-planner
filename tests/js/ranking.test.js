@@ -17,6 +17,19 @@ import {
   surplusSortKey,
   surplusDisplay,
   AT_LEAST_0,
+  serviceDateFromAbs,
+  clockMinutesOfDay,
+  normaliseEdge,
+  normaliseBand,
+  lastDepartureEdge,
+  resolveReturnService,
+  admissibleReturnModes,
+  resolveReturnBound,
+  resolveReturnFeasibility,
+  overallTier,
+  combineBindingLimit,
+  resolveOverallFeasibility,
+  validateReturnTransport,
 } from "../../web/ranking.js";
 
 // --- fixture builders ------------------------------------------------------
@@ -57,6 +70,34 @@ function tripwireRegular(label) {
       throw new Error(`tripwire: regular_hours["${label}"] should never be resolved`);
     },
   };
+}
+
+/** A return_transport value whose "origin_a" access throws if ever read —
+ * used to prove resolveReturnBound never reads return_transport inside the
+ * core-span, pre-dawn, or schedule-free branches. */
+function tripwireReturnTransport() {
+  return {
+    get origin_a() {
+      throw new Error("tripwire: return_transport should never be read here");
+    },
+  };
+}
+
+/** A venue carrying only return_transport (+ optional holiday_return_policy),
+ * for resolveReturnService tests that don't need hours data. */
+function venueWithReturnTransport(returnTransport, holidayReturnPolicy) {
+  const v = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
+  v.return_transport = returnTransport;
+  if (holidayReturnPolicy !== undefined) v.holiday_return_policy = holidayReturnPolicy;
+  return v;
+}
+
+/** A venue carrying only access.origin_a, for admissibleReturnModes/
+ * resolveReturnBound tests that don't need hours or return_transport data. */
+function venueWithAccess(origin_a) {
+  const v = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
+  v.access = { origin_a };
+  return v;
 }
 
 // --- calendar arithmetic ----------------------------------------------------
@@ -419,6 +460,571 @@ test("effectiveClose: no period shape may outrank a later date's authority — f
     requiredEndAbs
   );
   assert.deepEqual(ecAlwaysOpen, { type: "UNKNOWN" });
+});
+
+// --- Return-transport: calendar-date arithmetic -----------------------------
+
+test("serviceDateFromAbs: a 03:30 Saturday session belongs to Friday's service night (04:00 boundary)", () => {
+  const saturday0330 = absMinutes("2026-09-05", 210); // Sat 03:30, 2026-09-05 is a Saturday
+  assert.equal(serviceDateFromAbs(saturday0330), "2026-09-04"); // Friday
+});
+
+test("serviceDateFromAbs: exactly 04:00 belongs to its own calendar date, not the previous one", () => {
+  const fourAM = absMinutes("2026-09-05", 240);
+  assert.equal(serviceDateFromAbs(fourAM), "2026-09-05");
+});
+
+test("clockMinutesOfDay: recovers the offset-from-midnight component of an absolute minute", () => {
+  assert.equal(clockMinutesOfDay(absMinutes("2026-09-05", 0)), 0);
+  assert.equal(clockMinutesOfDay(absMinutes("2026-09-05", 930)), 930);
+  assert.equal(clockMinutesOfDay(absMinutes("2026-09-05", 1439)), 1439);
+});
+
+// --- Return-transport: band parsing -----------------------------------------
+
+test("normaliseEdge: worked values, including the pre-service-day-start wraparound", () => {
+  assert.equal(normaliseEdge("23:20"), 1400);
+  assert.equal(normaliseEdge("00:30"), 1470); // NOT 30 — wraps past RETURN_SERVICE_DAY_START_MINUTES
+  assert.equal(normaliseEdge("04:00"), 240); // inclusive low edge of [240,1680)
+  assert.equal(normaliseEdge("03:59"), 1679); // one below the exclusive high edge
+});
+
+test("normaliseEdge: rejects syntactically invalid clock strings", () => {
+  assert.equal(normaliseEdge("23:5"), null);
+  assert.equal(normaliseEdge("2360"), null);
+  assert.equal(normaliseEdge("24:00"), null);
+  assert.equal(normaliseEdge("23:60"), null);
+  assert.equal(normaliseEdge("25:00"), null);
+});
+
+test("normaliseEdge: every valid HH:MM clock string lands in [240, 1680), as a property over all 1440 values", () => {
+  for (let hh = 0; hh < 24; hh++) {
+    for (let mm = 0; mm < 60; mm++) {
+      const s = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+      const r = normaliseEdge(s);
+      assert.ok(r >= 240 && r < 1680, `${s} normalised to ${r}, expected [240,1680)`);
+    }
+  }
+});
+
+test("normaliseBand: an ordinary evening band and a midnight-straddling band both normalise and pass", () => {
+  assert.deepEqual(normaliseBand("23:20-23:25"), { kind: "present", lo: 1400, hi: 1405 });
+  assert.deepEqual(normaliseBand("23:55-00:05"), { kind: "present", lo: 1435, hi: 1445 });
+  assert.deepEqual(normaliseBand("00:30-00:35"), { kind: "present", lo: 1470, hi: 1475 });
+});
+
+test("normaliseBand: a band straddling the service-day boundary is malformed via the same lo<hi check", () => {
+  assert.equal(normaliseBand("03:58-04:02").kind, "malformed");
+});
+
+test("normaliseBand: a syntactically malformed edge is malformed", () => {
+  assert.equal(normaliseBand("25:00-25:05").kind, "malformed");
+});
+
+test("normaliseBand: three distinct malformed shapes — bad syntax, equal edges, inverted edges", () => {
+  assert.equal(normaliseBand("23:5-23:10").kind, "malformed");
+  assert.equal(normaliseBand("23:20-23:20").kind, "malformed"); // equal after normalisation
+  assert.equal(normaliseBand("23:25-23:20").kind, "malformed"); // plainly inverted
+});
+
+test("lastDepartureEdge: upper bound takes the lower/earlier edge, mid takes the floored midpoint — the mirror of a travel band", () => {
+  const band = { lo: 1400, hi: 1405 };
+  assert.equal(lastDepartureEdge(band, "upper"), 1400);
+  assert.equal(lastDepartureEdge(band, "mid"), 1402);
+  // Contrast: a travel band's upper bound takes its UPPER edge, never merged with this rule.
+  const travelBandUpperEdge = (b) => b.hi;
+  assert.notEqual(lastDepartureEdge(band, "upper"), travelBandUpperEdge(band));
+});
+
+// --- Return-transport: resolveReturnService ---------------------------------
+
+test("resolveReturnService: no return_transport block at all is missing", () => {
+  const venue = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
+  const r = resolveReturnService(venue, {}, "origin_a", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing");
+});
+
+test("resolveReturnService: block present but this destination/mode absent is missing", () => {
+  const venue = venueWithReturnTransport({ origin_a: { walk: {} } });
+  const r = resolveReturnService(venue, {}, "origin_a", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing");
+});
+
+test("resolveReturnService: a selected entry with no last_departure_band is missing, never malformed", () => {
+  const venue = venueWithReturnTransport({ origin_a: { transit: { default: {} } } });
+  const r = resolveReturnService(venue, {}, "origin_a", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing");
+});
+
+test("resolveReturnService: falls back to default when no by_weekday override matches", () => {
+  const venue = venueWithReturnTransport({
+    origin_a: { transit: { default: { last_departure_band: "23:20-23:25" } } },
+  });
+  const r = resolveReturnService(venue, {}, "origin_a", "transit", "2026-09-04"); // a Friday
+  assert.deepEqual(r, { kind: "present", lo: 1400, hi: 1405 });
+});
+
+test("resolveReturnService: a 03:30 Saturday session's service date (Friday) selects the fri by_weekday override, not sat's", () => {
+  const venue = venueWithReturnTransport({
+    origin_a: {
+      transit: {
+        default: { last_departure_band: "23:00-23:05" },
+        by_weekday: {
+          fri: { last_departure_band: "23:50-23:55" },
+          sat: { last_departure_band: "23:10-23:15" },
+        },
+      },
+    },
+  });
+  const saturday0330 = absMinutes("2026-09-05", 210); // Sat 03:30, 2026-09-05 is a Saturday
+  const serviceDate = serviceDateFromAbs(saturday0330);
+  assert.equal(serviceDate, "2026-09-04"); // Friday
+  const r = resolveReturnService(venue, {}, "origin_a", "transit", serviceDate);
+  assert.deepEqual(r, { kind: "present", lo: 1430, hi: 1435 }); // fri's band, not sat's
+});
+
+test("resolveReturnService: a malformed selected band is malformed, with a reason", () => {
+  const venue = venueWithReturnTransport({
+    origin_a: { transit: { default: { last_departure_band: "23:20-23:20" } } }, // equal after norm
+  });
+  const r = resolveReturnService(venue, {}, "origin_a", "transit", "2026-09-04");
+  assert.equal(r.kind, "malformed");
+  assert.ok(r.reason);
+});
+
+test("resolveReturnService: holiday_return_policy substitute_sun uses the sun by_weekday override on a holiday", () => {
+  const venue = venueWithReturnTransport(
+    {
+      origin_a: {
+        transit: {
+          default: { last_departure_band: "23:00-23:05" },
+          by_weekday: { sun: { last_departure_band: "22:00-22:05" } },
+        },
+      },
+    },
+    "substitute_sun"
+  );
+  const holidays = { "2026-09-04": { name: "Test Holiday" } };
+  const r = resolveReturnService(venue, holidays, "origin_a", "transit", "2026-09-04");
+  assert.deepEqual(r, { kind: "present", lo: 1320, hi: 1325 }); // sun's band, not default's
+});
+
+test("resolveReturnService: holiday_return_policy unknown (the default) on a holiday is missing, even though a default entry exists", () => {
+  const venue = venueWithReturnTransport({
+    origin_a: { transit: { default: { last_departure_band: "23:00-23:05" } } },
+  }); // holiday_return_policy left unset -> "unknown"
+  const holidays = { "2026-09-04": { name: "Test Holiday" } };
+  const r = resolveReturnService(venue, holidays, "origin_a", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing");
+});
+
+test("resolveReturnService: holiday_return_policy is read independently of holiday_policy — a substitute_sun holiday_policy never leaks in", () => {
+  const venue = venueWithReturnTransport({
+    origin_a: { transit: { default: { last_departure_band: "23:00-23:05" } } },
+  }); // no holiday_return_policy set
+  venue.holiday_policy = "substitute_sun"; // the UNRELATED busyness-curve field
+  const holidays = { "2026-09-04": { name: "Test Holiday" } };
+  const r = resolveReturnService(venue, holidays, "origin_a", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing"); // still missing — holiday_policy must not be cross-read
+});
+
+// --- Return-transport: admissibleReturnModes --------------------------------
+
+test("admissibleReturnModes: returns every recorded mode when nothing filters it out", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 }, walk: { band: "5-10m", rank: 2 } });
+  const modes = admissibleReturnModes(venue, false, false, absMinutes("2026-09-04", 900), "2026-09-04");
+  assert.deepEqual([...modes].sort(), ["transit", "walk"]);
+});
+
+test("admissibleReturnModes: bicycle_with_you=false removes cycle even if access records it", () => {
+  const venue = venueWithAccess({ cycle: { band: "10-15m", rank: 1 } });
+  const modes = admissibleReturnModes(venue, false, false, absMinutes("2026-09-04", 900), "2026-09-04");
+  assert.ok(!modes.has("cycle"));
+});
+
+test("admissibleReturnModes: rain removes cycle even when bicycle_with_you is true", () => {
+  const venue = venueWithAccess({ cycle: { band: "10-15m", rank: 1 } });
+  const modes = admissibleReturnModes(venue, true, true, absMinutes("2026-09-04", 900), "2026-09-04");
+  assert.ok(!modes.has("cycle"));
+});
+
+test("admissibleReturnModes: no access entry at all yields an empty set, never a silent default", () => {
+  const venue = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
+  const modes = admissibleReturnModes(venue, false, false, absMinutes("2026-09-04", 900), "2026-09-04");
+  assert.equal(modes.size, 0);
+});
+
+test("admissibleReturnModes: the cycle cutoff is compared via absMinutes(serviceDate, cutoff), never a raw offset", () => {
+  // A real 2026 date is thousands of absolute minutes from epoch day 0. A
+  // buggy raw comparison (sessionEndAbs > cycleLatestMinutes directly) would
+  // almost always evaluate true and wrongly strip cycle here.
+  const venue = venueWithAccess({ cycle: { band: "10-15m", rank: 1 } });
+  const serviceDate = "2026-09-04";
+  const cutoffAbs = absMinutes(serviceDate, 1500); // 01:00 next day
+  const wellBeforeCutoff = cutoffAbs - 100;
+  const modes = admissibleReturnModes(venue, true, false, wellBeforeCutoff, serviceDate, 1500);
+  assert.ok(modes.has("cycle"));
+});
+
+test("admissibleReturnModes: mid and upper bounds can disagree on the admissible set when they straddle the cycle cutoff", () => {
+  const venue = venueWithAccess({ cycle: { band: "10-15m", rank: 1 } });
+  const serviceDate = "2026-09-04";
+  const sessionEndMid = absMinutes(serviceDate, 1470); // 00:30 next day -- before the 01:00 cutoff (1500)
+  const sessionEndUpper = absMinutes(serviceDate, 1530); // 01:30 next day -- after the 01:00 cutoff
+  const modesMid = admissibleReturnModes(venue, true, false, sessionEndMid, serviceDate, 1500);
+  const modesUpper = admissibleReturnModes(venue, true, false, sessionEndUpper, serviceDate, 1500);
+  assert.ok(modesMid.has("cycle"));
+  assert.ok(!modesUpper.has("cycle"));
+});
+
+test("admissibleReturnModes: cycleLatestMinutes=null (the production default) means no cutoff at all", () => {
+  const venue = venueWithAccess({ cycle: { band: "10-15m", rank: 1 } });
+  const farFuture = absMinutes("2026-09-04", 100000); // absurdly late, would fail any real cutoff
+  const modes = admissibleReturnModes(venue, true, false, farFuture, "2026-09-04");
+  assert.ok(modes.has("cycle"));
+});
+
+// --- Return-transport: resolveReturnBound -----------------------------------
+
+test("resolveReturnBound: the route prerequisite fires inside the core span too — no access at all is unverified, never a pass", () => {
+  const venue = venueWithAccess({});
+  const sessionEnd = absMinutes("2026-09-04", 780); // 13:00, inside the core span
+  const r = resolveReturnBound(venue, {}, false, false, sessionEnd, "mid");
+  assert.deepEqual(r, { kind: "unverified", basis: "no_recorded_route" });
+});
+
+test("resolveReturnBound: inside the core span, zero return_transport reads and a pass; outside it with no data, unverified", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } }); // schedule-bound only
+  venue.return_transport = tripwireReturnTransport();
+
+  const insideSpan = absMinutes("2026-09-04", 780); // 13:00
+  const inside = resolveReturnBound(venue, {}, false, false, insideSpan, "mid");
+  assert.deepEqual(inside, { kind: "pass", basis: "core_span", margin: AT_LEAST_0 });
+
+  const venueNoData = venueWithAccess({ transit: { band: "20-25m", rank: 1 } }); // return_transport absent
+  const outsideSpan = absMinutes("2026-09-04", 1320); // 22:00
+  const outside = resolveReturnBound(venueNoData, {}, false, false, outsideSpan, "mid");
+  assert.deepEqual(outside, { kind: "unverified", basis: "no_data" });
+});
+
+test("resolveReturnBound: the core span is inclusive at both ends (21:30 exactly still resolves core_span)", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = tripwireReturnTransport();
+  const exactlyBoundary = absMinutes("2026-09-04", 1290); // 21:30
+  const r = resolveReturnBound(venue, {}, false, false, exactlyBoundary, "mid");
+  assert.deepEqual(r, { kind: "pass", basis: "core_span", margin: AT_LEAST_0 });
+});
+
+test("resolveReturnBound: pre-dawn is unverified on a schedule-bound-only set, with zero return_transport reads", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = tripwireReturnTransport();
+  const preDawn = absMinutes("2026-09-04", 300); // 05:00
+  const r = resolveReturnBound(venue, {}, false, false, preDawn, "mid");
+  assert.deepEqual(r, { kind: "unverified", basis: "pre_dawn_gap" });
+});
+
+test("resolveReturnBound: an admissible walk settles the pre-dawn gap as positive evidence, robust", () => {
+  const venue = venueWithAccess({ walk: { band: "5-10m", rank: 1 } });
+  venue.return_transport = tripwireReturnTransport(); // must never be read
+  const preDawn = absMinutes("2026-09-04", 300); // 05:00
+  const r = resolveReturnBound(venue, {}, false, false, preDawn, "mid");
+  assert.deepEqual(r, { kind: "pass", basis: "schedule_free", margin: AT_LEAST_0 });
+});
+
+test("resolveReturnBound: outside the core span and pre-dawn gap, resolves via the timetable against the service date", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "23:20-23:25" } } } };
+  const sessionEnd = absMinutes("2026-09-04", 1320); // 22:00, past the core span
+  const r = resolveReturnBound(venue, {}, false, false, sessionEnd, "upper");
+  assert.equal(r.kind, "pass");
+  assert.equal(r.basis, "last_departure");
+  assert.equal(r.lastDepartureAbs, absMinutes("2026-09-04", 1400)); // upper takes the lo edge, 23:20
+});
+
+test("resolveReturnBound: MAX (not MIN) over admissible schedule-bound modes — the later last departure wins", () => {
+  const venue = venueWithAccess({
+    transit: { band: "20-25m", rank: 1 },
+    shuttle: { band: "20-25m", rank: 2 }, // a second, synthetic schedule-bound mode
+  });
+  venue.return_transport = {
+    origin_a: {
+      transit: { default: { last_departure_band: "22:00-22:05" } },
+      shuttle: { default: { last_departure_band: "23:00-23:05" } },
+    },
+  };
+  const sessionEnd = absMinutes("2026-09-04", 1320); // 22:00
+  const r = resolveReturnBound(venue, {}, false, false, sessionEnd, "mid");
+  assert.equal(r.kind, "pass");
+  assert.equal(r.lastDepartureAbs, absMinutes("2026-09-04", 1382)); // shuttle's later midpoint, not transit's
+});
+
+test("resolveReturnBound: a malformed band on the only admissible mode unranks the venue as validation_failure, never unverified", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "23:20-23:20" } } } }; // equal after norm
+  const sessionEnd = absMinutes("2026-09-04", 1320); // 22:00
+  const r = resolveReturnBound(venue, {}, false, false, sessionEnd, "mid");
+  assert.equal(r.kind, "validation_failure");
+  assert.ok(r.reason);
+});
+
+// --- Return-transport: resolveReturnFeasibility / overallTier ---------------
+
+test("resolveReturnFeasibility: robust when both bounds land in the core span", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = tripwireReturnTransport();
+  const r = resolveReturnFeasibility(venue, {}, {
+    bicycleWithYou: false, raining: false,
+    sessionEndMidAbs: absMinutes("2026-09-04", 780), // 13:00
+    sessionEndUpperAbs: absMinutes("2026-09-04", 800),
+    toleranceMinutes: 10,
+  });
+  assert.equal(r.tier, "robust");
+  assert.equal(r.returnMarginUpper, AT_LEAST_0);
+});
+
+test("resolveReturnFeasibility: an upper-bound shortfall with a mid-bound surplus ranks tight, not robust", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "23:00-23:05" } } } }; // lo 1380 hi 1385
+  const r = resolveReturnFeasibility(venue, {}, {
+    bicycleWithYou: false, raining: false,
+    sessionEndMidAbs: absMinutes("2026-09-04", 1370), // mid edge 1382, margin +12
+    sessionEndUpperAbs: absMinutes("2026-09-04", 1385), // upper edge 1380, margin -5
+    toleranceMinutes: 10,
+  });
+  assert.equal(r.tier, "tight");
+});
+
+test("resolveReturnFeasibility: a mid-bound shortfall past tolerance ranks shorter", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "23:00-23:05" } } } };
+  const r = resolveReturnFeasibility(venue, {}, {
+    bicycleWithYou: false, raining: false,
+    sessionEndMidAbs: absMinutes("2026-09-04", 1395), // mid edge 1382, margin -13, past tolerance 10
+    sessionEndUpperAbs: absMinutes("2026-09-04", 1400),
+    toleranceMinutes: 10,
+  });
+  assert.equal(r.tier, "shorter");
+});
+
+test("resolveReturnFeasibility: an omitted toleranceMinutes defaults to RETURN_TOLERANCE_MINUTES (10), a 10-minute shortfall still ranks tight", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "23:00-23:05" } } } };
+  const r = resolveReturnFeasibility(venue, {}, {
+    bicycleWithYou: false, raining: false,
+    sessionEndMidAbs: absMinutes("2026-09-04", 1392), // mid edge 1382, margin -10 -- exactly the default tolerance
+    sessionEndUpperAbs: absMinutes("2026-09-04", 1400), // upper edge 1380, margin -20, not robust
+    // toleranceMinutes intentionally omitted
+  });
+  assert.equal(r.tier, "tight");
+});
+
+test("resolveReturnFeasibility: either bound unverified makes the whole return tier unverified, never partially robust", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } }); // no return_transport data
+  const r = resolveReturnFeasibility(venue, {}, {
+    bicycleWithYou: false, raining: false,
+    sessionEndMidAbs: absMinutes("2026-09-04", 780), // 13:00, core_span pass
+    sessionEndUpperAbs: absMinutes("2026-09-04", 1320), // 22:00, no data -> unverified
+    toleranceMinutes: 10,
+  });
+  assert.equal(r.tier, "unverified");
+});
+
+test("resolveReturnFeasibility: a validation failure on either bound yields tier invalid with a reason", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "23:20-23:20" } } } }; // malformed
+  const r = resolveReturnFeasibility(venue, {}, {
+    bicycleWithYou: false, raining: false,
+    sessionEndMidAbs: absMinutes("2026-09-04", 1320),
+    sessionEndUpperAbs: absMinutes("2026-09-04", 1330),
+    toleranceMinutes: 10,
+  });
+  assert.equal(r.tier, "invalid");
+  assert.ok(r.reason);
+});
+
+test("resolveReturnFeasibility: a tiered (non-unverified) result also exposes each bound's basis, for binding-limit composition", () => {
+  const venue = venueWithAccess({ transit: { band: "20-25m", rank: 1 } });
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "23:00-23:05" } } } };
+  const r = resolveReturnFeasibility(venue, {}, {
+    bicycleWithYou: false, raining: false,
+    sessionEndMidAbs: absMinutes("2026-09-04", 1320),
+    sessionEndUpperAbs: absMinutes("2026-09-04", 1330),
+    toleranceMinutes: 10,
+  });
+  assert.equal(r.basisMid, "last_departure");
+  assert.equal(r.basisUpper, "last_departure");
+});
+
+test("overallTier: the worse of the two tiers wins, over robust > tight > shorter > unverified", () => {
+  assert.equal(overallTier("robust", "robust"), "robust");
+  assert.equal(overallTier("robust", "tight"), "tight");
+  assert.equal(overallTier("tight", "shorter"), "shorter");
+  assert.equal(overallTier("shorter", "unverified"), "unverified");
+  assert.equal(overallTier("unverified", "robust"), "unverified"); // order-independent
+});
+
+// --- Return-transport: combineBindingLimit (the six-row table) -------------
+
+test("combineBindingLimit: hours NONE means metrics are undefined regardless of the return side", () => {
+  const r = combineBindingLimit("none", 30, { basis: "last_departure", lastDepartureAbs: 1000 });
+  assert.deepEqual(r, { row: "hours_none" });
+});
+
+test("combineBindingLimit: finite close + finite last departure takes whichever is earlier", () => {
+  const closeWins = combineBindingLimit({ type: "finite", value: 1000 }, 30, { basis: "last_departure", lastDepartureAbs: 2000 });
+  assert.equal(closeWins.bindingConstraint, "venue_close");
+  assert.equal(closeWins.bindingLimitAbs, 970); // 1000 - 30
+
+  const departureWins = combineBindingLimit({ type: "finite", value: 3000 }, 30, { basis: "last_departure", lastDepartureAbs: 2000 });
+  assert.equal(departureWins.bindingConstraint, "last_departure");
+  assert.equal(departureWins.bindingLimitAbs, 2000);
+});
+
+test("combineBindingLimit: finite close + AT_LEAST(0) return (core_span/schedule_free) is bound by venue close alone", () => {
+  const r = combineBindingLimit({ type: "finite", value: 1000 }, 30, { basis: "core_span" });
+  assert.equal(r.bindingConstraint, "venue_close");
+  assert.equal(r.bindingLimitAbs, 970);
+});
+
+test("combineBindingLimit: COVERED hours + finite last departure yields a FINITE binding limit, not UNDETERMINED", () => {
+  const r = combineBindingLimit({ type: "COVERED" }, 30, { basis: "last_departure", lastDepartureAbs: 2000 });
+  assert.equal(r.bindingConstraint, "last_departure");
+  assert.equal(r.bindingLimitAbs, 2000);
+});
+
+test("combineBindingLimit: COVERED hours + AT_LEAST(0) return is the only row with no binding limit at all", () => {
+  const r = combineBindingLimit({ type: "COVERED" }, 30, { basis: "schedule_free" });
+  assert.equal(r.bindingConstraint, "none");
+  assert.equal(r.bindingLimitAbs, undefined);
+});
+
+// --- Return-transport: resolveOverallFeasibility (end-to-end) --------------
+
+test("resolveOverallFeasibility: hours-unknown short-circuits, the return side is never evaluated", () => {
+  const venue = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
+  venue.access = tripwireReturnTransport(); // throws if admissibleReturnModes ever reads it
+  const holidays = { "2026-08-31": { name: "Test Holiday" } };
+  const r = resolveOverallFeasibility(venue, holidays, {
+    ...BASE_PARAMS, bicycleWithYou: false, raining: false, returnToleranceMinutes: 10, cycleLatestMinutes: null,
+  });
+  assert.equal(r.tier, "hours-unknown");
+});
+
+test("resolveOverallFeasibility: return unverified composes to overall unverified, preserving the hours-only metrics unchanged", () => {
+  const venue = makeVenue({
+    validFrom: "2026-08-29", validThrough: "2026-09-04",
+    byDate: { "2026-08-31": known([{ open: 0, always_open: true }]) },
+  });
+  venue.access = { origin_a: { transit: { band: "20-25m", rank: 1 } } }; // schedule-bound only, no return_transport data
+  const params = {
+    ...BASE_PARAMS, departureDate: "2026-08-31", leaveAtMinutes: 1200, travelMinutesMid: 0, travelMinutesUpper: 10,
+    durationMinutes: 120, closingBufferMinutes: 0, toleranceMinutes: 15,
+    bicycleWithYou: false, raining: false, returnToleranceMinutes: 10, cycleLatestMinutes: null,
+  };
+  const hoursOnly = resolveFeasibility(venue, {}, params);
+  const r = resolveOverallFeasibility(venue, {}, params);
+  assert.equal(r.tier, "unverified");
+  assert.equal(r.metricsBasis, "hours_only");
+  assert.equal(r.latestLeaveAt, hoursOnly.latestLeaveAt);
+  assert.equal(r.surplusMid.kind, "at_least_0");
+});
+
+test("resolveOverallFeasibility: COVERED hours + finite last departure yields a FINITE latestLeaveAt, not UNDETERMINED", () => {
+  const venue = makeVenue({
+    validFrom: "2026-08-29", validThrough: "2026-09-04",
+    byDate: { "2026-08-31": known([{ open: 0, always_open: true }]) },
+  });
+  venue.access = { origin_a: { transit: { band: "20-25m", rank: 1 } } };
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "23:00-23:05" } } } }; // lo 1380
+  const params = {
+    ...BASE_PARAMS, departureDate: "2026-08-31", leaveAtMinutes: 1200, travelMinutesMid: 0, travelMinutesUpper: 10,
+    durationMinutes: 120, closingBufferMinutes: 0, toleranceMinutes: 15,
+    bicycleWithYou: false, raining: false, returnToleranceMinutes: 10, cycleLatestMinutes: null,
+  };
+  const r = resolveOverallFeasibility(venue, {}, params);
+  assert.equal(r.tier, "robust");
+  assert.equal(r.metricsBasis, "combined");
+  assert.notEqual(r.latestLeaveAt, "UNDETERMINED");
+  assert.equal(r.latestLeaveAt, absMinutes("2026-08-31", 1262)); // mid's last departure edge is the midpoint 1382, not lo (1380) - 120 (duration) - 0 (travel)
+  assert.doesNotMatch(JSON.stringify(r, (_, v) => (v === Infinity ? "__INF__" : v)), /Infinity/);
+});
+
+test("resolveOverallFeasibility: an omitted returnToleranceMinutes preserves the RETURN_TOLERANCE_MINUTES default end-to-end", () => {
+  const venue = makeVenue({
+    validFrom: "2026-08-29", validThrough: "2026-09-04",
+    byDate: { "2026-08-31": known([{ open: 0, always_open: true }]) },
+  });
+  venue.access = { origin_a: { transit: { band: "20-25m", rank: 1 } } };
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "23:00-23:05" } } } }; // mid edge 1382
+  const params = {
+    ...BASE_PARAMS, departureDate: "2026-08-31", leaveAtMinutes: 1200, travelMinutesMid: 0, travelMinutesUpper: 8,
+    durationMinutes: 192, closingBufferMinutes: 0, toleranceMinutes: 15, // hours side: COVERED regardless, tolerance unused
+    bicycleWithYou: false, raining: false, cycleLatestMinutes: null,
+    // returnToleranceMinutes intentionally omitted
+  };
+  // sessionEndMid = 1200+192 = 1392 -> return margin_mid = 1382-1392 = -10 (exactly the default tolerance)
+  // sessionEndUpper = 1208+192 = 1400 -> return margin_upper = 1380-1400 = -20 (not robust)
+  const r = resolveOverallFeasibility(venue, {}, params);
+  assert.equal(r.tier, "tight"); // hours robust (COVERED), return tight -> overall worse-of is tight
+});
+
+test("resolveOverallFeasibility: COVERED hours + AT_LEAST(0) return (core_span) is the only combination yielding UNDETERMINED", () => {
+  const venue = makeVenue({
+    validFrom: "2026-08-29", validThrough: "2026-09-04",
+    byDate: { "2026-08-31": known([{ open: 0, always_open: true }]) },
+  });
+  venue.access = { origin_a: { transit: { band: "20-25m", rank: 1 } } };
+  const params = {
+    ...BASE_PARAMS, departureDate: "2026-08-31", leaveAtMinutes: 600, travelMinutesMid: 0, travelMinutesUpper: 10,
+    durationMinutes: 60, closingBufferMinutes: 0, toleranceMinutes: 15,
+    bicycleWithYou: false, raining: false, returnToleranceMinutes: 10, cycleLatestMinutes: null,
+  };
+  const r = resolveOverallFeasibility(venue, {}, params);
+  assert.equal(r.tier, "robust");
+  assert.equal(r.metricsBasis, "combined");
+  assert.equal(r.latestLeaveAt, "UNDETERMINED");
+  assert.equal(r.surplusMid.kind, "at_least_0");
+});
+
+// --- Return-transport: validateReturnTransport (whole-file, standalone) ----
+
+test("validateReturnTransport: no return_transport block at all stamps ok", () => {
+  const status = validateReturnTransport({ v1: {} });
+  assert.deepEqual(status, { v1: { state: "ok" } });
+});
+
+test("validateReturnTransport: a present-but-bandless entry stamps ok, never calling normaliseBand on an absent value", () => {
+  const venuesMeta = { v1: { return_transport: { origin_a: { transit: { default: {} } } } } };
+  const status = validateReturnTransport(venuesMeta);
+  assert.deepEqual(status, { v1: { state: "ok" } });
+});
+
+test("validateReturnTransport: a malformed band anywhere (including under by_weekday) marks the venue invalid", () => {
+  const venuesMeta = {
+    v1: {
+      return_transport: {
+        origin_a: {
+          transit: {
+            default: { last_departure_band: "23:20-23:25" },
+            by_weekday: { sun: { last_departure_band: "23:20-23:20" } }, // malformed
+          },
+        },
+      },
+    },
+  };
+  const status = validateReturnTransport(venuesMeta);
+  assert.equal(status.v1.state, "invalid");
+  assert.ok(status.v1.reason.includes("sun"));
+});
+
+test("validateReturnTransport: failures are per-venue — one malformed venue never affects another", () => {
+  const venuesMeta = {
+    v1: { return_transport: { origin_a: { transit: { default: { last_departure_band: "23:20-23:20" } } } } }, // malformed
+    v2: { return_transport: { origin_a: { transit: { default: { last_departure_band: "23:20-23:25" } } } } }, // ok
+  };
+  const status = validateReturnTransport(venuesMeta);
+  assert.equal(status.v1.state, "invalid");
+  assert.equal(status.v2.state, "ok");
 });
 
 // --- AT_LEAST(0): the tagged sum type ---------------------------------------
