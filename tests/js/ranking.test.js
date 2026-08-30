@@ -14,8 +14,8 @@ import {
   passesFeasibility,
   finiteShortfall,
   finiteSurplus,
-  sortKey,
-  display,
+  surplusSortKey,
+  surplusDisplay,
   AT_LEAST_0,
 } from "../../web/ranking.js";
 
@@ -423,10 +423,10 @@ test("effectiveClose: no period shape may outrank a later date's authority — f
 
 // --- AT_LEAST(0): the tagged sum type ---------------------------------------
 
-test("AT_LEAST(0) accessors: passesFeasibility true, sortKey 0, display carries no numeric margin", () => {
+test("AT_LEAST(0) accessors: passesFeasibility true, surplusSortKey 0, surplusDisplay carries no numeric margin", () => {
   assert.equal(passesFeasibility(AT_LEAST_0), true);
-  assert.equal(sortKey(AT_LEAST_0), 0);
-  assert.equal(display(AT_LEAST_0), "fits — margin not established");
+  assert.equal(surplusSortKey(AT_LEAST_0), 0);
+  assert.equal(surplusDisplay(AT_LEAST_0), "fits — margin not established");
 });
 
 test("finiteShortfall rejects AT_LEAST(0) and rejects a non-negative finite surplus", () => {
@@ -439,9 +439,9 @@ test("finiteShortfall returns the positive shortfall for a negative finite surpl
   assert.equal(finiteShortfall(finiteSurplus(-10)), 10);
 });
 
-test("display: a real finite surplus renders a spare/short margin, never the AT_LEAST(0) fallback text", () => {
-  assert.equal(display(finiteSurplus(90)), "1h 30m spare");
-  assert.equal(display(finiteSurplus(-10)), "10m short");
+test("surplusDisplay: a real finite surplus renders a spare/short margin, never the AT_LEAST(0) fallback text", () => {
+  assert.equal(surplusDisplay(finiteSurplus(90)), "1h 30m spare");
+  assert.equal(surplusDisplay(finiteSurplus(-10)), "10m short");
 });
 
 // --- resolveFeasibility: tiers ----------------------------------------------

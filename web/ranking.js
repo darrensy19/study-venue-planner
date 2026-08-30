@@ -276,7 +276,7 @@ export function finiteShortfall(surplus) {
   return -surplus.minutes;
 }
 
-export function sortKey(surplus) {
+export function surplusSortKey(surplus) {
   return surplus.kind === "at_least_0" ? 0 : surplus.minutes;
 }
 
@@ -289,10 +289,10 @@ function formatDuration(minutes) {
   return `${mm}m`;
 }
 
-/** display() must never fall back to sortKey() — rendering AT_LEAST(0) as
- * "0" would claim a venue closes exactly at the deadline when its close was
- * never established. */
-export function display(surplus) {
+/** surplusDisplay() must never fall back to surplusSortKey() — rendering
+ * AT_LEAST(0) as "0" would claim a venue closes exactly at the deadline when
+ * its close was never established. */
+export function surplusDisplay(surplus) {
   if (surplus.kind === "at_least_0") return "fits — margin not established";
   return surplus.minutes >= 0
     ? `${formatDuration(surplus.minutes)} spare`
