@@ -1957,6 +1957,18 @@ What changed, diffed against `~/.claude/skills/cross-agent-workflow`'s current t
 
 Verification actually performed, in place of the gate and review this bypassed: every updated file diffed byte-identical against its skill template/script; `.cross-agent-workflow/finding_state.py` run against both sealed `reviews/IMP-001.md` and `reviews/ARCH-001.md`, confirming they still parse as legacy records (no `Finding disposition schema` line, factual assessment stays optional); the skill's own 110-test `unittest` suite (`scripts/tests/run.sh`) run against the installed script, all passing. No `reviews/WF-001.md` or gate record exists, since the gate was never invoked — this entry is the only record of what verification actually ran.
 
+## 2026-08-31 — Corrected a stale premise in Phase 1's acceptance section
+
+`PLAN.md`'s Phase 1 "Acceptance, in two parts" read "every venue starts at
+`baseline_seatability: unknown`" as its premise for part 1. That was true when originally written,
+but Phase 1 step 2 (2026-08-30, above) assessed a real baseline for all 28 venues — none is
+`unknown` anymore (13 `usually_available`, 12 `mixed`, 2 `dependable`, 1 `poor`). Found while scoping
+`IMP-003`. Acceptance part 1 ("no baselines assessed → no option found") can no longer be exercised
+against live `data/venues_meta.json` as literally worded; it is now a synthetic-fixture test only.
+Part 2 ("an assessed baseline produces a Plan A") is the live-data path. `PLAN.md` corrected in
+place with a dated note rather than silently rewritten, per this file's own convention for corrected
+premises.
+
 ## 2026-08-31 — IMP-002 closed: session-end return-transport implemented in ranking.js
 
 Implemented `ARCH-001`'s return-transport design in `web/ranking.js`: `resolve_return_service`, `admissible_return_modes`, the six-step `resolveReturnBound` (route prerequisite → schedule-free → core-span → pre-dawn → timetable → `MAX` over present), `overall_tier` composition, the six-row binding-limit table, and `validate_return_transport`, plus 52 new tests (95 total) written test-first. `seat_confidence`/`backup_strength`/Plan A-B stay excluded, matching `IMP-001`'s original scope boundary — `backup_strength` needs `overall_tier`, which this assignment supplies as the dependency, not the consumer. Pre-gate `GATE_PASS`; round 1 (`codex_terra`) found one Medium finding — `IMP-002-R1-F01`, `RETURN_TOLERANCE_MINUTES` declared but never defaulted when `toleranceMinutes` was omitted, silently misranking a ≤10-minute return shortfall as `shorter` instead of `tight` — corrected (a one-line default parameter) with two new regression tests, both watched red before the fix; round 2 (`codex_terra`, narrowly scoped to the correction delta) approved with no findings. User approved and authorized close. Full detail in `reviews/IMP-002.md` and `reviews/IMP-002-gate.md`.

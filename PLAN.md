@@ -1973,10 +1973,12 @@ Requirements:
 - Holiday policy applied per venue and stated in the UI.
 - Alternatives grouped by area; `latest_leave_at` shown.
 
-**Acceptance, in two parts** — because every venue starts at `baseline_seatability: unknown`, which correctly yields no Plan A at all:
+**Acceptance, in two parts** — the design must correctly handle both an unassessed and an assessed venue set:
 
-1. **With no baselines assessed**, the app returns "No low-risk option found for the requested session", showing the candidates and why each is unknown. This is the correct behaviour, not a failure.
-2. **Once at least one venue has an assessed baseline**, the app produces a Plan A, and a Plan B where a viable fallback exists, and I can see why each was chosen — without thinking hard. **For a session ending inside the core service span this requires no `return_transport` data at all**; for a session ending outside it, a Plan A additionally requires that venue's `return_transport` entry, and its absence correctly yields the second refusal rather than a recommendation.
+1. **With no baselines assessed**, the app returns "No low-risk option found for the requested session", showing the candidates and why each is unknown. This is the correct behaviour, not a failure. **Exercised via a hand-built all-`unknown` test fixture, never against live `data/venues_meta.json`** — see the correction below.
+2. **With an assessed baseline** (the live case — see below), the app produces a Plan A, and a Plan B where a viable fallback exists, and I can see why each was chosen — without thinking hard. **For a session ending inside the core service span this requires no `return_transport` data at all**; for a session ending outside it, a Plan A additionally requires that venue's `return_transport` entry, and its absence correctly yields the second refusal rather than a recommendation.
+
+**Correction, 2026-08-31:** this section's original premise — "every venue starts at `baseline_seatability: unknown`" — was stale on disk. All 28 venues were assessed during Phase 1 step 2 (`DECISIONS.md`, 2026-08-30), before this correction was written. Acceptance part 1 is therefore exercised only against a synthetic fixture now; part 2 is the path exercisable against live data.
 
 **Phase 1 is independently useful.** If Phases 2 and 3 never happen, this was still worth building.
 
