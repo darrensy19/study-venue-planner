@@ -6,24 +6,24 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: `WF-001`
-- **Work type**: workflow amendment
-- **State**: `abandoned`
-- **Primary route**: `claude_opus` — Opus, effort high (never used)
-- **Verification route**: `codex_sol_high` — Sol, effort high (never used)
-- **Route triggers**: workflow-policy change; primary route `claude_opus` — both hard triggers, moot once abandoned
-- **Baseline commit**: `ea07366`
-- **Artifact under review**: `WORKFLOW.md`, `AGENTS.md`, `CLAUDE.md`'s "Cross-agent coordination" section, `reviews/TEMPLATE.md`, `.cross-agent-workflow/finding_state.py` and `VERSION` — all synced to the current `cross-agent-workflow` skill templates/scripts outside this gated assignment; schema marker stays `v1`
-- **Objective**: superseded — see `decisions.md`, "WF-001 abandoned: workflow sync applied directly"
-- **Scope exclusions**: —
-- **Acceptance criteria**: —
-- **Required verification**: n/a — no gate or review ran; verification actually performed (file diffs, sealed-record legacy parsing, skill's 110-test suite) is recorded in `decisions.md`
-- **Claude gate result**: — (gate never invoked; assignment abandoned before `draft` work began)
-- **Independent review**: `not_required` — superseded before the gate that would have triggered it
-- **Gate evidence**: —
-- **Review record**: —
+- **ID**: `IMP-002`
+- **Work type**: implementation
+- **State**: `completed`
+- **Primary route**: `claude_sonnet` — Sonnet, effort high
+- **Verification route**: `codex_terra` — Terra, effort medium
+- **Route triggers**: correctness depends on fail-open/fail-closed paths (missing service info vs. missing validation) and negative-path/non-vacuous tests, per `WORKFLOW.md`'s hard triggers
+- **Baseline commit**: `0dfd855`
+- **Artifact under review**: `web/ranking.js` (return-transport functions) and `tests/js/`
+- **Objective**: Implement `ARCH-001`'s session-end return-transport design — `plan.md`, "Getting home: session-end return transport"; full design in `reviews/ARCH-001.md`
+- **Scope exclusions**: `seat_confidence`, `backup_strength` grading, Plan A/B recalculation (all still `IMP-001`'s original exclusions, deferred to a later assignment); `fetch_hours.py`, `fetch_busyness.py`, `app.js`, `index.template.html`; `build/refresh.py`'s fetch/coarsen pipeline — only `validate_return_transport` itself is in scope, not its call site
+- **Acceptance criteria**: per `plan.md`'s "Getting home" contract and `reviews/ARCH-001.md`: `resolve_return_service`, `validate_return_transport`, `admissible_return_modes`, `overall_tier` (worse of hours tier and return tier), binding-limit composition, `unverified` vs. `UNKNOWN` kept distinct, route-prerequisite-before-clock ordering, core-span waiving timetable not route, pre-dawn gap unmodelled
+- **Required verification**: `tests/js/` via `node --test`, covering the return-transport list in `CLAUDE.md`'s Testing section
+- **Claude gate result**: `GATE_PASS`
+- **Independent review**: round 2 `APPROVE` — `IMP-002-R1-F01` resolved, no new findings
+- **Gate evidence**: `reviews/IMP-002-gate.md`
+- **Review record**: `reviews/IMP-002.md`
 - **User decisions required**: —
-- **Next action**: None — terminal. `reviews/LEDGER.md`'s `WF-001` row stands per the append-only rule; a new task requires a new assignment ID.
+- **Next action**: None — terminal. A new task requires a new assignment ID.
 
 <!--
 When State is `blocked_on_user`, add exactly these two fields (still inside the 25-line cap):
