@@ -1341,6 +1341,101 @@ test("resolveBusynessBand: flooring — an arrival mid-hour reads that hour's ow
   assert.equal(resolveBusynessBand(venue, at(11, 0)).band, "quiet");
 });
 
+// --- resolveBusynessBand: malformed and duplicate hours (IMP-003-R1-F01) ---
+//
+// All fixtures below share the same 8 open hours (08:00-16:00) and the same
+// "flat 50 + one real outlier at hour 15:100" baseline used in the N/P
+// boundary tests above, so a clean 8-hour set has median 50, max 100. Every
+// test here corrupts exactly one hour's data and asserts the corruption is
+// excluded rather than silently accepted.
+
+test("resolveBusynessBand: a non-finite arrival-hour value never yields a determined band", () => {
+  const entries = [
+    { hour: 8, busyness: 50 }, { hour: 9, busyness: 50 }, { hour: 10, busyness: undefined },
+    { hour: 11, busyness: 50 }, { hour: 12, busyness: 50 }, { hour: 13, busyness: 50 },
+    { hour: 14, busyness: 50 }, { hour: 15, busyness: 100 },
+  ];
+  const venue = busynessVenue("mon", { open: 480, close: 960 }, entries);
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 10 * 60));
+  // Before the fix this read {band: "typical", delta: NaN} — a corrupted
+  // arrival value must never produce a determined band, per plan.md's
+  // "source failure must not invent conditions."
+  assert.equal(r.band, "unknown");
+  assert.equal(r.reason, "no_data");
+  // The other 7 hours are still valid and countable — only the corrupted
+  // hour itself is dropped.
+  assert.equal(r.coverageHours, 7);
+});
+
+test("resolveBusynessBand: an out-of-range value elsewhere is excluded, not just ignored by luck", () => {
+  // hour 14 carries 150 — a numeric but out-of-range (>100) reading. If it
+  // leaked into the max/median computation it would corrupt both (wrongly
+  // becoming the new max instead of hour 15's real 100).
+  const entries = [
+    { hour: 8, busyness: 50 }, { hour: 9, busyness: 50 }, { hour: 10, busyness: 50 },
+    { hour: 11, busyness: 50 }, { hour: 12, busyness: 50 }, { hour: 13, busyness: 50 },
+    { hour: 14, busyness: 150 }, { hour: 15, busyness: 100 },
+  ];
+  const venue = busynessVenue("mon", { open: 480, close: 960 }, entries);
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 10 * 60));
+  assert.equal(r.coverageHours, 7); // hour 14 excluded, not counted
+  assert.equal(r.medianUsed, 50);
+  assert.equal(r.band, "typical"); // delta 0; would differ if 150 were the max
+});
+
+test("resolveBusynessBand: a negative value is malformed, same as an out-of-range positive one", () => {
+  const entries = [
+    { hour: 8, busyness: 50 }, { hour: 9, busyness: 50 }, { hour: 10, busyness: 50 },
+    { hour: 11, busyness: 50 }, { hour: 12, busyness: 50 }, { hour: 13, busyness: -5 },
+    { hour: 14, busyness: 50 }, { hour: 15, busyness: 100 },
+  ];
+  const venue = busynessVenue("mon", { open: 480, close: 960 }, entries);
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 10 * 60));
+  assert.equal(r.coverageHours, 7); // hour 13 excluded
+});
+
+test("resolveBusynessBand: exact 0 and 100 are valid readings, never treated as malformed", () => {
+  // A falsy-but-valid busyness of 0 must survive a naive `if (!value)` bug.
+  const entries = [
+    { hour: 8, busyness: 0 }, { hour: 9, busyness: 50 }, { hour: 10, busyness: 50 },
+    { hour: 11, busyness: 50 }, { hour: 12, busyness: 50 }, { hour: 13, busyness: 50 },
+    { hour: 14, busyness: 50 }, { hour: 15, busyness: 100 },
+  ];
+  const venue = busynessVenue("mon", { open: 480, close: 960 }, entries);
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 8 * 60));
+  assert.equal(r.coverageHours, 8); // all 8 hours counted, including the 0
+  assert.notEqual(r.band, "unknown");
+  assert.equal(r.band, "quiet"); // 0 is far below the median
+});
+
+test("resolveBusynessBand: duplicate records for one hour drop coverage below the floor, exactly the case that would otherwise satisfy it", () => {
+  // Six raw records, all for the SAME hour — meets the raw-count floor of 6
+  // but reflects only one (contested) hourly bucket, never six.
+  const entries = Array.from({ length: 6 }, () => ({ hour: 10, busyness: 90 }));
+  const venue = busynessVenue("mon", { open: 480, close: 960 }, entries);
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 10 * 60));
+  // Before the fix this read {band: "typical", coverageHours: 6}.
+  assert.equal(r.band, "unknown");
+  assert.equal(r.reason, "insufficient_coverage");
+  assert.equal(r.coverageHours, 0); // the contested hour counts for nothing
+});
+
+test("resolveBusynessBand: a duplicate record for a non-arrival hour is excluded without corrupting the other hours' stats", () => {
+  // hour 14 has two conflicting raw records (50 and 999) — both must be
+  // dropped, neither counted, and the surviving 7 hours must compute exactly
+  // as if hour 14 had never appeared at all.
+  const entries = [
+    { hour: 8, busyness: 50 }, { hour: 9, busyness: 50 }, { hour: 10, busyness: 50 },
+    { hour: 11, busyness: 50 }, { hour: 12, busyness: 50 }, { hour: 13, busyness: 50 },
+    { hour: 14, busyness: 50 }, { hour: 14, busyness: 999 }, { hour: 15, busyness: 100 },
+  ];
+  const venue = busynessVenue("mon", { open: 480, close: 960 }, entries);
+  const r = resolveBusynessBand(venue, absMinutes("2024-01-01", 10 * 60));
+  assert.equal(r.coverageHours, 7); // 8 nominal hours minus the excluded duplicate
+  assert.equal(r.medianUsed, 50);
+  assert.equal(r.band, "typical");
+});
+
 test("resolveSeatConfidence: full baseline x band lookup matches the explicit table, clamped at both ends", () => {
   const LADDER = { poor: 1, mixed: 2, usually_available: 3, dependable: 4 };
   const REVERSE = { 1: "poor", 2: "mixed", 3: "usually_available", 4: "dependable" };

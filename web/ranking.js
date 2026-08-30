@@ -546,6 +546,44 @@ function median(sortedAscending) {
   return n % 2 === 0 ? (sortedAscending[mid - 1] + sortedAscending[mid]) / 2 : sortedAscending[mid];
 }
 
+/** A busyness reading is usable only as a finite number on Popular Times'
+ * own 0-100 scale. 0 and 100 are real, legitimate readings (an empty venue at
+ * opening, or fully packed) and must not be excluded by a naive falsy check. */
+function isValidBusyness(value) {
+  return Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
+/**
+ * Reduces a weekday's raw Popular Times records to one validated reading per
+ * open hour: Map<hour, busyness>. An hour is included only when it has
+ * EXACTLY ONE raw record for that hour, open, AND that record's value is
+ * valid (isValidBusyness). Any other shape — zero records, a malformed
+ * value, or two-or-more raw records for the same hour (agreeing or not) — is
+ * dropped entirely rather than guessed at, the same "contradictory or
+ * unusable source data is not silently resolved" discipline the hours-side
+ * active-period lookup already applies to disagreeing periods. This is what
+ * makes coverage (the Map's size) trustworthy: a corrupted or duplicated
+ * feed can never inflate it past the real number of distinct, usable hours.
+ */
+function distinctValidHours(rawEntries, openHours) {
+  const valid = new Map();
+  const excluded = new Set();
+  for (const e of rawEntries) {
+    if (!openHours.has(e.hour)) continue;
+    if (valid.has(e.hour) || excluded.has(e.hour)) {
+      valid.delete(e.hour);
+      excluded.add(e.hour);
+      continue;
+    }
+    if (isValidBusyness(e.busyness)) {
+      valid.set(e.hour, e.busyness);
+    } else {
+      excluded.add(e.hour);
+    }
+  }
+  return valid;
+}
+
 /**
  * resolveBusynessBand(venue, arrivalAbs, {n, p, minHistogramHours})
  *   -> {band: "unknown", reason, coverageHours}
@@ -559,7 +597,10 @@ function median(sortedAscending) {
  *
  * peak takes precedence over busy when both conditions hold. unknown busyness
  * is distinct from a determined band's typical — resolveSeatConfidence relies
- * on that distinction to flag weaker evidence.
+ * on that distinction to flag weaker evidence. coverageHours counts only
+ * distinct, validated hours (see distinctValidHours) — malformed or
+ * duplicated records can never inflate it, and can never produce a
+ * determined band on their own hour.
  */
 export function resolveBusynessBand(venue, arrivalAbs, options = {}) {
   const { n = BUSYNESS_N, p = BUSYNESS_P, minHistogramHours = MIN_HISTOGRAM_HOURS } = options;
@@ -569,21 +610,21 @@ export function resolveBusynessBand(venue, arrivalAbs, options = {}) {
 
   const openHours = openHourSet(venue.hours?.regular_hours?.[weekday]);
   const rawEntries = venue.popularTimes?.[weekday] ?? [];
-  const filtered = rawEntries.filter((e) => openHours.has(e.hour));
+  const validHours = distinctValidHours(rawEntries, openHours);
 
-  if (filtered.length < minHistogramHours) {
-    return { band: "unknown", reason: "insufficient_coverage", coverageHours: filtered.length };
+  if (validHours.size < minHistogramHours) {
+    return { band: "unknown", reason: "insufficient_coverage", coverageHours: validHours.size };
   }
 
-  const arrivalEntry = filtered.find((e) => e.hour === arrivalHour);
-  if (!arrivalEntry) {
-    return { band: "unknown", reason: "no_data", coverageHours: filtered.length };
+  if (!validHours.has(arrivalHour)) {
+    return { band: "unknown", reason: "no_data", coverageHours: validHours.size };
   }
 
-  const values = filtered.map((e) => e.busyness).sort((a, b) => a - b);
+  const values = [...validHours.values()].sort((a, b) => a - b);
   const medianUsed = median(values);
   const max = values[values.length - 1];
-  const delta = arrivalEntry.busyness - medianUsed;
+  const arrivalValue = validHours.get(arrivalHour);
+  const delta = arrivalValue - medianUsed;
 
   // peak is a refinement of busy, not an independent check against the
   // maximum alone — otherwise a perfectly flat curve (every value equal to
@@ -592,7 +633,7 @@ export function resolveBusynessBand(venue, arrivalAbs, options = {}) {
   // typical" (plan.md). Only a value that already clears the busy threshold
   // can be promoted to peak.
   let band;
-  if (delta >= n && arrivalEntry.busyness >= max - p) {
+  if (delta >= n && arrivalValue >= max - p) {
     band = "peak";
   } else if (delta >= n) {
     band = "busy";
@@ -602,7 +643,7 @@ export function resolveBusynessBand(venue, arrivalAbs, options = {}) {
     band = "typical";
   }
 
-  return { band, delta, medianUsed, coverageHours: filtered.length };
+  return { band, delta, medianUsed, coverageHours: validHours.size };
 }
 
 const SEATABILITY_LADDER = { poor: 1, mixed: 2, usually_available: 3, dependable: 4 };
