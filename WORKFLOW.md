@@ -503,11 +503,19 @@ retry is visible.
    next action in `HANDOFF.md`, sets the state per the gate table above, and stops editing.
 3. The reviewer independently verifies the claims and diff. It is read-only everywhere except the
    reviewer-owned sections of `reviews/<id>.md`, and never commits.
-4. If changes are requested, the reviewer stops after recording them. The primary reconciles
-   `HANDOFF.md`, independently verifies each finding and records its factual assessment, makes
-   accepted corrections or escalates per **Review records**' escalation triggers, reruns required
-   verification, and appends a primary-owned response section covering every finding ID. It never
-   edits a reviewer-owned section, then returns the assignment to `review_requested`.
+4. If changes are requested, the reviewer stops after recording them. When the assignment's primary
+   route is Claude, the reviewer's final response ends with exactly one fenced Claude correction
+   prompt: it hands back only the recorded findings, names the assigned Claude primary route, and
+   directs that primary to reconcile `HANDOFF.md` to `changes_requested`, independently assess and
+   address each finding, rerun required verification, append its response, and return the assignment
+   to `review_requested`. No prose follows that prompt. The primary reconciles `HANDOFF.md`,
+   independently verifies each finding and records its factual assessment, makes accepted corrections
+   or escalates per **Review records**' escalation triggers, reruns required verification, and
+   appends a primary-owned response section covering every finding ID. It never edits a reviewer-owned
+   section, then returns the assignment to `review_requested`. When it does, the primary's final
+   response ends with exactly one fenced reviewer re-review prompt. Select its Codex route from the
+   correction delta table, provide the round-2 slice, and state `REPO VALIDATION`; no prose follows
+   that prompt.
 5. **Reaching `review_complete` requires a prompt, not a hope.** A reviewer recommending `APPROVE`
    emits a fenced prompt scoped to exactly one action — reconcile `HANDOFF.md` to `review_complete`,
    then stop and state the user's decision. `HANDOFF.md` is primary-writable only, so silence here

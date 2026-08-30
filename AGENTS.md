@@ -47,6 +47,9 @@ file and reads current state, instead of re-paying for a long scrollback.
   table — never a state inferred here. Then stop editing.
 - After review, independently verify every finding before resolving or rebutting it. Append only a
   `Primary response to review round N` section; never edit reviewer-owned or earlier sections.
+- When corrections return the assignment to `review_requested`, end the response with exactly one
+  fenced reviewer re-review handoff selected from `WORKFLOW.md`'s correction-delta route table. No
+  prose follows the prompt.
 
 ## Implementation reviewer — `codex_terra`, `codex_luna`, or `codex_sol`/`codex_sol_high`
 
@@ -57,6 +60,10 @@ file and reads current state, instead of re-paying for a long scrollback.
   required check.
 - Append reviewer-owned sections using `reviews/TEMPLATE.md`, including stable finding IDs and
   resolution statuses; never edit a primary response or an earlier section.
+- **On `CHANGES_REQUESTED` for a Claude-owned assignment, emit exactly one Claude correction
+  handoff** — make it the final content of the response. Scope it to reconciling `HANDOFF.md` to
+  `changes_requested`, independently assessing and addressing the recorded findings, rerunning
+  required verification, appending the primary response, and returning to `review_requested`.
 - **On `APPROVE`, emit the reconciliation handoff** — a fenced prompt scoped to reconciling
   `HANDOFF.md` to `review_complete`, per `WORKFLOW.md`'s one-writer protocol. Codex cannot write
   `HANDOFF.md` itself.

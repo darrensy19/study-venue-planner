@@ -108,6 +108,12 @@ approval; it does not change the assignment to `user_approved`.
 step 5. The reviewer cannot write `HANDOFF.md`; the fenced prompt below the recommendation is what
 gets the state to `review_complete` rather than leaving it silently stale.
 
+**If `CHANGES_REQUESTED` for a Claude-owned assignment, also emit exactly one fenced Claude
+correction handoff as the final content of the response** — see `WORKFLOW.md`'s one-writer protocol,
+step 4. It hands back only the recorded findings for the assigned Claude primary to reconcile
+`HANDOFF.md` to `changes_requested`, correct and verify, append its response, and request targeted
+re-review. No prose follows the prompt.
+
 ---
 ```
 
@@ -170,6 +176,10 @@ raised. Without a section for them, the next round's compact prompt drops them e
 
 - **Ready for re-review**: `<yes | no>`
 - **Reason**: `<short explanation>`
+
+When ready for re-review, the primary's final response ends with exactly one fenced reviewer
+re-review handoff. Select the Codex route from `WORKFLOW.md`'s correction-delta table, use `REPO
+VALIDATION`, include only the round-2 slice, and add no prose after the prompt.
 
 ---
 ```

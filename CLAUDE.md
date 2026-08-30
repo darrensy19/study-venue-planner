@@ -169,7 +169,10 @@ Follow `WORKFLOW.md`'s contract-aware preflight in its stated order — the orde
   `draft`* and its allowed-transition table — never a state inferred here. Do not make an
   architectural decision absent from or
   contradicting approved architecture; stop and escalate instead. In a review response, append only
-  `Primary response to review round N`; never edit reviewer-owned or earlier sections.
+  `Primary response to review round N`; never edit reviewer-owned or earlier sections. When the
+  corrections return the assignment to `review_requested`, end the response with exactly one fenced
+  reviewer re-review handoff selected from `WORKFLOW.md`'s correction-delta route table. No prose
+  follows the prompt.
 - **Pre-gate — always `claude_sonnet`, effort high, fresh context**: runs inside `draft`, before
   the assignment is offered for review. Write only `reviews/<id>-gate.md`, from a brief generated
   mechanically from `HANDOFF.md`'s acceptance criteria and required verification — never a brief
