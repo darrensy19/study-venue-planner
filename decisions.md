@@ -1913,3 +1913,11 @@ Note: the Places API does **not** expose popular times. It does expose opening h
 - **Added since:** confirm `hours_timezone` and `histogram_timezone` independently rather than
   assuming they agree; and check whether any of the ten stores needs after-midnight, 24-hour or split
   opening periods, which decides whether the periods array earns its complexity.
+
+## 2026-08-30 — `effective_close` slack semantics clarified: same-day/current-authority closes trusted exactly
+
+`plan.md`'s pseudocode read as "any confirmed slack ⇒ `COVERED`, even same-day," which would discard a genuinely verified thin margin. Resolved during `IMP-001`: a period's close is trusted and returned exactly (as a real shortfall or real slack) whenever nothing about a later date could contradict it — `current`-authority closes (same-day, or a decomposed multi-day chain) and `regular`-authority closes that don't cross midnight. `COVERED`/`AT_LEAST(0)` is reserved for `always_open`, `continues_beyond_window`, and `regular`-authority closes that do cross into another calendar date, where a holiday could still override the pattern. User-confirmed via the recommended interpretation. Implemented in `web/ranking.js`'s `effectiveClose`, with the reasoning in its docstring.
+
+## 2026-08-30 — IMP-001 closed: ranking.js hours-resolution and feasibility-tier core
+
+Implemented `resolve_hours`, `effective_close`, and the three feasibility tiers in `web/ranking.js` (commit `1677066`), the first assignment run under the newly-adopted cross-agent-workflow protocol. Pre-gate `GATE_PASS`; independent review (round 1, `codex_terra`) found one low-severity finding — `IMP-001-R1-F01`, a Node-version-dependent test invocation (`node --test tests/js/` failed under Node 24 but not 18) — corrected to the version-independent glob form and reverified on both runtimes; round 2 (`codex_luna`, narrowly scoped) approved. User approved and authorized close. Full detail in `reviews/IMP-001.md` and `reviews/IMP-001-gate.md`.

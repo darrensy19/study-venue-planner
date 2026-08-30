@@ -12,6 +12,7 @@ an old one. Dates are ISO `YYYY-MM-DD`.
 
 | Date | Event | Assignment ID | Verification route | Detail |
 | --- | --- | --- | --- | --- |
+| 2026-08-30 | `completed` | `IMP-001` | `codex_terra` | |
 
 ## Event vocabulary
 
