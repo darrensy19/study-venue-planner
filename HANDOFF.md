@@ -8,22 +8,22 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 - **ID**: `IMP-001`
 - **Work type**: implementation
-- **State**: `draft`
+- **State**: `review_requested`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, effort medium
 - **Route triggers**: correctness depends on fail-closed paths (`UNKNOWN`/`NONE` distinction, `AT_LEAST(0)` sum type) — mandatory Codex per hard trigger list
 - **Baseline commit**: `f6aa4f0`
-- **Artifact under review**: `web/ranking.js` (new)
+- **Artifact under review**: `web/ranking.js` (new), commit `1677066`
 - **Objective**: Implement `web/ranking.js`'s `resolve_hours`, `effective_close` and feasibility-tier machinery per `plan.md`'s decision model and `CLAUDE.md`'s hours-resolution contract.
 - **Scope exclusions**: `fetch_hours.py`, `fetch_busyness.py`, `build/refresh.py`, `app.js`, `index.template.html`, `seat_confidence`/`backup_strength`/Plan A-B (deferred to later assignments)
 - **Acceptance criteria**: `tests/js/` covers the resolve_hours/effective_close/feasibility-tier cases listed in `CLAUDE.md`'s Testing section (multi-day decomposition, window handling, continuity across the window edge, source authority, the lazy walk, `NONE` vs `UNKNOWN`, `AT_LEAST(0)` accessors, tier boundaries)
 - **Required verification**: `node --test tests/js/` passing; no DOM imports or `fetch()` in `ranking.js`; every `surplus_*` use goes through an accessor
-- **Claude gate result**: —
+- **Claude gate result**: `GATE_PASS`
 - **Independent review**: `required`
-- **Gate evidence**: —
+- **Gate evidence**: `reviews/IMP-001-gate.md` (invocation 1, 2026-08-30)
 - **Review record**: —
 - **User decisions required**: —
-- **Next action**: Implementation and tests done (38/38 passing), staged but uncommitted. Run the pre-gate next (brief already generated via `.cross-agent-workflow/gate_brief.py HANDOFF.md`), then route to `review_requested` (`codex_terra`) once `GATE_PASS` lands, since a hard trigger already fired.
+- **Next action**: Route to `codex_terra` for independent review round 1 (hard trigger fired, so this cannot close `claude_only` regardless of gate result). Gate noted one non-blocking observation (a `regular`-authority midnight-crossing precision case) and one scope gap (two "window handling" sub-cases belong to not-yet-written `fetch_hours.py`/`tests/python/`) — both worth surfacing to the reviewer, neither blocks.
 
 <!--
 When State is `blocked_on_user`, add exactly these two fields (still inside the 25-line cap):
