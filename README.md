@@ -5,9 +5,9 @@ Personal tool for picking a coffee venue to study at in Singapore. It answers:
 > It's 4pm and I want to study for 3-6 hours. I'm at work. Where do I go — and where do I go if
 > that's full?
 
-Roadmap, architecture, and data contracts: `plan.md`. Working conventions and non-negotiables:
-`CLAUDE.md`. What got decided and why: `decisions.md`. Which Claude Code plugins and skills this
-project uses: `skills.md`.
+Roadmap, architecture, and data contracts: `PLAN.md`. Working conventions and non-negotiables:
+`CLAUDE.md`. What got decided and why: `DECISIONS.md`. Which Claude Code plugins and skills this
+project uses: `SKILLS.md`.
 
 ## What it actually does
 
@@ -95,14 +95,14 @@ slower won't get used.
 
 **Phase 0 is closed.** 28 venues in Singapore across Starbucks, Coffee Bean & Tea Leaf and Baker &
 Cook were resolved to Place IDs, their hours and Popular Times histograms fetched, and `N`/`P` set
-from the real measured curves. See `plan.md`'s Phase 0 section and `decisions.md` for the full
+from the real measured curves. See `PLAN.md`'s Phase 0 section and `DECISIONS.md` for the full
 record, including two real bugs found and fixed in the spread analysis after an independent review.
 `data/venues_meta.json` carries `venue_type`/`area` for all 28. **Phase 1 is next** — fetchers, the
 refresh orchestrator, and Plan A/B. Concrete opening steps, in order:
 
 1. ~~Resolve the multi-day-period design gap in `resolve_hours`.~~ **Done, 2026-08-29.** Resolving it
    turned up four more defects in the same hours-ingestion step, and all five are settled together —
-   see `decisions.md`, "Hours ingestion: five defects resolved as one contract". The fetcher now has a
+   see `DECISIONS.md`, "Hours ingestion: five defects resolved as one contract". The fetcher now has a
    written contract to be built against: decompose multi-day periods at ingestion, treat a 24-hour
    venue as an unbounded period rather than one closing at midnight, read `truncated` as a window
    edge, compute and validate the seven-day window, and materialise every date in it. No code was
@@ -113,7 +113,7 @@ refresh orchestrator, and Plan A/B. Concrete opening steps, in order:
 3. Write `build/refresh.py` and the two real fetchers (`fetch_hours.py`, `fetch_busyness.py`) —
    the bulk of Phase 1.
 
-Per `CLAUDE.md`'s workflow rule, step 3 should start with a plan-mode critique of `plan.md`'s
+Per `CLAUDE.md`'s workflow rule, step 3 should start with a plan-mode critique of `PLAN.md`'s
 Phase 1 section against the repo as it now stands, run on `opusplan` — not a straight port of the
 Phase 0 probe scripts.
 
@@ -189,7 +189,7 @@ No card needed. The free plan is **250 searches/month**, throttled to **50/hour*
 
 **SerpApi is the binding constraint on refresh frequency, not Google.** Cost per venue is 1 call
 when a search resolves straight to a working histogram, 2 when a `data`-parameter retry is needed —
-see `decisions.md`, 2026-08-29, "Popular Times coverage, take two," for why the retry exists: an
+see `DECISIONS.md`, 2026-08-29, "Popular Times coverage, take two," for why the retry exists: an
 empty `popular_times` on the first response is not reliable evidence the venue lacks one. At 28
 venues that's **4–8 refreshes a month** depending on how many need the retry that day — weekly fits
 either way, daily does not and is not close.

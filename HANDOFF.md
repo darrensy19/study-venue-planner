@@ -14,9 +14,9 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Route triggers**: correctness depends on fail-open/fail-closed paths (missing service info vs. missing validation) and negative-path/non-vacuous tests, per `WORKFLOW.md`'s hard triggers
 - **Baseline commit**: `0dfd855`
 - **Artifact under review**: `web/ranking.js` (return-transport functions) and `tests/js/`
-- **Objective**: Implement `ARCH-001`'s session-end return-transport design — `plan.md`, "Getting home: session-end return transport"; full design in `reviews/ARCH-001.md`
+- **Objective**: Implement `ARCH-001`'s session-end return-transport design — `PLAN.md`, "Getting home: session-end return transport"; full design in `reviews/ARCH-001.md`
 - **Scope exclusions**: `seat_confidence`, `backup_strength` grading, Plan A/B recalculation (all still `IMP-001`'s original exclusions, deferred to a later assignment); `fetch_hours.py`, `fetch_busyness.py`, `app.js`, `index.template.html`; `build/refresh.py`'s fetch/coarsen pipeline — only `validate_return_transport` itself is in scope, not its call site
-- **Acceptance criteria**: per `plan.md`'s "Getting home" contract and `reviews/ARCH-001.md`: `resolve_return_service`, `validate_return_transport`, `admissible_return_modes`, `overall_tier` (worse of hours tier and return tier), binding-limit composition, `unverified` vs. `UNKNOWN` kept distinct, route-prerequisite-before-clock ordering, core-span waiving timetable not route, pre-dawn gap unmodelled
+- **Acceptance criteria**: per `PLAN.md`'s "Getting home" contract and `reviews/ARCH-001.md`: `resolve_return_service`, `validate_return_transport`, `admissible_return_modes`, `overall_tier` (worse of hours tier and return tier), binding-limit composition, `unverified` vs. `UNKNOWN` kept distinct, route-prerequisite-before-clock ordering, core-span waiving timetable not route, pre-dawn gap unmodelled
 - **Required verification**: `tests/js/` via `node --test`, covering the return-transport list in `CLAUDE.md`'s Testing section
 - **Claude gate result**: `GATE_PASS`
 - **Independent review**: round 2 `APPROVE` — `IMP-002-R1-F01` resolved, no new findings
