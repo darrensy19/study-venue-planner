@@ -23,7 +23,7 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Gate evidence**: `reviews/IMP-001-gate.md` (invocation 1, 2026-08-30)
 - **Review record**: `reviews/IMP-001.md` (round 1: `CHANGES_REQUESTED`, `IMP-001-R1-F01`; round 2: `APPROVE`, no findings)
 - **User decisions required**: —
-- **Next action**: User approved and authorized close 2026-08-30. `decisions.md` and `reviews/AUDIT-LOG.md` updated per `WORKFLOW.md`'s boundary rules. `IMP-001` is closed — a new assignment needs a new ID (Phase 1 step 2 meta fields, or the `ranking.js`/`app.js` naming-collision fix, are next).
+- **Next action**: User approved and authorized close 2026-08-30. `decisions.md` and `reviews/AUDIT-LOG.md` updated per `WORKFLOW.md`'s boundary rules. `IMP-001` is closed — a new assignment needs a new ID. Phase 1 step 2 meta fields (`access`/`preference`/`fallbacks`/`holiday_policy`/`closing_buffer_minutes`) are now complete for all 28 venues (2026-08-30, outside the assignment system — see `decisions.md`), and the naming-collision rename is done (`bf2c0a5`). Two real candidates remain: (1) an `ARCH-###` for the flagged session-end/return-transport feasibility requirement — not yet designed; (2) `seat_confidence`/`backup_strength`/Plan A-B, excluded from `IMP-001`'s scope, still unimplemented.
 
 <!--
 When State is `blocked_on_user`, add exactly these two fields (still inside the 25-line cap):
