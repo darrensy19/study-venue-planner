@@ -23,10 +23,26 @@ One file belongs to one assignment. Seal the record when the assignment becomes 
 - **Baseline commit**: `<sha>`
 - **Reviewed diff or commit**: `<exact files, diff, tree hash, or sha>`
 - **Scope**: `<what is included and excluded>`
+- **Finding disposition schema**: `factual-assessment/v1`
 ```
 
 The reviewer creates the header once. Neither role later edits it; a changed review target is
 identified in the next review round.
+
+**`Finding disposition schema`** is the compatibility boundary for the `Factual assessment` field
+below: on a record that declares `factual-assessment/v1`, every disposition must carry the field,
+and `.cross-agent-workflow/finding_state.py` fails open on one that omits it. A record with no such
+field — every one written before this field existed — is read as legacy: the factual assessment
+stays optional there, exactly as it always has. Same discipline as `WORKFLOW.md`'s own protocol
+schema marker: written once, at header creation, never edited afterward.
+
+What the schema and the parser check is narrow: that the field is *present* and that its token is
+one of `confirmed | refuted | partial | not_verified` and not self-contradictory against the
+disposition heading — `not_verified` is only legal paired with `blocked_on_user`, since evidence
+that cannot be established either way is never a basis for `accepted` or `rebutted`. Neither the
+schema nor the parser can verify that a `refuted` assessment's cited evidence is real, or that a
+`partial` assessment's prose actually states what was confirmed versus what remains uncertain —
+that first-hand review is the primary's and reviewer's job, not something a Markdown parser can do.
 
 ### Reviewer appends: review round N
 
@@ -111,12 +127,23 @@ the assignment's required verification.
 
 #### `<finding-id>` — `<accepted | rebutted | blocked_on_user>`
 
-- **Factual assessment**: `<confirmed | refuted | partial>` — what independent verification
-  established, separate from what the primary decided to do about it. `confirmed`: the finding is
-  real as reported. `refuted`: verification found evidence contradicting the reviewer's claim —
-  cite it in Independent verification below; never rebut without this. `partial`: state exactly
-  what portion is confirmed and what remains uncertain or needs a user decision — see
-  `WORKFLOW.md`'s Review records section.
+- **Factual assessment**: `<confirmed | refuted | partial | not_verified>` — what independent
+  verification established, separate from what the primary decided to do about it. `confirmed`: the
+  finding is real as reported. `refuted`: verification found evidence contradicting the reviewer's
+  claim — cite it in Independent verification below; never rebut without this. `partial`: state
+  exactly what portion is confirmed and what remains uncertain or needs a user decision — see
+  `WORKFLOW.md`'s Review records section. `not_verified`: the claim cannot be established either way
+  from available repository evidence or permitted verification — not a hedge for `partial`. A
+  `not_verified` disposition requires `blocked_on_user` on the heading above, never `accepted` or
+  `rebutted`, **unless** it carries `Action authority` (below) *and* the finding has previously
+  recorded a `blocked_on_user` disposition — landing directly after that block is not, by itself,
+  enough. The assessment stays `not_verified` unless new evidence actually changed it; a user
+  authorizing a correction never upgrades it to `confirmed`.
+- **Action authority**: `<user_directed, present only on a not_verified disposition resuming after
+  an explicit user decision — omit otherwise>` — the explicit marker required for that pairing; the
+  parser checks its presence and token, not whether the cited decision is real.
+- **User decision** (optional, recommended for auditability): `<a concise statement of what the
+  user decided, or a pointer to where it is recorded>`
 - **Independent verification**: `<evidence checked before deciding — this is "I confirmed the
   finding was real," distinct from the Verification line below>`
 - **Response**: `<why the finding is accepted, rebutted, or needs the user — must follow from the

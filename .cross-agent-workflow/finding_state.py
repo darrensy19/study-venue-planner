@@ -33,16 +33,69 @@ backticked ID; the real corpus contains both backticked and bare forms. Rejectin
 the bare form would fail open on a third of real records — safe, but it would
 defeat the extractor's entire purpose on those files.
 
-**Factual assessment vs. action disposition.** A disposition block may optionally
-carry a ``Factual assessment`` field (``confirmed | refuted | partial``), distinct
-from the ``accepted | rebutted | blocked_on_user`` on its heading — what
-independent verification established, versus what the primary decided to do
-about it. The field is optional for backward compatibility (no real corpus
-record predates it), but when present it must agree with the disposition:
-``rebutted`` requires ``refuted``, and ``accepted`` rejects ``refuted``. This is
-the deterministic proxy for "a rebuttal never treats a claim as fact without
-evidence" — it cannot verify the evidence itself, but it rejects the
-self-contradictory labeling that would otherwise pass silently.
+**Factual assessment vs. action disposition — what is and is not checked.** A
+disposition block may carry a ``Factual assessment`` field (``confirmed |
+refuted | partial | not_verified``), distinct from the ``accepted | rebutted |
+blocked_on_user`` on its heading. What this script actually enforces is
+narrow: the field's *token* is one of the four valid words, exactly one such
+field appears per block, and it is not self-contradictory against the
+disposition (``rebutted`` requires ``refuted``; ``accepted`` rejects
+``refuted``; a ``not_verified`` disposition must be ``blocked_on_user``,
+since a claim that cannot be established either way is never a basis for the
+primary to *autonomously* accept or rebut it — see below for the one narrow,
+explicitly-marked exception once a user has resolved that block).
+What it does **not** and cannot check: whether the evidence behind
+``refuted`` is real or adequate, or whether a ``partial`` assessment's prose
+actually states what was confirmed versus what remains uncertain.
+Evidence adequacy and the substance of a partial finding are a first-hand
+review question for the human or agent reading the record, not something a
+regex over Markdown can verify. This script only rejects the self-contradictory
+*labeling* that would otherwise pass silently — it is a proxy for "a rebuttal
+never treats a claim as fact without evidence," not a verifier of the evidence
+itself.
+
+``not_verified`` is distinct from ``partial``: ``partial`` says a substantive
+part of the claim holds and a substantive part does not; ``not_verified`` says
+nothing was established either way. This mirrors the ``review-round`` skill's
+own CONFIRMED/PARTIAL/REFUTED/NOT VERIFIED vocabulary — kept lowercase and
+snake_case here to match the three words already in use, not that skill's
+uppercase display convention. A shared meaning does not require a shared
+spelling.
+
+**Resuming a `blocked_on_user`-escalated `not_verified` finding is legal, but
+requires an explicit marker, not just a shape in the record.** An earlier
+version of this rule treated a disposition landing directly after a
+`blocked_on_user` disposition (no resolution row between) as proof enough
+that a user had resolved the block. That is too weak: this script does not
+read the user's instruction or verify the lifecycle transition, so an
+unauthorized second disposition could take exactly the same shape — event
+adjacency is not evidence of authorization, only of ordering. The pairing now
+requires **both**: the finding must have recorded a `blocked_on_user`
+disposition *somewhere* in its prior history (not necessarily the immediately
+preceding event — a legitimate intervening resolution row does not break
+this), **and** the resuming disposition must itself carry
+`` Action authority: user_directed``. Neither is sufficient alone — the
+marker unaccompanied by any escalation history could be fabricated on a
+finding never blocked, and the history alone is exactly the shape-only proof
+just rejected. `rebutted` stays unreachable regardless of the marker, blocked
+by the separate, unconditional `rebutted` requires `refuted` check. The
+factual assessment itself is untouched by any of this: nothing here converts
+`not_verified` to `confirmed`, and the record is expected to keep saying
+`not_verified` unless new evidence actually changed it — see WORKFLOW.md's
+Review records section. As with every other content field here, the script
+checks the marker's *presence and token*, never whether the cited user
+decision is real.
+
+**Whether the field must be present at all is a per-record choice, and that
+choice is the only thing the schema marker changes.** The assignment header
+may declare ``Finding disposition schema: factual-assessment/v1``; on a record
+that does, every disposition must carry the field, and one that omits it fails
+open — presence only, still no check of the field's substance. A record with
+no such marker — every real corpus record today — is legacy: the field stays
+optional exactly as above. This mirrors ``WORKFLOW.md``'s own protocol-schema
+marker. The normative claim "every disposition separates two judgments" is
+true, mechanically, of schema-marked records only in the sense of token
+presence and internal consistency — never in the sense of verified adequacy.
 
 Stdlib only.
 """
@@ -75,9 +128,21 @@ DISPOSITION_HEADING_RE = re.compile(r"^#### `?([A-Z]+-\d{3}-R\d+-F\d{2})`? — `
 STATUS_AT_ISSUANCE_RE = re.compile(r"^- \*\*Status at issuance\*\*:\s*`?(\w+)`?\s*$")
 RESOLUTION_ROW_RE = re.compile(r"^\|\s*`?([A-Z]+-\d{3}-R\d+-F\d{2})`?\s*\|\s*`?(\w+)`?\s*\|")
 # Optional — every real corpus record predates this field, so its absence is not
-# an error. When present it must agree with the disposition heading: see the
-# cross-check below.
+# an error unless the assignment header opts in via the schema marker below. When
+# present it must agree with the disposition heading: see the cross-check below.
 FACTUAL_ASSESSMENT_RE = re.compile(r"^- \*\*Factual assessment\*\*:\s*`?(\w+)`?")
+# Opt-in marker in the assignment header. Absent on every legacy record — that is
+# not an error, it just means the factual-assessment field stays optional for
+# that record. Present and recognized, it makes the field mandatory on every
+# disposition. Same discipline as WORKFLOW.md's own protocol schema marker.
+FINDING_DISPOSITION_SCHEMA_RE = re.compile(
+    r"^- \*\*Finding disposition schema\*\*:\s*`?([\w./-]+)`?\s*$"
+)
+# The explicit authority marker a `not_verified` finding's resumed disposition
+# must carry — see the not_verified/blocked_on_user cross-check below. Not
+# proof the cited user decision is genuine, only that the primary is claiming
+# one; the parser's trust boundary here matches every other content field.
+ACTION_AUTHORITY_RE = re.compile(r"^- \*\*Action authority\*\*:\s*`?(\w+)`?")
 
 VALID_SEVERITIES = {"Critical", "High", "Medium", "Low"}
 
@@ -96,7 +161,12 @@ NAMED_SECTIONS = {
 
 VALID_DISPOSITIONS = {"accepted", "rebutted", "blocked_on_user"}
 VALID_RESOLUTIONS = {"resolved", "unresolved", "blocked_on_user"}
-VALID_FACTUAL_ASSESSMENTS = {"confirmed", "refuted", "partial"}
+VALID_FACTUAL_ASSESSMENTS = {"confirmed", "refuted", "partial", "not_verified"}
+VALID_ACTION_AUTHORITIES = {"user_directed"}
+# The only schema that currently exists. Every value in this set requires a
+# factual assessment on every disposition; a record declaring anything else
+# fails open rather than being silently trusted or silently ignored.
+FACTUAL_ASSESSMENT_REQUIRED_SCHEMAS = {"factual-assessment/v1"}
 TERMINAL_RESOLUTION = "resolved"
 
 ACTORS = ("primary-correction", "reviewer-round2", "reconciliation", "all")
@@ -237,6 +307,23 @@ def parse_document(text: str) -> Document:
                     f"assessment' fields — expected at most one, not "
                     f"{', '.join(repr(f) for f in fa_matches)}"
                 )
+            authority_matches = [
+                am.group(1)
+                for am in (ACTION_AUTHORITY_RE.match(bl.strip()) for bl in block.splitlines())
+                if am
+            ]
+            if len(authority_matches) > 1:
+                raise FullReadRequired(
+                    f"{fid} disposition at line {i + 1} has {len(authority_matches)} 'Action "
+                    f"authority' fields — expected at most one, not "
+                    f"{', '.join(repr(a) for a in authority_matches)}"
+                )
+            if authority_matches and authority_matches[0] not in VALID_ACTION_AUTHORITIES:
+                raise FullReadRequired(
+                    f"{fid} disposition at line {i + 1} has unknown action authority "
+                    f"{authority_matches[0]!r} — expected one of "
+                    f"{', '.join(sorted(VALID_ACTION_AUTHORITIES))}"
+                )
             if fa_matches:
                 factual = fa_matches[0]
                 if factual not in VALID_FACTUAL_ASSESSMENTS:
@@ -245,6 +332,33 @@ def parse_document(text: str) -> Document:
                         f"{factual!r} — expected one of "
                         f"{', '.join(sorted(VALID_FACTUAL_ASSESSMENTS))}"
                     )
+                if factual == "not_verified" and disposition != "blocked_on_user":
+                    # Not adjacency — the finding must have entered `blocked_on_user`
+                    # at some point in its history (anywhere, not just the
+                    # immediately prior event), and *this* disposition must
+                    # explicitly claim the authority for acting despite unresolved
+                    # evidence. Neither alone is sufficient: the marker alone could
+                    # be fabricated on a finding never escalated, and the history
+                    # alone — the record's shape — cannot prove a user actually
+                    # decided anything.
+                    ever_blocked = any(
+                        kind == "disposition" and value == "blocked_on_user"
+                        for _, kind, value in doc.findings[fid].events
+                    )
+                    user_directed = bool(authority_matches) and authority_matches[0] == "user_directed"
+                    if not (ever_blocked and user_directed):
+                        raise FullReadRequired(
+                            f"{fid} disposition at line {i + 1} has factual assessment "
+                            f"`not_verified` with disposition {disposition!r} — evidence that "
+                            f"cannot be established either way is not a basis for the primary "
+                            f"to autonomously accept or rebut a finding. It requires "
+                            f"`blocked_on_user`, unless this disposition carries `Action "
+                            f"authority: user_directed` on a finding that has previously "
+                            f"recorded a `blocked_on_user` disposition — the explicit marker "
+                            f"plus that escalation history, not the shape of the record alone, "
+                            f"is what this script accepts as evidence the action is "
+                            f"user-directed"
+                        )
                 if disposition == "rebutted" and factual != "refuted":
                     raise FullReadRequired(
                         f"{fid} disposition at line {i + 1} is `rebutted` with factual "
@@ -293,6 +407,8 @@ def parse_document(text: str) -> Document:
 
         i += 1
 
+    _check_finding_disposition_schema(doc)
+
     # Validate every finding eagerly, so a malformed document fails even for
     # findings the caller never queries individually.
     for fe in doc.findings.values():
@@ -301,11 +417,63 @@ def parse_document(text: str) -> Document:
     return doc
 
 
+def _finding_disposition_schema(assignment_header: str) -> str | None:
+    matches = [
+        m.group(1)
+        for m in (FINDING_DISPOSITION_SCHEMA_RE.match(ln.strip()) for ln in assignment_header.splitlines())
+        if m
+    ]
+    if len(matches) > 1:
+        raise FullReadRequired(
+            f"assignment header has {len(matches)} 'Finding disposition schema' fields — "
+            f"expected at most one, not {', '.join(repr(v) for v in matches)}"
+        )
+    return matches[0] if matches else None
+
+
+def _check_finding_disposition_schema(doc: Document) -> None:
+    """Enforce the factual-assessment requirement only for records that opt in.
+
+    A record with no 'Finding disposition schema' field in its assignment
+    header — every real corpus record today — is legacy: the factual
+    assessment stays optional, exactly as the inline per-disposition
+    cross-check already allows. Only a record that explicitly declares the
+    schema is held to "every disposition states one."
+    """
+    schema = _finding_disposition_schema(doc.assignment_header)
+    if schema is None:
+        return
+    if schema not in FACTUAL_ASSESSMENT_REQUIRED_SCHEMAS:
+        raise FullReadRequired(
+            f"assignment header declares unknown 'Finding disposition schema' {schema!r} — "
+            f"expected one of {', '.join(sorted(FACTUAL_ASSESSMENT_REQUIRED_SCHEMAS))}"
+        )
+    for fe in doc.findings.values():
+        disposition_lines = [ln for ln, kind, _ in fe.events if kind == "disposition"]
+        for line_no, block in zip(disposition_lines, fe.disposition_blocks):
+            has_factual = any(
+                FACTUAL_ASSESSMENT_RE.match(bl.strip()) for bl in block.splitlines()
+            )
+            if not has_factual:
+                raise FullReadRequired(
+                    f"{fe.finding_id} disposition at line {line_no} has no 'Factual "
+                    f"assessment' field — required because the assignment header "
+                    f"declares finding disposition schema {schema!r}"
+                )
+
+
 def _reduce(fe: FindingEvents) -> str:
     if not fe.events:
         return "open"
 
-    expected = "disposition"
+    # Normally strict alternation: disposition, resolution, disposition, ...
+    # One narrow exception — a `blocked_on_user` disposition may be followed
+    # directly by a second disposition, with no intervening resolution. Per
+    # WORKFLOW.md's lifecycle table, the only way out of `blocked_on_user` is
+    # an explicit user resolution of the recorded blocker; a second
+    # disposition reachable only in that shape is therefore the primary
+    # resuming under that resolution, not a second autonomous attempt.
+    expected = {"disposition"}
     terminal = False
     last_kind = last_value = None
 
@@ -321,17 +489,18 @@ def _reduce(fe: FindingEvents) -> str:
                 f"`resolved` resolution — only an idempotent `resolved` re-verification "
                 f"may follow a terminal resolution"
             )
-        if kind != expected:
+        if kind not in expected:
             raise FullReadRequired(
-                f"{fe.finding_id} has a {kind} at line {line_no} where a {expected} "
-                f"was expected — invalid ordering (disposition and resolution must "
-                f"strictly alternate)"
+                f"{fe.finding_id} has a {kind} at line {line_no} where "
+                f"{' or '.join(sorted(expected))} was expected — invalid ordering "
+                f"(disposition and resolution must alternate, except a second "
+                f"disposition may directly follow a `blocked_on_user` disposition)"
             )
         last_kind, last_value = kind, value
         if kind == "disposition":
-            expected = "resolution"
+            expected = {"resolution", "disposition"} if value == "blocked_on_user" else {"resolution"}
         else:
-            expected = "disposition"
+            expected = {"disposition"}
             if value == TERMINAL_RESOLUTION:
                 terminal = True
 

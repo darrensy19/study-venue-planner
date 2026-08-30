@@ -9,14 +9,20 @@ for each role Codex may hold. It never restates a transition, a gate, or the rou
 
 At the start of each assignment, and again after another agent or the user has acted:
 
-1. Read `WORKFLOW.md`'s Roles, Choosing a route, and Lifecycle sections; `HANDOFF.md`; the relevant
-   `PLAN.md` section; and the current review record if it exists — sliced per `WORKFLOW.md`'s
-   role- and state-aware slicing table for whichever role this assignment names.
-2. Inspect `git status` and the exact diff or commit named in `HANDOFF.md`.
-3. Confirm the current assignment names Codex in the intended role and the intended route. If the
+Follow `WORKFLOW.md`'s contract-aware preflight in its stated order — the order is load-bearing, and
+Codex-side it runs:
+
+1. Read `HANDOFF.md` in full, **first**. It is capped at 25 lines and is the only artifact naming
+   the diff or commit under review.
+2. Inspect `git status` and read **that exact** diff, in full, before loading any other context.
+3. Only then read what the diff makes necessary: acceptance criteria and the contract sections they
+   reference, the governing `PLAN.md` section, `WORKFLOW.md`'s Roles / Choosing a route / Lifecycle
+   sections, and the current review record — each sliced per `WORKFLOW.md`'s role- and state-aware
+   slicing table for whichever role this assignment names. Do not re-read unchanged files wholesale.
+4. Confirm the current assignment names Codex in the intended role and the intended route. If the
    runtime does not expose the selected model, state that it cannot be verified — do not claim a
    match.
-4. When returning as primary after a review, reconcile any newer reviewer recommendation into
+5. When returning as primary after a review, reconcile any newer reviewer recommendation into
    `HANDOFF.md` before primary edits resume. If changes were requested, append the primary-owned
    response section required by `WORKFLOW.md` after corrections and verification are complete.
 
@@ -25,16 +31,20 @@ during the workflow — re-read those state files explicitly rather than relying
 context. After a `WF-###` change to `WORKFLOW.md`, start a fresh Codex session for automatic
 instruction discovery.
 
+When a closing response carries a standalone `Conversation: END` line — not part of any fenced
+handoff prompt — that session is finished; see `WORKFLOW.md`'s *`END` closes the current thread* for
+what the directive means. Codex-side, the practical consequence is that a fresh session reloads this
+file and reads current state, instead of re-paying for a long scrollback.
+
 ## Architecture primary — `codex_sol` or `codex_sol_high`
 
 - Work only on the bounded architecture or high-level assignment recorded in `HANDOFF.md`.
 - Edit only the named design, roadmap, and handoff artifacts; do not implement production code in
   an architecture assignment.
 - Preserve approved project constraints, source policy, frozen artifacts, and spent holdouts.
-- Run the assignment's required verification, freeze edits, and invoke the gate. On
-  `GATE_PASS` set `review_requested` if a hard trigger fired or `approval_requested` otherwise; on
-  `GATE_FAIL` remain in `draft`; on `GATE_INCONCLUSIVE` set `review_requested` or `blocked_on_user`.
-  Then stop editing.
+- Run the assignment's required verification, freeze edits, invoke the gate, then set the state the
+  gate outcome dictates per `WORKFLOW.md`'s *The gate lives inside `draft`* and its allowed-transition
+  table — never a state inferred here. Then stop editing.
 - After review, independently verify every finding before resolving or rebutting it. Append only a
   `Primary response to review round N` section; never edit reviewer-owned or earlier sections.
 
@@ -50,6 +60,11 @@ instruction discovery.
 - **On `APPROVE`, emit the reconciliation handoff** — a fenced prompt scoped to reconciling
   `HANDOFF.md` to `review_complete`, per `WORKFLOW.md`'s one-writer protocol. Codex cannot write
   `HANDOFF.md` itself.
+- Report anything the diff **causes**, including breakage in files the diff does not touch; a
+  pre-existing defect the diff neither introduces nor disturbs is a non-blocking observation. See
+  `WORKFLOW.md`'s *Diff-first, on every reviewing turn* for the boundary.
+- Before opening a round 3 or later, satisfy `WORKFLOW.md`'s *Round 3 requires a reason to exist*
+  and name in `Why:` which condition applies; otherwise close the loop.
 - Escalate architectural discoveries rather than supplying a redesign inside implementation review.
 - Do not infer policy changes from user facts, preferences, model confirmations, or ambiguous
   statements; recommend `BLOCKED_ON_USER` when an explicit policy decision is required.

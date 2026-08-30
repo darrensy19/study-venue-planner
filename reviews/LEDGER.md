@@ -16,3 +16,4 @@ event history the sampling audit reads instead.
 | --- | --- | --- | --- |
 | `IMP-001` | 2026-08-30 | implementation | ranking.js hours-resolution & feasibility-tier core (resolve_hours, effective_close, tiers) |
 | `ARCH-001` | 2026-08-30 | architecture/high-level | Session-end/return-transport feasibility requirement |
+| `WF-001` | 2026-08-31 | workflow amendment | Sync WORKFLOW.md/AGENTS.md/CLAUDE.md/reviews/TEMPLATE.md and `.cross-agent-workflow/` scripts to the updated skill templates |

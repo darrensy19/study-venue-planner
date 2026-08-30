@@ -148,21 +148,26 @@ silently as though no trigger applies.
 
 At the start of each assignment, and again after another agent or the user has acted:
 
-1. Re-read `WORKFLOW.md`'s Roles, Choosing a route, and Lifecycle sections; `HANDOFF.md`; the
-   relevant `PLAN.md` section; and the current review record if it exists — sliced per
-   `WORKFLOW.md`'s role- and state-aware slicing table for whichever role this assignment names.
-2. Inspect `git status` and the exact diff or commit named in `HANDOFF.md`.
-3. Confirm the current assignment names Claude in the intended role and route. If the selected
+Follow `WORKFLOW.md`'s contract-aware preflight in its stated order — the order is load-bearing:
+
+1. Re-read `HANDOFF.md` in full, **first**. It is capped at 25 lines and is the only artifact naming
+   the diff or commit under review.
+2. Inspect `git status` and read **that exact** diff, in full, before loading any other context.
+3. Only then read what the diff makes necessary: acceptance criteria and the contract sections they
+   reference, the governing `PLAN.md` section, `WORKFLOW.md`'s Roles / Choosing a route / Lifecycle
+   sections, and the current review record — each sliced per `WORKFLOW.md`'s role- and state-aware
+   slicing table for whichever role this assignment names. Do not re-read unchanged files wholesale.
+4. Confirm the current assignment names Claude in the intended role and route. If the selected
    model is not observable, say so rather than claiming it matches.
-4. When returning as primary after a review, reconcile the latest reviewer recommendation into
+5. When returning as primary after a review, reconcile the latest reviewer recommendation into
    `HANDOFF.md` before editing assignment artifacts. If changes were requested, append the
    primary-owned response section required by `WORKFLOW.md` after corrections and verification.
 
 - **Implementation or architecture primary — `claude_sonnet`, `claude_opus`, or `claude_fable`**:
   implement or design only the bounded assignment, run its required verification, freeze edits, and
-  invoke the gate. On `GATE_PASS` set `review_requested` if a hard trigger fired or
-  `approval_requested` otherwise; on `GATE_FAIL` remain in `draft`; on `GATE_INCONCLUSIVE` set
-  `review_requested` or `blocked_on_user`. Do not make an architectural decision absent from or
+  invoke the gate. Set the state the gate outcome dictates per `WORKFLOW.md`'s *The gate lives inside
+  `draft`* and its allowed-transition table — never a state inferred here. Do not make an
+  architectural decision absent from or
   contradicting approved architecture; stop and escalate instead. In a review response, append only
   `Primary response to review round N`; never edit reviewer-owned or earlier sections.
 - **Pre-gate — always `claude_sonnet`, effort high, fresh context**: runs inside `draft`, before

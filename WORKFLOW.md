@@ -14,6 +14,10 @@ This file is edited only through a `WF-###` assignment, and the schema marker ab
 at that assignment's `user_approved` step — never while the change is still in `draft`, or the
 assignment that changed the marker could not itself finish (see Assignment ID allocation).
 
+The full protocol preserves the same review semantics as `prepare-validation`, `repo-validate`, and
+`review-round`. Lifecycle states add orchestration, persistence, routing, and authority; they do not
+redefine the underlying review model.
+
 ## Roles
 
 Two work-type categories, fixed, each with an ID series and a typical route pairing. The routes
@@ -71,6 +75,37 @@ If the question blocks an open assignment, the primary sets `HANDOFF.md` to `blo
 a concrete `blocked_reason` and the `resume_state` to restore. Questions arising before any
 assignment is open need no lifecycle record.
 
+### Architecture exploration happens outside the protocol
+
+The protocol governs assignments. It does not govern the thinking that precedes one. Unsettled
+architecture, workflow, and strategy discussion — weighing approaches and discarding most of them —
+is **out-of-protocol** work: it opens no assignment, allocates no ID, and writes no record.
+
+Deliberately so. That discussion needs no repository access, so holding it inside a repo-grounded
+agent pays for context it never reads. It belongs wherever the thinking is cheapest, including
+outside this repository entirely.
+
+What enters the protocol is a **coherent candidate design** — settled enough to be validated, not
+presumed correct. Claude formalizes it into an `ARCH-###` assignment; Codex then performs the
+repo-grounded validation: does this design hold against the dependencies, patterns, and constraints
+actually present here?
+
+**That validation can send the design back.** A repo constraint discovered at this step is a normal
+outcome, not a failure of the exploration — it is the entire reason the step exists. Revision
+returns to exploration; the candidate is never forced through because it arrived looking finished.
+
+The operating split this produces:
+
+| Where | Role |
+| --- | --- |
+| Out-of-protocol discussion | Architecture exploration and critique — needs no repo access |
+| Claude | Formal drafting and implementation |
+| Codex | Repo-grounded validation and diff verification |
+| User | Sequencing and approval authority |
+
+Only the last three are protocol parties. The first row names no agent because the protocol has no
+authority over it: nothing there holds a role, writes a record, or receives a handoff prompt.
+
 ### Subagents may hold only the pre-gate role
 
 Neither the primary nor the reviewer may be a subagent. A role belongs to a named agent running
@@ -114,7 +149,10 @@ Effort: `low`, `medium`, `high`, `xhigh`, `max` — identical vocabulary on both
 
 - **Sonnet is the Claude floor.** `claude-haiku-4-5` is excluded; work too small for Sonnet should
   not be an assignment at all.
-- **`low` is unassigned.** No route selects it.
+- **`low` is assigned to exactly one route, `codex_terra_low`** — a round-2-or-later correction
+  re-review of an exact, deterministic text-or-format fix, matching the lightweight `/repo-validate`
+  protocol's own `Codex Terra, effort low` tier for the same case. It is not a general-purpose or
+  initial-review tier, and no other route selects it.
 - **`xhigh`, `max`, and `ultra` are excluded entirely, for now** — not merely unrouted. No route
   selects them and no prompt may recommend them. Reinstating any of them as a selectable tier is
   itself a policy change, requiring a `WF-###` assignment, not a runtime override.
@@ -153,12 +191,19 @@ These scripts are stdlib-only Python 3 and need no installation step beyond bein
 
 ### The rule
 
-Every fenced handoff prompt opens with **four lines**, before the assignment content below:
+Every fenced handoff prompt opens with **five lines**, before the assignment content below. A
+prompt addressed to a reviewer — inviting it to conduct or continue a review — carries a sixth,
+`Review phase:`. This is the same conceptual header `prepare-validation`, `repo-validate`, and
+`review-round` use for their own handoffs; `Action:` and `Review phase:` are this protocol's
+equivalent of those skills' `Action:` and `Review phase:` fields, restated here because this
+protocol's turns are lifecycle steps rather than skill invocations.
 
 ```text
 Run as: Codex Terra, effort medium   (gpt-5.6-terra)
 Why: IMP-008 round-1 implementation review — settled contract; focused runtime verification.
 Conversation: START NEW — first independent review of this assignment.
+Action: Review IMP-008
+Review phase: INITIAL REVIEW
 Goal: Add paired-baseline comparison to the backtest evaluator.
 ```
 
@@ -168,21 +213,37 @@ Claude-side, with the concrete way to set each field:
 Run as: Claude Sonnet, effort high   (/model sonnet; effort via --effort or settings.json)
 Why: IMP-004 implementation — contract settled, one module; no trigger fired, claude_only.
 Conversation: CONTINUE — same primary through corrections on this assignment.
+Action: Implement IMP-004
 Goal: Centralize candidate-pool selection between production and every evaluator.
 ```
 
 - `Run as:` — the route's pinned model and effort.
 - `Why:` — the route and the triggers that selected it. Never blank.
-- `Conversation:` — `START NEW` or `CONTINUE`, per the boundary table below.
+- `Conversation:` — `START NEW` or `CONTINUE`, per the boundary table below. **These are the only
+  two values a handoff prompt may carry.** `END` is not a handoff value: it is a closing-response
+  directive that appears on its own, outside any fenced prompt — see `END` closes the current thread.
+- `Action:` — the specific step this turn performs, in a short verb phrase: `Review <id>`,
+  `Correct <id> round N findings`, `Implement <id>`, `Reconcile HANDOFF.md to review_complete`. This
+  names the step, never restates the objective — see `Goal:` below for that.
+- `Review phase:` — present only when `Action:` hands the recipient a review to conduct: `INITIAL
+  REVIEW` for a round-1 review, `REPO VALIDATION` for a round-2-or-later correction re-review, or
+  `FINAL REVIEW` for a genuine final architecture approval pass. Absent on every primary-directed
+  handoff, which has no review phase to name.
 - `Goal:` — a **mechanical, byte-identical copy** of the assignment's `Objective` field, never a
   paraphrase. Orientation for whoever pastes the prompt, not a substitute for reading `HANDOFF.md`,
   the governing `WORKFLOW.md` sections, the relevant `PLAN.md` contract, or the full diff. A
-  mismatch or omission fails prompt generation.
+  mismatch or omission fails prompt generation. `Action:` and `Goal:` never duplicate each other:
+  `Action:` names the step, `Goal:` names the assignment's objective, and neither substitutes for
+  the other.
 
 This rule applies to every **agent-directed** handoff prompt. It does not apply to user-only
 approval choices, which emit no agent prompt at all under the one-recipient rule.
 
 ### Conversation boundaries
+
+`START NEW` and `CONTINUE` describe the **next recipient's** conversation. `END` describes the
+**current** one. They therefore never compete for the same slot — see `END` closes the current
+thread below.
 
 | Situation | Directive |
 | --- | --- |
@@ -191,11 +252,59 @@ approval choices, which emit no agent prompt at all under the one-recipient rule
 | Reviewer, round 2 | `CONTINUE` where practical — it already knows the findings |
 | Primary through corrections and closure of the same assignment | `CONTINUE` |
 | Architecture closes, implementation opens | `START NEW` |
-| After `completed` or `abandoned`, before unrelated work | `START NEW` |
+| Assignment reaches `completed` or `abandoned` | `END` — close the thread; unrelated work opens a new one |
 | Repository, objective, or evidence base changes | `START NEW` |
 | Active conversation grows long and tool-heavy | Emit one compact handoff, then `START NEW` |
 
 Not a fresh conversation after every handoff — that discards useful same-assignment context.
+
+### `END` closes the current thread
+
+`START NEW` and `CONTINUE` both address the *next* recipient. `END` addresses the **current**
+conversation, and it is the only directive that does: it says this thread's scope is finished and
+nothing further should be asked of it.
+
+Emit it when an assignment reaches `completed` or `abandoned`, as a **standalone line in the closing
+response** — never as a field inside a fenced handoff prompt, and never accompanied by `Run as:`,
+`Why:`, or `Goal:`, which describe a recipient `END` does not have:
+
+```text
+Conversation: END — assignment complete; do not continue this thread for unrelated work.
+```
+
+It reuses the `Conversation:` label because it answers the same question a reader is scanning for.
+It is not the four-field block, and a prompt generator or validator must not treat it as one.
+
+An `END` line is not a handoff prompt and names no recipient, so the one-recipient rule is untouched
+— `END` closes a thread rather than addressing one. The next assignment is opened in a new
+conversation, composed from `HANDOFF.md` and the review record, never from this thread's scrollback.
+
+**`END` and `START NEW` never collide**, because a response carrying `END` emits no agent handoff
+prompt. At `completed` and `abandoned` the one-recipient rule already makes the closing response
+user-directed: it awaits the user's sequencing decision and has no eligible agent to address. So the
+successor assignment's prompt — `Conversation: START NEW`, per the row above it — is not composed
+here at all. It is composed once the user has chosen the next task, by the new conversation that
+reads current state. The boundary table's `START NEW` rows and its `END` row describe two different
+responses, not two candidate values for one field.
+
+This is also what the closing response's list of next tasks is for. Those three tasks are picked up
+in a **new** conversation; listing them is not an invitation to start one here.
+
+### Why in-place model switches get expensive
+
+Switching the active model mid-conversation (`/model` on the Claude side; relaunching Codex under a
+different route without closing the session) forces the new model to rebuild the KV cache for
+everything already in that window. Cost scales with how much is already cached, not with the switch
+itself: early in a small conversation this is a non-event; once the window has grown to hundreds of
+thousands of tokens, an in-place switch costs far more than ending the conversation and starting
+fresh. Measured session data showed in-place switching dominating the bill — millions of creation
+tokens across a run, against tens of thousands to re-cache after a fresh start.
+
+This is why most rows above resolve to `START NEW` rather than `CONTINUE` at a route change — a
+different route usually means a different model. `CONTINUE` is never license to swap models in place
+once the conversation has grown large: if a `CONTINUE` conversation is long and the next step's route
+needs a different model, that **is** the "active conversation grows long and tool-heavy" case —
+emit one compact handoff, then `START NEW`, rather than switching in place.
 
 ### Advisory, always
 
@@ -222,9 +331,10 @@ per-assignment effort judgment.
 | Route | Model | Effort | Selected when |
 | --- | --- | --- | --- |
 | `claude_only` | — | — | No hard trigger fired; the gate is the whole verification |
-| `codex_luna` | Luna | medium | Narrow spot-checks; cross-file documentation consistency; exact-correction verification; batched sampling audits |
+| `codex_luna` | Luna | medium | Narrow spot-checks; cross-file documentation consistency; batched sampling audits |
+| `codex_terra_low` | Terra | low | Round-2-or-later correction re-review of an exact, deterministic text-or-format fix only — never an initial-review route |
 | `codex_terra` | Terra | medium | Implementation correctness; runtime probes; negative paths; suspiciously green tests |
-| `codex_sol` | Sol | medium | Iterative architecture critique, plan review, bounded policy analysis |
+| `codex_sol` | Sol | medium | Repo-grounded validation of a candidate design; plan review; bounded policy analysis |
 | `codex_sol_high` | Sol | high | Final architecture approval review; unresolved ambiguity; statistical methodology; security/privacy; broad system audits |
 
 **Selection is total:**
@@ -232,8 +342,8 @@ per-assignment effort judgment.
 1. Select the primary route from the work.
 2. Apply the hard triggers below to decide `claude_only` versus Codex.
 3. If Codex is required, select the verification route: exact or narrow independent check → Luna ·
-   implementation or runtime probe → Terra · iterative architecture or policy → Sol medium · final
-   architecture, statistics, security, or broad audit → Sol high.
+   implementation or runtime probe → Terra · candidate-design validation or policy → Sol medium ·
+   final architecture, statistics, security, or broad audit → Sol high.
 4. If two verification tiers are plausible, take the higher and state the uncertainty in `Why:`.
 
 **Hard Codex triggers** — mandatory when any fires; everything else may close `claude_only`,
@@ -412,12 +522,19 @@ turns; it is not a filesystem lock.
 
 Route the re-review on the **correction delta**, never on a finding's class:
 
-| Correction | Route |
+| Correction delta | Route |
 | --- | --- |
-| Exact text or format, deterministic proof | `codex_luna`, narrowly scoped |
-| Small implementation correction with focused tests | `codex_terra` |
-| Material code or policy change, rebuttal, scope expansion, new behavioural claim | Original reviewer route |
+| Exact text or format, deterministic proof | `codex_terra_low` |
+| Ordinary implementation, docs, or config correction against an already-agreed contract | `codex_terra` |
+| Correction that changes or reopens the design, contract, or policy itself | `codex_sol` |
 | User-directed revision after a prior approval recommendation | Original route, mandatory |
+
+Classify by what the correction actually changed, never by the finding's original class or the
+previous round's route — route the correction, not its history. A rebuttal, a scope expansion, or a
+new behavioural claim is routed by whichever of the first three rows its actual delta matches; none
+of them is a route of its own. Final architecture approval is not a correction re-review: route it
+as `codex_sol_high` under **Choosing a route**, in a fresh review (`START NEW`), never through this
+table.
 
 **De-escalation requires a clean verification record.** Round 2 may drop a tier only when round 1
 recorded an **empty `Could not verify`** and every required verification was performed first-hand
@@ -425,8 +542,26 @@ with no outstanding waiver.
 
 The round-2 prompt carries only: the original finding blocks, primary dispositions, the correction
 diff, the exact checks proving resolution, outstanding user decisions, unresolved non-blocking
-observations, user-directed revisions since the preceding review, and the governing contract
-sections.
+observations, user-directed revisions since the preceding review, and the contract sections the
+correction delta makes load-bearing — not the full set the round-1 prompt carried.
+
+### Round 3 requires a reason to exist
+
+Rounds are not free — each one re-reads a diff and re-derives context. After round 2 the loop closes
+by default. A round 3 or later opens only when one of these holds, and the prompt's `Why:` names
+which:
+
+| Condition | What it means |
+| --- | --- |
+| A named unresolved risk | Round 2 recorded a specific finding it could not resolve — a concrete risk, not general unease |
+| Newly introduced material change | The correction added behaviour or scope beyond what round 2 reviewed |
+| Failed verification | A required check ran and did not pass |
+| Explicit user request | The user asked for a further round |
+
+With none of them firing, the loop closes: the reviewer recommends `APPROVE`, or the assignment goes
+to `blocked_on_user` for a decision the reviewer cannot make. **"One more look to be safe" is not a
+condition — it is the absence of one.** A reviewer that cannot name which row it is invoking has
+already answered the question.
 
 ### User-mediated agent handoffs
 
@@ -505,29 +640,71 @@ up. Seeding is a write; it happens only after the user approves adoption.
 
 ## Contract-aware preflight
 
-At the start of each assignment, and again after another agent or the user has acted:
+At the start of each assignment, and again after another agent or the user has acted. **The order is
+load-bearing: each step scopes the next, and the diff cannot scope anything until `HANDOFF.md` has
+named which diff it is.**
 
-1. Read the diff, in full, always.
-2. Read acceptance criteria and the contract sections they reference, always.
-3. Read `PLAN.md` when it **governs** the work — keyed on the objective and acceptance criteria,
+1. Read `HANDOFF.md` in full, **first** — its assignment block is capped at 25 lines, so this is
+   cheap, and it is the only artifact that names the diff or commit under review.
+2. Inspect `git status` and read **that exact** diff, in full. Every step below is scoped by it.
+3. Read acceptance criteria always, and the contract sections they reference — scoped per
+   **Diff-first** below.
+4. Read `PLAN.md` when it **governs** the work — keyed on the objective and acceptance criteria,
    never on whether the diff happens to touch `PLAN.md`.
-4. Slice `WORKFLOW.md` and `reviews/<id>.md` by role and state (below), not by an arbitrary tail.
-5. Read `HANDOFF.md` in full — it is capped at 25 lines for the assignment block.
-6. Inspect `git status` and the exact diff or commit named in `HANDOFF.md`.
-7. Confirm the assignment names this agent in the intended role and route. If the runtime does not
+5. Slice `WORKFLOW.md` and `reviews/<id>.md` by role and state (below), not by an arbitrary tail.
+6. Confirm the assignment names this agent in the intended role and route. If the runtime does not
    expose the selected model, say so rather than claiming a match.
-8. When returning as primary after a review, reconcile the latest reviewer recommendation into
+7. When returning as primary after a review, reconcile the latest reviewer recommendation into
    `HANDOFF.md` before editing assignment artifacts.
+
+Reading any of steps 3–5 before step 2 is the failure this ordering exists to prevent: context
+loaded before the target is known is context loaded against the wrong scope, and a diff inspected
+before `HANDOFF.md` names it may be the working tree's default rather than the assignment's.
+
+### Diff-first, on every reviewing turn
+
+Step 2 is the reviewed diff, and steps 3–5 are scoped **by** it — step 1 exists only to identify
+which diff that is. Read the diff before the context; then read only the unchanged contract or
+context sections needed to judge what it does. Do not re-read unchanged files wholesale — a file the
+diff does not touch is read in the narrow slice that validates the change, or not at all.
+
+This is a token rule with a correctness edge: a reviewer that re-reads everything spends its budget
+reconstructing what it already reviewed.
+
+**Narrow reading, not narrow responsibility.** The unit of review is the diff's *blast radius*, not
+its line range. Anything the diff causes is a finding against this assignment — including breakage
+in code the diff never touched. A changed signature, contract, invariant, schema, or return type
+that breaks an unchanged caller is exactly such a finding, and tracing that call graph into
+unchanged files is **required**, not a scope violation. Diff-first says start from the diff and read
+outward only as far as the change reaches; it never says stop at the diff's edge.
+
+What diff-first does exclude is the **pre-existing** defect that the diff neither introduces nor
+disturbs. That is a non-blocking observation, and it belongs in a new assignment rather than in this
+one's findings.
+
+Repo-grounded validation is likewise unaffected. Checking a candidate design against the
+dependencies, patterns, and constraints already present here means reading unchanged code by
+definition — that is the assignment's purpose, not a breach of its scope.
+
+Every reviewer-directed handoff prompt carries the instruction explicitly, in the prompt body:
+
+```text
+Review the git diff for this assignment. Read surrounding or unchanged sections only where needed
+to validate that diff. Do not re-review unchanged sections — they were covered in a prior round or
+fall outside this assignment.
+```
+
+Round 2 and later narrow it further, to the correction delta named in **Round 2 is targeted**.
 
 ### Role- and state-aware slicing
 
 | Actor and state | Chunks required |
 | --- | --- |
 | Primary opening an assignment | Lifecycle and allocation sections; current handoff; governing contract section |
-| Pre-gate | Handoff acceptance criteria and required verification; full diff; governing contract sections |
-| Reviewer, round 1 | Handoff; assignment header; full diff; reviewer rules; governing contract sections |
+| Pre-gate | Handoff acceptance criteria and required verification; full diff; the contract sections the diff makes load-bearing |
+| Reviewer, round 1 | Handoff; assignment header; full diff; reviewer rules; the contract sections the diff makes load-bearing |
 | Primary addressing findings | Latest review round; complete finding blocks; current handoff; correction-relevant contract sections |
-| Reviewer, round 2 | Assignment header; original finding blocks; primary dispositions; correction diff; outstanding `Could not verify`; unresolved non-blocking observations; user-directed revisions since the preceding review; relevant contract sections |
+| Reviewer, round 2 | Assignment header; original finding blocks; primary dispositions; correction diff; outstanding `Could not verify`; unresolved non-blocking observations; user-directed revisions since the preceding review; the contract sections the correction delta makes load-bearing |
 | Reconciliation after approval | Latest recommendation and current handoff only |
 
 A reviewer does not need setup, migration, ledger allocation, kickoff integration, or every routing
@@ -547,8 +724,8 @@ does **not** produce the role-aware slice the table above describes:
 | Reconciling after `APPROVE` | `.cross-agent-workflow/finding_state.py reviews/<id>.md --emit-chunks --actor reconciliation` |
 
 `--actor` without `--emit-chunks` is rejected rather than ignored. The script only ever sees the
-review record — the diff, `HANDOFF.md` and the governing contract sections named in the slicing
-table remain the caller's to read. This is not a style preference: it is the difference between "outside the
+review record — the diff, `HANDOFF.md` and the contract sections the slicing table scopes remain the
+caller's to read. This is not a style preference: it is the difference between "outside the
 model," genuinely deterministic, and an LLM performing the same reduction in its head, which can
 make the exact mistake this reducer exists to prevent. The script exits non-zero with
 `FULL_READ_REQUIRED: <reason>` on stderr, and nothing on stdout, for every fail-open case below —
@@ -599,20 +776,64 @@ hash, or any mismatch, forces a full read.
 - A finding begins `open`. The primary records `accepted`, `rebutted`, or `blocked_on_user`. The
   reviewer then records `resolved`, `unresolved`, or `blocked_on_user`, with evidence. Status
   history is appended, never mutated.
+- The assignment header may declare **`Finding disposition schema`: `factual-assessment/v1`** —
+  written once, at header creation, never edited, same discipline as the protocol schema marker
+  above. This is the explicit compatibility boundary for the two rules below, and it is narrow:
+  `.cross-agent-workflow/finding_state.py` mechanically enforces only that the field is *present*
+  on every disposition (when the schema declares it) and that its *token* is internally
+  consistent — one of `confirmed | refuted | partial | not_verified`, and not self-contradictory
+  against the action disposition (see below). It does **not** and cannot verify whether the
+  evidence behind a `refuted` assessment is real or adequate, or whether a `partial` assessment's
+  prose actually states what was confirmed versus what remains uncertain — that is a first-hand
+  review question for whoever reads the record, exactly as it always was. A record with no schema
+  field — every one written before this field existed — is legacy: the rules below still apply as
+  guidance, but the field is optional and the parser only cross-checks its token when present; its
+  absence is not an error.
 - **Every disposition separates two judgments.** The *factual assessment* — what independent
-  verification actually established, `confirmed | refuted | partial` — is distinct from the
-  *action disposition* on the heading, `accepted | rebutted | blocked_on_user`. `partial` is not a
-  hedge: it requires stating exactly what portion was confirmed and what remains uncertain or
-  needs a user decision.
+  verification actually established, `confirmed | refuted | partial | not_verified` — is distinct
+  from the *action disposition* on the heading, `accepted | rebutted | blocked_on_user`. Under
+  `factual-assessment/v1`, every disposition must state one, mechanically checked for presence and
+  token validity only. `partial` is not a hedge: it requires stating exactly what portion was
+  confirmed and what remains uncertain or needs a user decision — content no parser checks, so the
+  primary and reviewer are the actual guarantee here, not the schema marker. `not_verified` is not
+  `partial` either: `partial` says a substantive part of the claim holds and a substantive part does
+  not; `not_verified` says the claim cannot be established either way from the available repository
+  evidence or permitted verification. Do not write `partial` merely because evidence is
+  inconclusive.
 - **A rebuttal must be backed by evidence, not asserted.** `rebutted` requires a `refuted` factual
-  assessment citing the independent verification that contradicts the reviewer's claim. Neither
-  the reviewer's finding nor the primary's counterclaim is treated as fact without evidence — a
-  primary that disagrees without contradicting evidence records `blocked_on_user`, never
-  `rebutted`.
+  assessment citing the independent verification that contradicts the reviewer's claim. Whenever a
+  factual assessment is present, the parser rejects the token pairing `rebutted`/`confirmed` and
+  `accepted`/`refuted` as self-contradictory — but it cannot confirm the cited evidence is real,
+  only that the labeling is not internally inconsistent. Neither the reviewer's finding nor the
+  primary's counterclaim is treated as fact without evidence — a primary that disagrees without
+  contradicting evidence records `blocked_on_user`, never `rebutted`.
+- **A `not_verified` disposition requires `blocked_on_user`, unless explicitly marked
+  user-directed.** Evidence that cannot be established either way is never a basis for the primary
+  to *autonomously* accept a finding as real or rebut it as false; the parser rejects a
+  `not_verified` disposition paired with anything but `blocked_on_user`. Once the user explicitly
+  resolves that block (see the escalation trigger below and `blocked_on_user`'s `resume_state`
+  transition in Lifecycle), the primary may record a further disposition for the same finding —
+  `accepted` to carry out the user's instruction, never `rebutted`, since resuming under a user
+  decision is not evidence contradicting the claim. That disposition still states `not_verified`,
+  unless new evidence actually changed the assessment: a user authorizing a correction does not make
+  the claim `confirmed`, and the disposition must carry **`Action authority`: `user_directed`**,
+  stating explicitly that the action rests on the user's decision rather than on evidence. The
+  parser requires **both** conditions before accepting the pairing — the marker, and a prior
+  `blocked_on_user` disposition recorded somewhere earlier for the same finding (not necessarily the
+  immediately preceding event; a legitimate intervening record, such as a reviewer round that ran
+  before the user's decision was logged, does not break this). Event adjacency alone is **not**
+  accepted as proof: the parser does not read the user's instruction or verify the lifecycle
+  transition, so an unmarked disposition landing directly after `blocked_on_user` is exactly as
+  unauthorized-looking as any other autonomous one, and is rejected. Optionally, and recommended for
+  auditability, the disposition may also carry **`User decision`**: a concise statement of what the
+  user decided, or a pointer to where it is recorded — not mechanically checked, the same trust
+  boundary as every other content field here.
 - **Escalate before editing** — record the finding `blocked_on_user` and make no edit until the
   user decides — when any of these hold. Every other finding, including every `confirmed` finding
   accepted for correction, proceeds through the normal verify → correct → validate → re-review
-  loop with no per-finding user gate:
+  loop with no per-finding user gate — deliberately: the user already authorized this bounded
+  assignment and its correction loop, unlike a lighter-weight review protocol with no persistent
+  assignment authority of its own, which asks before every fix:
   - The primary's independent verification and the reviewer's evidence remain in conflict (a
     materially disputed finding).
   - The correction would change policy or scope.
@@ -620,6 +841,9 @@ hash, or any mismatch, forces a full read.
   - The correction would affect architecture, security, or data.
   - The finding or its correction conflicts with evidence already established elsewhere in the
     assignment — the governing contract, prior verification, or an earlier round.
+  - Independent verification reaches a `not_verified` factual assessment and no prior
+    user-authorized resumption applies — the claim cannot be established either way from available
+    evidence, so it is not a basis for the primary to autonomously record `accepted` or `rebutted`.
 - `APPROVE` requires every finding resolved and every required check run, unless the user
   explicitly waived one. It recommends user approval; it does not change the lifecycle state.
 - **`Runtime model verification` is a constant** — state it once here: *the runtime does not expose
