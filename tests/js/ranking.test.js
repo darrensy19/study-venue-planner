@@ -22,6 +22,7 @@ import {
   normaliseEdge,
   normaliseBand,
   lastDepartureEdge,
+  normaliseTravelBand,
   resolveReturnService,
   admissibleReturnModes,
   resolveReturnBound,
@@ -555,6 +556,40 @@ test("lastDepartureEdge: upper bound takes the lower/earlier edge, mid takes the
   // Contrast: a travel band's upper bound takes its UPPER edge, never merged with this rule.
   const travelBandUpperEdge = (b) => b.hi;
   assert.notEqual(lastDepartureEdge(band, "upper"), travelBandUpperEdge(band));
+});
+
+// --- Travel-band parsing (access[][].band, fallbacks[].travel_band) --------
+
+test("normaliseTravelBand: an ordinary band normalises to a floored midpoint and the upper edge", () => {
+  assert.deepEqual(normaliseTravelBand("15-20m"), { kind: "present", mid: 17, upper: 20 });
+  assert.deepEqual(normaliseTravelBand("5-10m"), { kind: "present", mid: 7, upper: 10 });
+});
+
+test("normaliseTravelBand: an even-width band's midpoint needs no flooring", () => {
+  assert.deepEqual(normaliseTravelBand("10-20m"), { kind: "present", mid: 15, upper: 20 });
+});
+
+test("normaliseTravelBand: explicit null is not_measured, distinct from malformed", () => {
+  assert.deepEqual(normaliseTravelBand(null), { kind: "not_measured" });
+});
+
+test("normaliseTravelBand: syntactically malformed strings are malformed, never guessed", () => {
+  assert.equal(normaliseTravelBand("15-20").kind, "malformed"); // missing "m" suffix
+  assert.equal(normaliseTravelBand("15-20 min").kind, "malformed");
+  assert.equal(normaliseTravelBand("abc").kind, "malformed");
+  assert.equal(normaliseTravelBand("").kind, "malformed");
+  assert.equal(normaliseTravelBand("-5-10m").kind, "malformed"); // no negative edges
+});
+
+test("normaliseTravelBand: equal and inverted edges are malformed, mirroring normaliseBand's lo<hi check", () => {
+  assert.equal(normaliseTravelBand("10-10m").kind, "malformed"); // equal
+  assert.equal(normaliseTravelBand("20-15m").kind, "malformed"); // inverted
+});
+
+test("normaliseTravelBand: non-string, non-null input is malformed rather than throwing", () => {
+  assert.equal(normaliseTravelBand(42).kind, "malformed");
+  assert.equal(normaliseTravelBand(undefined).kind, "malformed");
+  assert.equal(normaliseTravelBand({ lo: 5, hi: 10 }).kind, "malformed");
 });
 
 // --- Return-transport: resolveReturnService ---------------------------------

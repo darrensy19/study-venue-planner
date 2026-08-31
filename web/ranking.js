@@ -153,6 +153,38 @@ export function lastDepartureEdge(band, boundKind) {
   return boundKind === "upper" ? band.lo : Math.floor((band.lo + band.hi) / 2);
 }
 
+// --- Travel-band parsing (access[][].band, fallbacks[].travel_band) -------
+
+/**
+ * normaliseTravelBand("N-Mm") -> {kind:"present", mid, upper}
+ *                               | {kind:"not_measured"}
+ *                               | {kind:"malformed", reason}
+ *
+ * `mid` is the floored midpoint (mirrors lastDepartureEdge's floored mid);
+ * `upper` is the band's upper edge — the pessimistic bound for feasibility,
+ * the opposite convention from a return band's upper bound, which takes the
+ * LOWER edge. Never merge the two.
+ *
+ * `null` means "not yet measured" (access[][].band's explicit-null case) and
+ * is a distinct outcome from "malformed" — a caller for which null is never
+ * legitimate (e.g. a fallbacks[].travel_band entry, which is always added
+ * complete) must reject `not_measured` itself; this function only reports
+ * what the value means, not whether it's acceptable in a given context.
+ */
+export function normaliseTravelBand(band) {
+  if (band === null) return { kind: "not_measured" };
+  const m = typeof band === "string" ? /^([0-9]+)-([0-9]+)m$/.exec(band) : null;
+  if (!m) {
+    return { kind: "malformed", reason: `expected "N-Mm", got ${JSON.stringify(band)}` };
+  }
+  const lo = Number(m[1]);
+  const hi = Number(m[2]);
+  if (!(lo < hi)) {
+    return { kind: "malformed", reason: `edges not increasing: (${lo}, ${hi})` };
+  }
+  return { kind: "present", mid: Math.floor((lo + hi) / 2), upper: hi };
+}
+
 // --- resolve_return_service -----------------------------------------------
 
 /**
