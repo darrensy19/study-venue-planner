@@ -2028,3 +2028,31 @@ under the pre-correction code. The response also added a `metricsBasis` field so
 consumer can distinguish an hours-only figure from a return-capped one. Round 2 (`codex_terra`,
 scoped to the correction delta) approved with no findings. User approved and authorized close. Full
 detail in `reviews/IMP-004.md` and `reviews/IMP-004-gate.md`.
+
+## 2026-09-01 — IMP-005 closed: travel-band ("N-Mm") string-to-minutes parser implemented in ranking.js
+
+Implemented `normaliseTravelBand("N-Mm")` in `web/ranking.js`, parsing `access[][].band` /
+`fallbacks[].travel_band` into `{mid, upper}` minutes: `mid` is the floored midpoint (mirroring
+`lastDepartureEdge`'s floored mid for return bands), `upper` is the band's upper edge — the
+pessimistic bound for feasibility, the opposite convention from a return band's upper bound, which
+takes the lower edge. Explicit `null` returns a distinct `not_measured` outcome (`access[][].band`'s
+"not yet measured" case); `PLAN.md` states no null case for `fallbacks[].travel_band`, so a caller
+for which `null` is never legitimate must reject `not_measured` itself — the parser only reports what
+a value means, not whether it's acceptable in a given context. Scoped to the pure parser only: wiring
+it into `resolveOverallFeasibility`/`evaluatePlanBFallback` (both still take pre-resolved minutes, per
+`IMP-004`'s same exclusion), `build/refresh.py`, `app.js`, and fallback selection/ranking all remain
+deferred. 6 tests written test-first (138 total after implementation).
+
+Pre-gate `GATE_PASS`; round 1 (`codex_terra`) found one Medium finding — `IMP-005-R1-F01`: the
+`[0-9]+` capture has no length bound, so an overflow-length digit band silently overflowed `Number()`
+to `Infinity`, which then passed the `lo<hi` check unchanged and returned `{kind:"present",
+mid:Infinity, upper:Infinity}` instead of being rejected; separately, the malformed branch's
+diagnostic interpolated `JSON.stringify(band)` directly, which throws on a `BigInt` or any value with
+a throwing `toJSON()`, turning a malformed-input rejection into an uncaught exception. Corrected by
+requiring both parsed edges to satisfy `Number.isSafeInteger` before the ordering check or midpoint
+derivation (covering finite + integer + in-range in one check, without inventing a minutes cap
+`PLAN.md` never states), and by routing the diagnostic through a `describeUnparseable` helper that
+falls back to a generic type description if `JSON.stringify` itself throws — 4 new regression tests
+added (142 total), each confirmed to fail against the pre-correction code before the fix. Round 2
+(`codex_terra`, scoped to the correction delta) approved with no findings. User approved and
+authorized close. Full detail in `reviews/IMP-005.md` and `reviews/IMP-005-gate.md`.

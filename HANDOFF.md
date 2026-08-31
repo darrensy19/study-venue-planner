@@ -8,7 +8,7 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 - **ID**: `IMP-005`
 - **Work type**: implementation
-- **State**: `review_requested`
+- **State**: `completed`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, effort medium
 - **Route triggers**: correctness depends on negative/fail-closed paths (malformed vs. not-yet-measured band strings) — same pattern as `IMP-002`/`IMP-003`/`IMP-004`
@@ -19,8 +19,8 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Acceptance criteria**: `"N-Mm"` → `mid=(N+M)/2`, `upper=M`; `access[][].band` explicit `null` → defined not-measured sentinel, never throws; `fallbacks[].travel_band` has no stated null case in `PLAN.md` — treated as required whenever a fallback entry exists (a hand-picked link is added complete), so malformed there is a rejection, not a silent guess; any malformed/non-numeric/`N>=M`/missing-`"m"` band string on either field is a rejected, fail-closed result — never silently coerced; pure function, no DOM; covered by `tests/js`
 - **Required verification**: `tests/js/` via `node --test tests/js/*.test.js` (never the bare-directory form)
 - **Claude gate result**: `GATE_PASS`
-- **Independent review**: round 1 `CHANGES_REQUESTED` — `IMP-005-R1-F01` accepted and corrected in `9f6c618`; round 2 requested
+- **Independent review**: round 1 `CHANGES_REQUESTED` — `IMP-005-R1-F01` accepted and corrected in `9f6c618`; round 2 `REPO VALIDATION` on that correction returned `APPROVE` — `IMP-005-R1-F01` `resolved`, no new findings
 - **Gate evidence**: `reviews/IMP-005-gate.md`
 - **Review record**: `reviews/IMP-005.md`
 - **User decisions required**: —
-- **Next action**: Awaiting Codex Terra round-2 (REPO VALIDATION) review of `9f6c618` per the fenced prompt in `reviews/IMP-005.md`'s primary response.
+- **Next action**: None — terminal. A new task requires a new assignment ID.
