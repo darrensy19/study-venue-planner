@@ -8,7 +8,7 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 - **ID**: `IMP-004`
 - **Work type**: implementation
-- **State**: `review_complete`
+- **State**: `completed`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, effort medium
 - **Route triggers**: correctness depends on negative/fail-closed paths (unverified-return cap on `salvage`, `cycle`-fallback-without-bicycle exclusion, delayed-arrival closure, return-capped-vs-hours-capped floor) and non-vacuous tests — same pattern as `IMP-002`/`IMP-003`
@@ -22,5 +22,5 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Independent review**: round 1 `CHANGES_REQUESTED` — `IMP-004-R1-F01` accepted and corrected in `5eebfdc`; round 2 `REPO VALIDATION` on that correction returned `APPROVE` — `IMP-004-R1-F01` `resolved`, no new findings
 - **Gate evidence**: `reviews/IMP-004-gate.md`
 - **Review record**: `reviews/IMP-004.md`
-- **User decisions required**: Approve `IMP-004` for close, or request revisions.
-- **Next action**: Awaiting the user's explicit approval or revision decision.
+- **User decisions required**: —
+- **Next action**: None — terminal. A new task requires a new assignment ID.

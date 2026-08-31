@@ -16,6 +16,7 @@ an old one. Dates are ISO `YYYY-MM-DD`.
 | 2026-08-31 | completed | ARCH-001 | codex_sol | |
 | 2026-08-31 | completed | IMP-002 | codex_terra | |
 | 2026-08-31 | completed | IMP-003 | codex_terra | |
+| 2026-08-31 | completed | IMP-004 | codex_terra | |
 
 ## Event vocabulary
 

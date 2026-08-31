@@ -1996,3 +1996,35 @@ premise (all 28 venues already have an assessed `baseline_seatability`, contradi
 unknown" wording — see the entry above), and an unrelated concurrent doc rename
 (`plan.md`/`decisions.md`/`skills.md` → uppercase) committed as found. User approved and authorized
 close. Full detail in `reviews/IMP-003.md` and `reviews/IMP-003-gate.md`.
+
+## 2026-08-31 — IMP-004 closed: backup_strength grading and Plan B recalculation implemented in ranking.js
+
+Implemented Plan B's dual-bound arrival chain and `backup_strength` grading in `web/ranking.js`.
+`resolveFeasibility` and `resolveOverallFeasibility` were split into thin departure-based wrappers
+over new arrival-based cores (`resolveFeasibilityAtArrivals`, `resolveOverallFeasibilityAtArrivals`)
+— a behavior-preserving refactor, verified by the pre-existing 114-test suite staying green
+unchanged throughout — because Plan B's mid and upper legs are two independently derived absolute
+minutes (Plan A's own arrival + the seat-check buffer, then the fallback's own travel bound), never
+one departure paired with two travel estimates. `resolvePlanBArrivals` computes that chain;
+`evaluatePlanBFallback` evaluates one fallback candidate end-to-end through the same machinery as
+Plan A, at its own resolved arrivals, using the fallback's own `return_transport`/`access` data
+(never Plan A's), and grades `strong`/`salvage`/`none` per `PLAN.md` §5: an unverified return caps at
+`salvage`, a `cycle`-mode fallback link is excluded outright without `bicycle_with_you`, and the
+salvage/none floor reads the return-capped `usable_minutes`, never the hours-capped duration. Scoped
+to evaluating one given fallback at caller-supplied resolved travel minutes — band-string ("N-Mm")
+parsing for `fallbacks[].travel_band`/`access[][].band` and selecting the best of several fallback
+candidates both remain deferred, the former not yet built for the origin leg either, the latter
+"rank all venues"-adjacent. 17 new tests written test-first (131 total after implementation).
+
+Pre-gate `GATE_PASS`; round 1 (`codex_terra`) found one High finding — `IMP-004-R1-F01`, an
+unverified return has no return-capped `usable_minutes` at all, so feeding the hours-only fallback
+figure into the generic salvage floor let a fallback whose own hours tier was already `shorter`
+still qualify as `salvage` on hours-only minutes. Corrected by resolving the fallback's hours-only
+tier directly whenever the composed tier is `unverified` and applying `PLAN.md`'s categorical rule
+(salvage only when that hours-only tier is `robust`/`tight`; otherwise fails closed to `none`, since
+neither a return-capped duration nor the specified categorical allowance exists for that
+combination) — one new regression test added (132 total), watched to confirm it would have failed
+under the pre-correction code. The response also added a `metricsBasis` field so a future UI
+consumer can distinguish an hours-only figure from a return-capped one. Round 2 (`codex_terra`,
+scoped to the correction delta) approved with no findings. User approved and authorized close. Full
+detail in `reviews/IMP-004.md` and `reviews/IMP-004-gate.md`.
