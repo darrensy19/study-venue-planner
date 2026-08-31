@@ -97,8 +97,14 @@ slower won't get used.
 Cook were resolved to Place IDs, their hours and Popular Times histograms fetched, and `N`/`P` set
 from the real measured curves. See `PLAN.md`'s Phase 0 section and `DECISIONS.md` for the full
 record, including two real bugs found and fixed in the spread analysis after an independent review.
-`data/venues_meta.json` carries `venue_type`/`area` for all 28. **Phase 1 is next** — fetchers, the
-refresh orchestrator, and Plan A/B. Concrete opening steps, in order:
+`data/venues_meta.json` carries `venue_type`/`area`/`baseline_seatability` for all 28 — every venue
+has a real assessment (`usually_available`, `mixed`, `dependable`, or `poor`), none left `unknown`.
+
+**Phase 1 is in progress.** `web/ranking.js`'s pure-function core is built and tested (132 tests,
+`node --test tests/js/*.test.js`): hours resolution and feasibility tiers, session-end
+return-transport and `overall_tier`, `relative_busyness` banding and `seat_confidence`, and Plan B
+recalculation with `backup_strength` grading — see `DECISIONS.md`'s `IMP-001` through `IMP-004`
+entries for what each added. Concrete opening steps for what's still open, in order:
 
 1. ~~Resolve the multi-day-period design gap in `resolve_hours`.~~ **Done, 2026-08-29.** Resolving it
    turned up four more defects in the same hours-ingestion step, and all five are settled together —
@@ -107,11 +113,13 @@ refresh orchestrator, and Plan A/B. Concrete opening steps, in order:
    venue as an unbounded period rather than one closing at midnight, read `truncated` as a window
    edge, compute and validate the seven-day window, and materialise every date in it. No code was
    written; this was a design decision.
-2. Fill in `baseline_seatability` by hand for at least one venue in `data/venues_meta.json` (every
-   venue is currently `unknown`) — Phase 1's second acceptance test needs at least one non-`unknown`
-   venue to produce a Plan A at all.
-3. Write `build/refresh.py` and the two real fetchers (`fetch_hours.py`, `fetch_busyness.py`) —
-   the bulk of Phase 1.
+2. Write the `access[][].band` / `fallbacks[].travel_band` ("N-Mm") → minutes parser. Both
+   `resolveOverallFeasibility` and Plan B's `evaluatePlanBFallback` take pre-resolved travel minutes
+   as a deliberate scope boundary so far — this unblocks running either against real
+   `venues_meta.json` data.
+3. Write `build/refresh.py` and the two real fetchers (`fetch_hours.py`, `fetch_busyness.py`), then
+   `app.js` and `index.template.html` — nothing is runnable end-to-end without this orchestration/UI
+   shell.
 
 Per `CLAUDE.md`'s workflow rule, step 3 should start with a plan-mode critique of `PLAN.md`'s
 Phase 1 section against the repo as it now stands, run on `opusplan` — not a straight port of the
