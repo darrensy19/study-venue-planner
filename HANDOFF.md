@@ -6,21 +6,21 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: `IMP-004`
+- **ID**: `IMP-005`
 - **Work type**: implementation
-- **State**: `completed`
+- **State**: `draft`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, effort medium
-- **Route triggers**: correctness depends on negative/fail-closed paths (unverified-return cap on `salvage`, `cycle`-fallback-without-bicycle exclusion, delayed-arrival closure, return-capped-vs-hours-capped floor) and non-vacuous tests — same pattern as `IMP-002`/`IMP-003`
-- **Baseline commit**: `07e8b67`; implementation `bdf7ada`; round-1 correction `5eebfdc`
-- **Artifact under review**: `web/ranking.js` (Plan B recalculation + `backup_strength` grading) and `tests/js/ranking.test.js`
-- **Objective**: Implement `backup_strength` grading and Plan B recalculation in `web/ranking.js` — `PLAN.md`, "5. `backup_strength`" and "Plan A and Plan B"
-- **Scope exclusions**: band-string ("N-Mm") parsing for `fallbacks[].travel_band` / `access[][].band` (fallback travel minutes enter as resolved numbers, mirroring `resolveOverallFeasibility`'s existing `travelMinutesMid/Upper` parameter shape — that string-to-minutes conversion is Phase 1 orchestrator work, not yet built for the origin leg either); selecting/ranking the best fallback among several candidates for one venue (that is "rank all venues"-adjacent, already deferred); `build/refresh.py`, `app.js`, any top-level ranking function
-- **Acceptance criteria**: Plan B's dual-bound arrival chain (`plan_b_departure_*` from Plan A's arrival + `SEAT_CHECK_BUFFER_MINUTES`, `plan_b_arrival_*` from there + fallback travel), each bound resolved independently through the same hours/return machinery as Plan A (no shared-departure shortcut); `backup_strength` three-way (`strong`/`salvage`/`none`) graded on the fallback's `overall_tier` and confidence floor; `unverified` return capping at `salvage`; a `cycle`-mode fallback link excluded when `!bicycle_with_you`; the floor minutes are the return-capped `usable_minutes`, never hours-capped — per `PLAN.md` §5 and "Plan A and Plan B"
+- **Route triggers**: correctness depends on negative/fail-closed paths (malformed vs. not-yet-measured band strings) — same pattern as `IMP-002`/`IMP-003`/`IMP-004`
+- **Baseline commit**: `12f7388`
+- **Artifact under review**: `web/ranking.js` (new parser) and `tests/js/ranking.test.js`
+- **Objective**: Parse `"N-Mm"` travel-band strings (`access[][].band`, `fallbacks[].travel_band`) into `{mid, upper}` minutes — `PLAN.md` "Time, dates and hours resolution" (mid/upper derivation) and "Data contracts" (band format)
+- **Scope exclusions**: wiring the parser into `resolveOverallFeasibility`/`evaluatePlanBFallback` (both keep taking pre-resolved minutes, per `IMP-004`'s same exclusion); `build/refresh.py`, `app.js`; selecting/ranking among several fallbacks for one venue
+- **Acceptance criteria**: `"N-Mm"` → `mid=(N+M)/2`, `upper=M`; `access[][].band` explicit `null` → defined not-measured sentinel, never throws; `fallbacks[].travel_band` has no stated null case in `PLAN.md` — treated as required whenever a fallback entry exists (a hand-picked link is added complete), so malformed there is a rejection, not a silent guess; any malformed/non-numeric/`N>=M`/missing-`"m"` band string on either field is a rejected, fail-closed result — never silently coerced; pure function, no DOM; covered by `tests/js`
 - **Required verification**: `tests/js/` via `node --test tests/js/*.test.js` (never the bare-directory form)
-- **Claude gate result**: `GATE_PASS`
-- **Independent review**: round 1 `CHANGES_REQUESTED` — `IMP-004-R1-F01` accepted and corrected in `5eebfdc`; round 2 `REPO VALIDATION` on that correction returned `APPROVE` — `IMP-004-R1-F01` `resolved`, no new findings
-- **Gate evidence**: `reviews/IMP-004-gate.md`
-- **Review record**: `reviews/IMP-004.md`
+- **Claude gate result**: —
+- **Independent review**: `required`
+- **Gate evidence**: —
+- **Review record**: —
 - **User decisions required**: —
-- **Next action**: None — terminal. A new task requires a new assignment ID.
+- **Next action**: Implement per acceptance criteria (TDD), run required verification, then invoke the pre-gate.

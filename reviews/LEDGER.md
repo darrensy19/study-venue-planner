@@ -20,3 +20,4 @@ event history the sampling audit reads instead.
 | `IMP-002` | 2026-08-31 | implementation | Implement ARCH-001's session-end return-transport design in ranking.js |
 | `IMP-003` | 2026-08-31 | implementation | relative_busyness banding and seat_confidence lookup in ranking.js |
 | `IMP-004` | 2026-08-31 | implementation | backup_strength grading and Plan B recalculation in ranking.js |
+| `IMP-005` | 2026-08-31 | implementation | travel-band ("N-Mm") string-to-minutes parser for access[][].band / fallbacks[].travel_band |
