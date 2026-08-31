@@ -171,14 +171,29 @@ export function lastDepartureEdge(band, boundKind) {
  * complete) must reject `not_measured` itself; this function only reports
  * what the value means, not whether it's acceptable in a given context.
  */
+/** Best-effort description of an unparseable value for a diagnostic message.
+ * JSON.stringify throws on a BigInt and on any value with a throwing
+ * toJSON(), which would turn a malformed-input rejection into an uncaught
+ * throw — exactly the failure mode a fail-closed parser must not have. */
+function describeUnparseable(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return `<unserialisable ${typeof value}>`;
+  }
+}
+
 export function normaliseTravelBand(band) {
   if (band === null) return { kind: "not_measured" };
   const m = typeof band === "string" ? /^([0-9]+)-([0-9]+)m$/.exec(band) : null;
   if (!m) {
-    return { kind: "malformed", reason: `expected "N-Mm", got ${JSON.stringify(band)}` };
+    return { kind: "malformed", reason: `expected "N-Mm", got ${describeUnparseable(band)}` };
   }
   const lo = Number(m[1]);
   const hi = Number(m[2]);
+  if (!Number.isSafeInteger(lo) || !Number.isSafeInteger(hi)) {
+    return { kind: "malformed", reason: `edge outside the safe integer range: (${m[1]}, ${m[2]})` };
+  }
   if (!(lo < hi)) {
     return { kind: "malformed", reason: `edges not increasing: (${lo}, ${hi})` };
   }

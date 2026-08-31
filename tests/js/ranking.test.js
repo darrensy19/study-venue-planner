@@ -592,6 +592,31 @@ test("normaliseTravelBand: non-string, non-null input is malformed rather than t
   assert.equal(normaliseTravelBand({ lo: 5, hi: 10 }).kind, "malformed");
 });
 
+// IMP-005-R1-F01: unrepresentable parsed edges and unserialisable malformed diagnostics
+// must never produce a non-finite "present" result or throw.
+
+test("normaliseTravelBand: an overflow-length digit band is malformed, never a non-finite present result", () => {
+  const result = normaliseTravelBand(`1-${"9".repeat(400)}m`);
+  assert.equal(result.kind, "malformed");
+});
+
+test("normaliseTravelBand: an edge beyond Number.MAX_SAFE_INTEGER is malformed even though it's still finite", () => {
+  const unsafe = String(Number.MAX_SAFE_INTEGER + 2);
+  const result = normaliseTravelBand(`1-${unsafe}m`);
+  assert.equal(result.kind, "malformed");
+});
+
+test("normaliseTravelBand: a BigInt input is malformed rather than throwing during diagnostics", () => {
+  assert.doesNotThrow(() => normaliseTravelBand(1n));
+  assert.equal(normaliseTravelBand(1n).kind, "malformed");
+});
+
+test("normaliseTravelBand: an object with a throwing toJSON is malformed rather than throwing during diagnostics", () => {
+  const throwingToJSON = { toJSON() { throw new Error("boom"); } };
+  assert.doesNotThrow(() => normaliseTravelBand(throwingToJSON));
+  assert.equal(normaliseTravelBand(throwingToJSON).kind, "malformed");
+});
+
 // --- Return-transport: resolveReturnService ---------------------------------
 
 test("resolveReturnService: no return_transport block at all is missing", () => {
