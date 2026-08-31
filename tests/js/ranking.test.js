@@ -1639,8 +1639,29 @@ test("evaluatePlanBFallback: an unverified return caps backup_strength at salvag
   });
   assert.equal(r.overallTier, "unverified");
   assert.equal(r.usableMinutesMid, 180); // hours-only metrics: always-open, full requested duration
+  assert.equal(r.metricsBasis, "hours_only"); // never presentable as a committed/return-capped duration
   assert.equal(r.strength, "salvage");
   assert.equal(r.reason, "unverified_return");
+});
+
+// IMP-004-R1-F01: an unverified return has no return-capped usable_minutes to
+// clear the floor with. Without the fix, this fixture's 110 hours-only
+// minutes (>= PLAN_B_MIN_SESSION_MINUTES) would have wrongly qualified as
+// salvage even though the session does not fit by hours alone AND the way
+// home is unknown — two independent reasons for caution, neither honestly
+// measurable, compounding into a false "salvage" claim with no real basis.
+test("evaluatePlanBFallback: hours-only minutes clearing the floor never grant salvage when the fallback's own hours tier is shorter and the return is unverified", () => {
+  const venue = planBFallbackVenue({ regular: { mon: known([{ open: 1200, close: 1310 }]) }, baseline: "usually_available" });
+  venue.access = { origin_a: {} }; // no recorded route home at all -> unverified
+  const arrivalAbs = absMinutes("2024-01-01", 1200);
+  const r = evaluatePlanBFallback(venue, {}, {
+    ...PLAN_B_BASE, fallbackMode: "walk", fallbackTravelMinutesMid: 0, fallbackTravelMinutesUpper: 0,
+    planAArrivalMidAbs: arrivalAbs - 10, planAArrivalUpperAbs: arrivalAbs - 10,
+  });
+  assert.equal(r.overallTier, "unverified");
+  assert.equal(r.usableMinutesMid, 110); // open 1200, close 1310 -> 110 hours-only minutes, >= the 90 floor
+  assert.equal(r.strength, "none"); // the fallback's own hours tier is "shorter" (110 < the requested 180), never salvage on an unverified return
+  assert.equal(r.reason, "unverified_return_and_short_session");
 });
 
 test("evaluatePlanBFallback: a cycle-mode fallback link is unviable without the bicycle, and no hours or return data is ever read", () => {

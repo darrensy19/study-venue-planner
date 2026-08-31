@@ -804,6 +804,22 @@ export function resolveBackupStrength(params) {
  * A `cycle`-mode fallback link is excluded before any hours or return data
  * is read at all — the bicycle is at home unless bicycleWithYou, and riding
  * a bicycle you didn't bring is not evaluable, not merely infeasible.
+ *
+ * IMP-004-R1-F01: an `unverified` return has no return-capped usable_minutes
+ * at all — there is no known last departure to cap against, so
+ * resolveBackupStrength's generic floor check (built for a genuine numeric
+ * cap) must never run against the hours-only figure resolveOverallFeasibility
+ * AtArrivals falls back to in that branch. plan.md's Plan B section states
+ * the unverified rule categorically, not as a floor test: an unverified
+ * return caps backup_strength at salvage ONLY when the session already fits
+ * on hours alone (the fallback's own hours tier, independent of return, is
+ * robust/tight) — never derived from comparing an hours-only minute count
+ * against PLAN_B_MIN_SESSION_MINUTES, which is a return-capped quantity by
+ * definition and does not exist here. A fallback whose hours tier is
+ * "shorter" AND whose return is unverified has neither a known minimum
+ * duration nor this categorical allowance, so it fails closed to "none" —
+ * the same discipline this codebase applies to every other case where a
+ * claim cannot be established either way.
  */
 export function evaluatePlanBFallback(fallbackVenue, holidays, params) {
   const {
@@ -821,7 +837,7 @@ export function evaluatePlanBFallback(fallbackVenue, holidays, params) {
     cycleLatestMinutes,
     seatCheckBufferMinutes,
     minSessionMinutes,
-    minConfidence,
+    minConfidence = PLAN_B_MIN_CONFIDENCE,
   } = params;
 
   if (fallbackMode === "cycle" && !bicycleWithYou) {
@@ -853,17 +869,37 @@ export function evaluatePlanBFallback(fallbackVenue, holidays, params) {
   const busyness = resolveBusynessBand(fallbackVenue, arrivals.arrivalMidAbs);
   const seatConfidence = resolveSeatConfidence(fallbackVenue.baseline_seatability, busyness);
 
-  const backup = resolveBackupStrength({
-    overallTier: overall.tier,
-    confidence: seatConfidence.confidence,
-    usableMinutesMid: overall.usableMinutesMid,
-    minSessionMinutes, minConfidence,
-  });
+  let backup;
+  if (overall.tier === "unverified") {
+    const hoursOnly = resolveFeasibilityAtArrivals(fallbackVenue, holidays, {
+      arrivalMidAbs: arrivals.arrivalMidAbs,
+      arrivalUpperAbs: arrivals.arrivalUpperAbs,
+      travelMinutesMid: fallbackTravelMinutesMid,
+      travelMinutesUpper: fallbackTravelMinutesUpper,
+      durationMinutes, closingBufferMinutes, toleranceMinutes,
+    });
+    const sessionFitsByHoursAlone = hoursOnly.tier === "robust" || hoursOnly.tier === "tight";
+    if (!meetsConfidenceFloor(seatConfidence.confidence, minConfidence)) {
+      backup = { strength: "none", reason: "confidence_below_floor" };
+    } else if (sessionFitsByHoursAlone) {
+      backup = { strength: "salvage", reason: "unverified_return" };
+    } else {
+      backup = { strength: "none", reason: "unverified_return_and_short_session" };
+    }
+  } else {
+    backup = resolveBackupStrength({
+      overallTier: overall.tier,
+      confidence: seatConfidence.confidence,
+      usableMinutesMid: overall.usableMinutesMid,
+      minSessionMinutes, minConfidence,
+    });
+  }
 
   return {
     ...backup,
     overallTier: overall.tier,
     usableMinutesMid: overall.usableMinutesMid,
+    metricsBasis: overall.metricsBasis,
     confidence: seatConfidence.confidence,
     evidenceQuality: seatConfidence.evidenceQuality,
     planBArrivalMidAbs: arrivals.arrivalMidAbs,
