@@ -29,9 +29,15 @@ import {
   overallTier,
   combineBindingLimit,
   resolveOverallFeasibility,
+  resolveFeasibilityAtArrivals,
+  resolveOverallFeasibilityAtArrivals,
   validateReturnTransport,
   resolveBusynessBand,
   resolveSeatConfidence,
+  resolvePlanBArrivals,
+  meetsConfidenceFloor,
+  resolveBackupStrength,
+  evaluatePlanBFallback,
 } from "../../web/ranking.js";
 
 // --- fixture builders ------------------------------------------------------
@@ -1469,4 +1475,231 @@ test("resolveSeatConfidence: a determined band always yields evidenceQuality nor
     const r = resolveSeatConfidence("mixed", { band });
     assert.equal(r.evidenceQuality, "normal");
   }
+});
+
+// --- resolveFeasibilityAtArrivals: independently-resolved arrivals ---------
+
+test("resolveFeasibilityAtArrivals: mid and upper are resolved on their own dates, never derived from one shared departure", () => {
+  // Monday 20:00-24:00 open; Tuesday closed entirely (default). Passing a
+  // Monday mid arrival and a Tuesday upper arrival proves each bound reads
+  // its own date's hours rather than one departure abs plus two travel
+  // estimates, which could never land upper on a different weekday than mid
+  // unless the two arrivals are genuinely independent inputs.
+  const venue = makeVenue({
+    validFrom: "2099-01-01", validThrough: "2099-01-07",
+    regular: { mon: known([{ open: 1200, close: 1440 }]) },
+  });
+  const arrivalMidAbs = absMinutes("2024-01-01", 1260); // Monday 21:00, inside the open period
+  const arrivalUpperAbs = absMinutes("2024-01-02", 1260); // Tuesday 21:00, Tuesday is closed
+  const r = resolveFeasibilityAtArrivals(venue, {}, {
+    arrivalMidAbs, arrivalUpperAbs, travelMinutesMid: 0, travelMinutesUpper: 0,
+    durationMinutes: 60, closingBufferMinutes: 0, toleranceMinutes: 15,
+  });
+  assert.equal(r.tier, "tight"); // mid fits with 120m slack; upper is NONE so robust is impossible
+  assert.equal(r.usableMinutesMid, 60);
+  assert.deepEqual(r.surplusMid, { kind: "finite", minutes: 120 });
+  assert.equal(r.surplusUpper, undefined); // upper NONE never unranks on its own, but has no surplus
+});
+
+// --- resolvePlanBArrivals: the dual-bound arrival chain ---------------------
+
+test("resolvePlanBArrivals: departures come from Plan A's own arrivals plus the seat-check buffer, arrivals add the fallback's own travel bound", () => {
+  const r = resolvePlanBArrivals({
+    planAArrivalMidAbs: 1000, planAArrivalUpperAbs: 1050,
+    fallbackTravelMinutesMid: 20, fallbackTravelMinutesUpper: 30,
+    seatCheckBufferMinutes: 10,
+  });
+  assert.deepEqual(r, {
+    departureMidAbs: 1010, departureUpperAbs: 1060,
+    arrivalMidAbs: 1030, arrivalUpperAbs: 1090,
+  });
+});
+
+test("resolvePlanBArrivals: seatCheckBufferMinutes defaults to the provisional 10 when omitted", () => {
+  const withDefault = resolvePlanBArrivals({
+    planAArrivalMidAbs: 1000, planAArrivalUpperAbs: 1000,
+    fallbackTravelMinutesMid: 0, fallbackTravelMinutesUpper: 0,
+  });
+  const explicit10 = resolvePlanBArrivals({
+    planAArrivalMidAbs: 1000, planAArrivalUpperAbs: 1000,
+    fallbackTravelMinutesMid: 0, fallbackTravelMinutesUpper: 0,
+    seatCheckBufferMinutes: 10,
+  });
+  assert.deepEqual(withDefault, explicit10);
+});
+
+// --- meetsConfidenceFloor ----------------------------------------------------
+
+test("meetsConfidenceFloor: a confidence at or above the floor clears it, below does not, unknown never clears any floor", () => {
+  assert.equal(meetsConfidenceFloor("dependable", "mixed"), true);
+  assert.equal(meetsConfidenceFloor("mixed", "mixed"), true); // at the floor, not just above
+  assert.equal(meetsConfidenceFloor("poor", "mixed"), false);
+  assert.equal(meetsConfidenceFloor("unknown", "mixed"), false);
+});
+
+// --- resolveBackupStrength: the strong/salvage/none grading table ----------
+
+test("resolveBackupStrength: strong when the session fits (robust or tight) and confidence clears the floor", () => {
+  assert.equal(resolveBackupStrength({ overallTier: "robust", confidence: "dependable", usableMinutesMid: 180, minSessionMinutes: 90, minConfidence: "mixed" }).strength, "strong");
+  assert.equal(resolveBackupStrength({ overallTier: "tight", confidence: "usually_available", usableMinutesMid: 170, minSessionMinutes: 90, minConfidence: "mixed" }).strength, "strong");
+});
+
+test("resolveBackupStrength: salvage when the floor is cleared but the requested session does not fit", () => {
+  const r = resolveBackupStrength({ overallTier: "shorter", confidence: "mixed", usableMinutesMid: 90, minSessionMinutes: 90, minConfidence: "mixed" });
+  assert.equal(r.strength, "salvage");
+  assert.equal(r.reason, "short_session");
+});
+
+test("resolveBackupStrength: none when the return-capped minutes fall below PLAN_B_MIN_SESSION_MINUTES", () => {
+  const r = resolveBackupStrength({ overallTier: "shorter", confidence: "mixed", usableMinutesMid: 89, minSessionMinutes: 90, minConfidence: "mixed" });
+  assert.equal(r.strength, "none");
+  assert.equal(r.reason, "below_minimum_minutes");
+});
+
+test("resolveBackupStrength: an unverified return caps backup_strength at salvage, never strong, and is labelled as such", () => {
+  const r = resolveBackupStrength({ overallTier: "unverified", confidence: "mixed", usableMinutesMid: 200, minSessionMinutes: 90, minConfidence: "mixed" });
+  assert.equal(r.strength, "salvage");
+  assert.equal(r.reason, "unverified_return");
+});
+
+test("resolveBackupStrength: confidence below the floor is none even when the session fits on hours and return alone", () => {
+  const poor = resolveBackupStrength({ overallTier: "robust", confidence: "poor", usableMinutesMid: 180, minSessionMinutes: 90, minConfidence: "mixed" });
+  assert.equal(poor.strength, "none");
+  assert.equal(poor.reason, "confidence_below_floor");
+  const unknown = resolveBackupStrength({ overallTier: "robust", confidence: "unknown", usableMinutesMid: 180, minSessionMinutes: 90, minConfidence: "mixed" });
+  assert.equal(unknown.strength, "none");
+  assert.equal(unknown.reason, "confidence_below_floor");
+});
+
+// --- evaluatePlanBFallback: end-to-end ---------------------------------------
+
+function planBFallbackVenue({ regular, baseline, mode = "walk" }) {
+  const v = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07", regular });
+  v.access = { origin_a: { [mode]: {} } };
+  v.baseline_seatability = baseline;
+  return v;
+}
+
+const PLAN_B_BASE = {
+  bicycleWithYou: false, raining: false,
+  durationMinutes: 180, closingBufferMinutes: 0, toleranceMinutes: 15,
+  returnToleranceMinutes: 10, cycleLatestMinutes: null,
+};
+
+test("evaluatePlanBFallback: strong when the requested session fits and confidence clears the floor", () => {
+  const venue = planBFallbackVenue({ regular: { mon: known([{ open: 0, always_open: true }]) }, baseline: "dependable" });
+  const planAArrivalMidAbs = absMinutes("2024-01-01", 1200);
+  const planAArrivalUpperAbs = absMinutes("2024-01-01", 1210);
+  const r = evaluatePlanBFallback(venue, {}, {
+    ...PLAN_B_BASE, fallbackMode: "walk", fallbackTravelMinutesMid: 5, fallbackTravelMinutesUpper: 10,
+    planAArrivalMidAbs, planAArrivalUpperAbs,
+  });
+  assert.equal(r.strength, "strong");
+  assert.equal(r.overallTier, "robust");
+  assert.equal(r.planBArrivalMidAbs, planAArrivalMidAbs + 10 + 5); // seat-check buffer (10) + travel (5)
+  assert.equal(r.planBArrivalUpperAbs, planAArrivalUpperAbs + 10 + 10);
+});
+
+test("evaluatePlanBFallback: salvage when the floor is cleared but the requested session does not fit", () => {
+  const venue = planBFallbackVenue({ regular: { mon: known([{ open: 1200, close: 1330 }]) }, baseline: "usually_available" });
+  const arrivalAbs = absMinutes("2024-01-01", 1200);
+  const r = evaluatePlanBFallback(venue, {}, {
+    ...PLAN_B_BASE, fallbackMode: "walk", fallbackTravelMinutesMid: 0, fallbackTravelMinutesUpper: 0,
+    planAArrivalMidAbs: arrivalAbs - 10, planAArrivalUpperAbs: arrivalAbs - 10, // -10 for the seat-check buffer, landing exactly at open
+  });
+  assert.equal(r.overallTier, "shorter");
+  assert.equal(r.usableMinutesMid, 130); // open 1200, close 1330, arrival 1200 -> 130 usable of the requested 180
+  assert.equal(r.strength, "salvage");
+  assert.equal(r.reason, "short_session");
+});
+
+test("evaluatePlanBFallback: none when even the return-capped minutes fall below the salvage floor", () => {
+  const venue = planBFallbackVenue({ regular: { mon: known([{ open: 1200, close: 1250 }]) }, baseline: "usually_available" });
+  const arrivalAbs = absMinutes("2024-01-01", 1200);
+  const r = evaluatePlanBFallback(venue, {}, {
+    ...PLAN_B_BASE, fallbackMode: "walk", fallbackTravelMinutesMid: 0, fallbackTravelMinutesUpper: 0,
+    planAArrivalMidAbs: arrivalAbs - 10, planAArrivalUpperAbs: arrivalAbs - 10,
+  });
+  assert.equal(r.usableMinutesMid, 50); // open 1200, close 1250 -> only 50 minutes available
+  assert.equal(r.strength, "none");
+  assert.equal(r.reason, "below_minimum_minutes");
+});
+
+test("evaluatePlanBFallback: an unverified return caps backup_strength at salvage, labelled as an unverified way home rather than a short session", () => {
+  const venue = makeVenue({
+    validFrom: "2099-01-01", validThrough: "2099-01-07",
+    regular: { mon: known([{ open: 0, always_open: true }]) },
+  });
+  venue.access = { origin_a: {} }; // no recorded route home at all
+  venue.baseline_seatability = "mixed";
+  const arrivalAbs = absMinutes("2024-01-01", 1200);
+  const r = evaluatePlanBFallback(venue, {}, {
+    ...PLAN_B_BASE, fallbackMode: "walk", fallbackTravelMinutesMid: 0, fallbackTravelMinutesUpper: 0,
+    planAArrivalMidAbs: arrivalAbs - 10, planAArrivalUpperAbs: arrivalAbs - 10,
+  });
+  assert.equal(r.overallTier, "unverified");
+  assert.equal(r.usableMinutesMid, 180); // hours-only metrics: always-open, full requested duration
+  assert.equal(r.strength, "salvage");
+  assert.equal(r.reason, "unverified_return");
+});
+
+test("evaluatePlanBFallback: a cycle-mode fallback link is unviable without the bicycle, and no hours or return data is ever read", () => {
+  const tripwireVenue = {
+    get hours() { throw new Error("tripwire: hours should never be read for an unviable cycle fallback"); },
+    get access() { throw new Error("tripwire: access should never be read for an unviable cycle fallback"); },
+    get baseline_seatability() { throw new Error("tripwire: baseline_seatability should never be read"); },
+  };
+  const r = evaluatePlanBFallback(tripwireVenue, {}, {
+    ...PLAN_B_BASE, fallbackMode: "cycle", fallbackTravelMinutesMid: 10, fallbackTravelMinutesUpper: 15,
+    planAArrivalMidAbs: 1000, planAArrivalUpperAbs: 1050,
+  });
+  assert.equal(r.strength, "none");
+  assert.equal(r.reason, "cycle_fallback_unviable");
+});
+
+test("evaluatePlanBFallback: confidence below the floor is none even when the session fits", () => {
+  const venue = planBFallbackVenue({ regular: { mon: known([{ open: 0, always_open: true }]) }, baseline: "poor" });
+  const arrivalAbs = absMinutes("2024-01-01", 1200);
+  const r = evaluatePlanBFallback(venue, {}, {
+    ...PLAN_B_BASE, fallbackMode: "walk", fallbackTravelMinutesMid: 0, fallbackTravelMinutesUpper: 0,
+    planAArrivalMidAbs: arrivalAbs - 10, planAArrivalUpperAbs: arrivalAbs - 10,
+  });
+  assert.equal(r.overallTier, "robust");
+  assert.equal(r.strength, "none");
+  assert.equal(r.reason, "confidence_below_floor");
+});
+
+test("evaluatePlanBFallback: an hours-unknown fallback venue is never a Plan B option", () => {
+  const venue = planBFallbackVenue({ regular: { mon: unknown() }, baseline: "dependable" });
+  const arrivalAbs = absMinutes("2024-01-01", 1200);
+  const r = evaluatePlanBFallback(venue, {}, {
+    ...PLAN_B_BASE, fallbackMode: "walk", fallbackTravelMinutesMid: 0, fallbackTravelMinutesUpper: 0,
+    planAArrivalMidAbs: arrivalAbs - 10, planAArrivalUpperAbs: arrivalAbs - 10,
+  });
+  assert.equal(r.strength, "none");
+  assert.equal(r.reason, "hours-unknown");
+});
+
+test("evaluatePlanBFallback: the salvage/none floor reads the return-capped usable minutes, never the hours-capped duration", () => {
+  // Always-open venue (hours alone would give the full 180m duration), but a
+  // real last-departure constraint caps the return-side usable time to well
+  // under PLAN_B_MIN_SESSION_MINUTES. If the floor check ever read the raw
+  // duration instead of the return-capped usableMinutesMid, this would
+  // wrongly read "salvage" (or better) instead of "none".
+  const venue = makeVenue({
+    validFrom: "2099-01-01", validThrough: "2099-01-07",
+    regular: { mon: known([{ open: 0, always_open: true }]) },
+  });
+  venue.access = { origin_a: { transit: {} } }; // schedule-bound only, no schedule-free mode
+  venue.return_transport = { origin_a: { transit: { default: { last_departure_band: "21:40-21:50" } } } }; // mid edge 1305
+  venue.baseline_seatability = "dependable";
+  const arrivalAbs = absMinutes("2024-01-01", 1250); // 20:50 -> session end 23:50 (1430), past the core span and evening pre-dawn window
+  const r = evaluatePlanBFallback(venue, {}, {
+    ...PLAN_B_BASE, fallbackMode: "walk", fallbackTravelMinutesMid: 0, fallbackTravelMinutesUpper: 0,
+    planAArrivalMidAbs: arrivalAbs - 10, planAArrivalUpperAbs: arrivalAbs - 10,
+  });
+  assert.equal(r.overallTier, "shorter");
+  assert.equal(r.usableMinutesMid, 55); // last departure 1305 - arrival 1250, never the raw 180m duration
+  assert.equal(r.strength, "none");
+  assert.equal(r.reason, "below_minimum_minutes");
 });

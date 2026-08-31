@@ -32,6 +32,13 @@ const BUSYNESS_N = 15;
 const BUSYNESS_P = 5;
 const MIN_HISTOGRAM_HOURS = 6;
 
+// Plan B / backup_strength constants (plan.md's "Plan B viability floor" and
+// "5. backup_strength"). All three are provisional and threaded as
+// overridable parameters, like the constants above.
+const SEAT_CHECK_BUFFER_MINUTES = 10;
+const PLAN_B_MIN_SESSION_MINUTES = 90;
+const PLAN_B_MIN_CONFIDENCE = "mixed";
+
 // --- Calendar-date arithmetic -----------------------------------------
 
 function parseDate(dateStr) {
@@ -407,13 +414,10 @@ function boundBindingMetrics(venue, holidays, arrivalAbs, travelMinutes, duratio
 /**
  * resolveOverallFeasibility(venue, holidays, params) -> the composed result.
  *
- * Calls the existing, unmodified resolveFeasibility for the hours-side tier
- * first (zero risk to the hours test suite); hours "invalid"/"hours-unknown"
- * short-circuits before the return side is ever evaluated. Otherwise resolves
- * the return side, composes overall_tier, and — unless the return side is
- * unverified, in which case the hours-only metrics are returned unchanged and
- * labelled as such, per plan.md's "never presented as a verified session
- * length" — recombines metrics per bound via the binding-limit table.
+ * Thin wrapper: derives both arrivals from one shared departure, then
+ * delegates to resolveOverallFeasibilityAtArrivals for the actual
+ * hours/return composition. See that function's own doc comment for the
+ * composition rules.
  */
 export function resolveOverallFeasibility(venue, holidays, params) {
   const {
@@ -430,16 +434,52 @@ export function resolveOverallFeasibility(venue, holidays, params) {
     cycleLatestMinutes,
   } = params;
 
-  const hoursResult = resolveFeasibility(venue, holidays, {
-    departureDate, leaveAtMinutes, travelMinutesMid, travelMinutesUpper, durationMinutes, closingBufferMinutes, toleranceMinutes,
+  const departureAbs = absMinutes(departureDate, leaveAtMinutes);
+  const arrivalMidAbs = departureAbs + travelMinutesMid;
+  const arrivalUpperAbs = departureAbs + travelMinutesUpper;
+
+  return resolveOverallFeasibilityAtArrivals(venue, holidays, {
+    arrivalMidAbs, arrivalUpperAbs, travelMinutesMid, travelMinutesUpper, durationMinutes, closingBufferMinutes, toleranceMinutes,
+    bicycleWithYou, raining, returnToleranceMinutes, cycleLatestMinutes,
+  });
+}
+
+/**
+ * resolveOverallFeasibilityAtArrivals(venue, holidays, params) -> the
+ * composed result, from both arrivals directly instead of one shared
+ * departure. Plan B needs this arrival-based core because its mid and upper
+ * arrivals do not share a departure abs — see resolveFeasibilityAtArrivals
+ * for the identical reasoning on the hours side.
+ *
+ * Resolves the hours-side tier first; hours "invalid"/"hours-unknown"
+ * short-circuits before the return side is ever evaluated. Otherwise resolves
+ * the return side, composes overall_tier, and — unless the return side is
+ * unverified, in which case the hours-only metrics are returned unchanged and
+ * labelled as such, per plan.md's "never presented as a verified session
+ * length" — recombines metrics per bound via the binding-limit table.
+ */
+export function resolveOverallFeasibilityAtArrivals(venue, holidays, params) {
+  const {
+    arrivalMidAbs,
+    arrivalUpperAbs,
+    travelMinutesMid,
+    travelMinutesUpper,
+    durationMinutes,
+    closingBufferMinutes,
+    toleranceMinutes,
+    bicycleWithYou,
+    raining,
+    returnToleranceMinutes = RETURN_TOLERANCE_MINUTES,
+    cycleLatestMinutes,
+  } = params;
+
+  const hoursResult = resolveFeasibilityAtArrivals(venue, holidays, {
+    arrivalMidAbs, arrivalUpperAbs, travelMinutesMid, travelMinutesUpper, durationMinutes, closingBufferMinutes, toleranceMinutes,
   });
   if (hoursResult.tier === "invalid" || hoursResult.tier === "hours-unknown") {
     return hoursResult;
   }
 
-  const departureAbs = absMinutes(departureDate, leaveAtMinutes);
-  const arrivalMidAbs = departureAbs + travelMinutesMid;
-  const arrivalUpperAbs = departureAbs + travelMinutesUpper;
   const sessionEndMidAbs = arrivalMidAbs + durationMinutes;
   const sessionEndUpperAbs = arrivalUpperAbs + durationMinutes;
 
@@ -672,6 +712,162 @@ export function resolveSeatConfidence(baselineSeatability, busynessBand) {
   return {
     confidence: SEATABILITY_FROM_LEVEL[clamped],
     evidenceQuality: busynessBand.band === "unknown" ? "weak" : "normal",
+  };
+}
+
+/**
+ * meetsConfidenceFloor(confidence, floorConfidence) -> boolean.
+ *
+ * Reuses SEATABILITY_LADDER, so "unknown" (absent from the ladder) never
+ * clears any floor — plan.md: "a poor or unknown fallback is not a plan."
+ */
+export function meetsConfidenceFloor(confidence, floorConfidence) {
+  const level = SEATABILITY_LADDER[confidence];
+  const floorLevel = SEATABILITY_LADDER[floorConfidence];
+  return level !== undefined && floorLevel !== undefined && level >= floorLevel;
+}
+
+// --- Plan B: the dual-bound arrival chain -----------------------------------
+
+/**
+ * resolvePlanBArrivals(params) -> {departureMidAbs, departureUpperAbs, arrivalMidAbs, arrivalUpperAbs}
+ *
+ * plan.md's "Plan B is recalculated, not just second place": the upper bound
+ * is the sum of two upper bounds (Plan A's own upper arrival, then the
+ * fallback's upper travel time) — never a midpoint-derived arrival. Both
+ * legs get the same seatCheckBufferMinutes; the time spent scanning for a
+ * seat does not depend on how the first leg went.
+ */
+export function resolvePlanBArrivals(params) {
+  const {
+    planAArrivalMidAbs,
+    planAArrivalUpperAbs,
+    fallbackTravelMinutesMid,
+    fallbackTravelMinutesUpper,
+    seatCheckBufferMinutes = SEAT_CHECK_BUFFER_MINUTES,
+  } = params;
+
+  const departureMidAbs = planAArrivalMidAbs + seatCheckBufferMinutes;
+  const departureUpperAbs = planAArrivalUpperAbs + seatCheckBufferMinutes;
+  return {
+    departureMidAbs,
+    departureUpperAbs,
+    arrivalMidAbs: departureMidAbs + fallbackTravelMinutesMid,
+    arrivalUpperAbs: departureUpperAbs + fallbackTravelMinutesUpper,
+  };
+}
+
+/**
+ * resolveBackupStrength(params) -> {strength: "strong"|"salvage"|"none", reason?}
+ *
+ * plan.md's "5. backup_strength" grading table. `overallTier` must already be
+ * one of robust/tight/shorter/unverified — an hours-unknown or invalid
+ * fallback is excluded by the caller before this is ever reached, never
+ * defaulted through here. `usableMinutesMid` must already be return-capped
+ * (resolveOverallFeasibilityAtArrivals's own output), never the raw hours-
+ * capped duration — this function has no way to tell the difference and
+ * trusts its caller for that distinction.
+ */
+export function resolveBackupStrength(params) {
+  const {
+    overallTier,
+    confidence,
+    usableMinutesMid,
+    minSessionMinutes = PLAN_B_MIN_SESSION_MINUTES,
+    minConfidence = PLAN_B_MIN_CONFIDENCE,
+  } = params;
+
+  if (!meetsConfidenceFloor(confidence, minConfidence)) {
+    return { strength: "none", reason: "confidence_below_floor" };
+  }
+  if (overallTier === "robust" || overallTier === "tight") {
+    return { strength: "strong" };
+  }
+  if ((usableMinutesMid ?? 0) >= minSessionMinutes) {
+    return { strength: "salvage", reason: overallTier === "unverified" ? "unverified_return" : "short_session" };
+  }
+  return { strength: "none", reason: "below_minimum_minutes" };
+}
+
+/**
+ * evaluatePlanBFallback(fallbackVenue, holidays, params) -> the fallback's
+ * Plan B result: arrivals, its own overall_tier and return-capped metrics,
+ * its own seat_confidence, and the graded backup_strength.
+ *
+ * Scope: evaluates exactly ONE given fallback candidate, at resolved travel
+ * minutes the caller supplies (fallbackTravelMinutesMid/Upper) — parsing
+ * fallbacks[].travel_band's "N-Mm" string is Phase 1 orchestrator work, not
+ * yet built for access[][].band either (see IMP-004's scope exclusions).
+ * Selecting the best of several fallback candidates for one venue is
+ * likewise out of scope, deferred with the top-level ranking function.
+ *
+ * A `cycle`-mode fallback link is excluded before any hours or return data
+ * is read at all — the bicycle is at home unless bicycleWithYou, and riding
+ * a bicycle you didn't bring is not evaluable, not merely infeasible.
+ */
+export function evaluatePlanBFallback(fallbackVenue, holidays, params) {
+  const {
+    fallbackMode,
+    fallbackTravelMinutesMid,
+    fallbackTravelMinutesUpper,
+    planAArrivalMidAbs,
+    planAArrivalUpperAbs,
+    bicycleWithYou,
+    raining,
+    durationMinutes,
+    closingBufferMinutes,
+    toleranceMinutes,
+    returnToleranceMinutes,
+    cycleLatestMinutes,
+    seatCheckBufferMinutes,
+    minSessionMinutes,
+    minConfidence,
+  } = params;
+
+  if (fallbackMode === "cycle" && !bicycleWithYou) {
+    return { strength: "none", reason: "cycle_fallback_unviable" };
+  }
+
+  const arrivals = resolvePlanBArrivals({
+    planAArrivalMidAbs, planAArrivalUpperAbs, fallbackTravelMinutesMid, fallbackTravelMinutesUpper, seatCheckBufferMinutes,
+  });
+
+  const overall = resolveOverallFeasibilityAtArrivals(fallbackVenue, holidays, {
+    arrivalMidAbs: arrivals.arrivalMidAbs,
+    arrivalUpperAbs: arrivals.arrivalUpperAbs,
+    travelMinutesMid: fallbackTravelMinutesMid,
+    travelMinutesUpper: fallbackTravelMinutesUpper,
+    durationMinutes, closingBufferMinutes, toleranceMinutes,
+    bicycleWithYou, raining, returnToleranceMinutes, cycleLatestMinutes,
+  });
+
+  if (overall.tier === "invalid" || overall.tier === "hours-unknown") {
+    return {
+      strength: "none",
+      reason: overall.tier,
+      planBArrivalMidAbs: arrivals.arrivalMidAbs,
+      planBArrivalUpperAbs: arrivals.arrivalUpperAbs,
+    };
+  }
+
+  const busyness = resolveBusynessBand(fallbackVenue, arrivals.arrivalMidAbs);
+  const seatConfidence = resolveSeatConfidence(fallbackVenue.baseline_seatability, busyness);
+
+  const backup = resolveBackupStrength({
+    overallTier: overall.tier,
+    confidence: seatConfidence.confidence,
+    usableMinutesMid: overall.usableMinutesMid,
+    minSessionMinutes, minConfidence,
+  });
+
+  return {
+    ...backup,
+    overallTier: overall.tier,
+    usableMinutesMid: overall.usableMinutesMid,
+    confidence: seatConfidence.confidence,
+    evidenceQuality: seatConfidence.evidenceQuality,
+    planBArrivalMidAbs: arrivals.arrivalMidAbs,
+    planBArrivalUpperAbs: arrivals.arrivalUpperAbs,
   };
 }
 
@@ -990,6 +1186,31 @@ export function resolveFeasibility(venue, holidays, params) {
   const departureAbs = absMinutes(departureDate, leaveAtMinutes);
   const arrivalMidAbs = departureAbs + travelMinutesMid;
   const arrivalUpperAbs = departureAbs + travelMinutesUpper;
+
+  return resolveFeasibilityAtArrivals(venue, holidays, {
+    arrivalMidAbs, arrivalUpperAbs, travelMinutesMid, travelMinutesUpper, durationMinutes, closingBufferMinutes, toleranceMinutes,
+  });
+}
+
+/**
+ * resolveFeasibilityAtArrivals(venue, holidays, params) -> same shape as
+ * resolveFeasibility, but takes both arrivals directly instead of deriving
+ * them from one shared departure. resolveFeasibility is a thin wrapper over
+ * this for the ordinary single-departure case; Plan B needs this arrival-
+ * based core directly because its mid and upper departures are themselves
+ * two different absolute minutes (plan_a_arrival_mid/upper + the seat-check
+ * buffer), not one departure paired with two travel-time estimates.
+ */
+export function resolveFeasibilityAtArrivals(venue, holidays, params) {
+  const {
+    arrivalMidAbs,
+    arrivalUpperAbs,
+    travelMinutesMid,
+    travelMinutesUpper,
+    durationMinutes,
+    closingBufferMinutes,
+    toleranceMinutes,
+  } = params;
 
   const mid = resolveBound(venue, holidays, arrivalMidAbs, travelMinutesMid, durationMinutes, closingBufferMinutes);
   const upper = resolveBound(venue, holidays, arrivalUpperAbs, travelMinutesUpper, durationMinutes, closingBufferMinutes);
