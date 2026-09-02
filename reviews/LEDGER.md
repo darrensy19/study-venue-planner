@@ -21,3 +21,4 @@ event history the sampling audit reads instead.
 | `IMP-003` | 2026-08-31 | implementation | relative_busyness banding and seat_confidence lookup in ranking.js |
 | `IMP-004` | 2026-08-31 | implementation | backup_strength grading and Plan B recalculation in ranking.js |
 | `IMP-005` | 2026-08-31 | implementation | travel-band ("N-Mm") string-to-minutes parser for access[][].band / fallbacks[].travel_band |
+| `ARCH-002` | 2026-09-01 | architecture/high-level | Phase 1 orchestration/UI-shell architecture — fetch layer, venue-source registry, coarsening, refresh orchestration, return-validator bridge, ranking pipeline, HTML generation, frontend shell |

@@ -2056,3 +2056,48 @@ falls back to a generic type description if `JSON.stringify` itself throws — 4
 added (142 total), each confirmed to fail against the pre-correction code before the fix. Round 2
 (`codex_terra`, scoped to the correction delta) approved with no findings. User approved and
 authorized close. Full detail in `reviews/IMP-005.md` and `reviews/IMP-005-gate.md`.
+
+## 2026-09-03 — ARCH-002 closed: Phase 1 orchestration/UI-shell architecture formalized
+
+Formalized the approved Phase 1 architecture into `PLAN.md` and `CLAUDE.md` — design only, no
+production code. Ten areas: the venues/meta merge moved to Python at generation time (`ranking.js`
+does no client-side merge, and an ID mismatch either way is a generation contract failure, with the
+tests moving to `tests/python/`); `data/venue_sources.json` established as the canonical Phase 1
+fetch registry, seeded once from frozen `data/phase0/place_ids.csv`, with four required nonempty
+fields, unique `venue_id`/`place_id`, and exact ID-set agreement with `venues_meta.json` enforced
+before any API call and again at generation; `fetch_hours(source)` / `fetch_busyness(source)`
+corrected to take source records, since the SerpApi endpoint is a *search* on resolved name plus
+address and does not accept a Place ID at all; per-source `ok`/`stale`/`failed` with no fabricated
+data on `failed`; the full coarsening contract; the Node return-validator bridge, argv-only and
+fail-closed on a broken bridge while per-venue `invalid` merely classifies; `refresh.py` as sole
+writer of `data/venues.json` and `web/index.html`, with `make refresh` never committing and not
+exposed until wired; `holidays.json` hand-maintained and failing generation visibly when absent;
+one pure whole-dataset `ranking.js` entry point with an exhaustive ranked/unranked taxonomy and a
+seven-key fallback order; and the frontend/generation constraints plus an eight-step Phase 1
+implementation order carrying no `IMP-###`.
+
+**The coarsening section is where nearly all the review effort went, and the durable lesson is
+epistemic rather than mechanical.** Its prefix check is a *consistency check between two records*,
+not an integrity check on either: two prefixes are equal exactly when their projections
+`(venue_id, day_of_week, hour, outcome)` agree row for row, in order — and that single predicate,
+not any enumeration of cases, is the exhaustive statement of what it can detect. Successive drafts
+each claimed something slightly stronger than the mechanism supports: that any mutation fails
+(coordinated edits pass); that an enumeration was exhaustive; that boundary insertion and deletion
+were harmless (they move the prefix boundary, so the complete output gains or loses a row); that
+complete output could identify *which* visit an added or lost row was (`occurred_at` is discarded,
+so it cannot); and that committed rows carry distinct histogram stamps (they need not — same-run
+coarsening gives identical `histogram_fetched_at`, and same venue/weekday/hour gives identical
+`histogram_busyness`). That last one was reasoned from stamps constructed in a fixture and
+generalized into a claim about the schema, which is circular. Two strengthenings were considered
+and rejected with reasons recorded in `PLAN.md`: a committed per-row digest of the raw `occurred_at`
+(brute-forceable in a public repo, destroying exactly what coarsening protects) and an in-memory
+provenance seam (buys nothing, since the two insertion mechanisms have identical consequence).
+The fixtures now assert only what the committed schema retains, and each passing case asserts its
+complete-output consequence so a Group 2 instance cannot masquerade as Group 1.
+
+Nine review rounds, `codex_sol_high` throughout. Round 1 issued the only four findings ever raised;
+`F03`/`F04` resolved round 2, `F02` round 3, `F01` round 9. Seven of the ten design areas drew no
+finding at any round, and the coarsening *mechanism* — candidate selection, cursor-free
+processed-prefix authority, pre-fetch histogram stamping, atomic replace — was never itself
+challenged; what churned was the accuracy of the document's claims about it. Gate `GATE_PASS`;
+round 9 `APPROVE` with `Could not verify` **None**. Full record: [reviews/ARCH-002.md](reviews/ARCH-002.md).
