@@ -25,3 +25,4 @@ event history the sampling audit reads instead.
 | `IMP-006` | 2026-09-03 | implementation | Phase 1 step 1: venue-source registry + bootstrap, hours parser, fetch_hours |
 | `IMP-007` | 2026-09-03 | implementation | Fix GAP 2: currentOpeningHours decomposition emits a zero-length entry on a period closing exactly at 00:00 |
 | `IMP-008` | 2026-09-03 | implementation | Phase 1 step 2: SerpApi transport/parser and fetch_busyness(source) |
+| `IMP-009` | 2026-09-03 | implementation | Phase 1 step 3: Node return-validator bridge (validateReturnTransport export + subprocess.run bridge) |

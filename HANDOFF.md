@@ -6,21 +6,21 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: `IMP-008`
+- **ID**: `IMP-009`
 - **Work type**: implementation
-- **State**: `completed`
+- **State**: `user_approved`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, medium
-- **Route triggers**: correctness depends on a negative/fail-closed path — the "confirmed absent only after both routes tried" logic, the exact site of three retracted designs in `DECISIONS.md`'s "Popular Times coverage, take two" (`WORKFLOW.md`'s "correctness depends on negative or fail-closed paths" hard trigger)
-- **Baseline commit**: `be3d3c2`; implementation `f0dabe6`
-- **Artifact under review**: `scraper/serpapi.py`, `scraper/busyness.py` (new), `fetch_busyness` in `scraper/fetchers.py`, and their `tests/python/` coverage
-- **Objective**: Phase 1 step 2 (`PLAN.md`, "Phase 1 implementation order") — a reusable SerpApi transport and Popular Times parser under `scraper/`, plus `fetch_busyness(source)` in `scraper/fetchers.py`, mirroring `fetch_hours`'s registry-record-in/data-out/no-file-writes/propagate-failures pattern
-- **Scope exclusions**: `build/refresh.py` orchestration (step 7); the return-validator bridge (step 3); `ranking.js` entry point (step 4); coarsening (step 5); frontend/generator (step 6); no import of or edit to frozen `build/phase0_busyness.py` — read as reference only, per "Phase 0 artifacts stay frozen"
-- **Acceptance criteria**: `fetch_busyness(source)` takes the full `venue_sources.json` record, never a bare Place ID; searches SerpApi on `resolved_name` + `resolved_address`; when the first response's `popular_times` is empty, retries via the `data` parameter built from that response's `data_id` + `gps_coordinates` before accepting absence as confirmed (`PLAN.md`, "Fetch layer and refresh orchestration"); handles both the collapsed `place_results` shape and the `local_results` list shape; extracts a `{weekday: [{hour, busyness}]}` histogram; propagates transport failures (a `SerpApiError` analogous to `PlacesError`) and malformed-candidate failures (missing `data_id`/coordinates) to the caller; writes no file
-- **Required verification**: `.venv/bin/pytest tests/python/` — new fixture tests covering the search-collapse route, the `local_results` route, the data-param retry succeeding after an empty first response, confirmed-absent after both routes return empty, transport failure propagation, and a malformed candidate (no `data_id` or coordinates) failing rather than guessing; `node --test tests/js/*.test.js` as a no-regression check (142 passing, unaffected — Python-only); `git status`/`git diff` confined to `scraper/`, `tests/python/`, `HANDOFF.md`, `reviews/LEDGER.md`
+- **Route triggers**: correctness depends on a negative/fail-closed path — the broken-bridge-vs-malformed-venue distinction (`PLAN.md`, "The return-validator bridge": a nonzero exit, missing Node, non-JSON stdout, or a venue missing its status must be distinguishable from a per-venue `invalid` result, which is not an error) (`WORKFLOW.md`'s "correctness depends on negative or fail-closed paths" hard trigger)
+- **Baseline commit**: `0d5712b`
+- **Artifact under review**: `build/validate_return_transport.mjs` (new), `build/return_validator_bridge.py` (new), `tests/python/test_return_validator_bridge.py` (new)
+- **Objective**: Phase 1 step 3 (`PLAN.md`, "Phase 1 implementation order") — a narrow Node script that imports the already-implemented `validateReturnTransport()` from `web/ranking.js`, reads a `venues_meta.json` path from argv, and writes structured JSON to stdout; plus a Python wrapper that invokes it via `subprocess.run([...])` and distinguishes a per-venue `invalid` result from a broken-bridge failure
+- **Scope exclusions**: `build/refresh.py` orchestration wiring (step 7, not yet built); the `ranking.js` pipeline entry point (step 4); the coarsening stage (step 5); frontend/generator (step 6); no change to `validateReturnTransport()`'s own logic or its existing `tests/js` coverage — settled contract, read-only import
+- **Acceptance criteria**: Node script writes **structured JSON and nothing else** to stdout, reads the metadata path handed to it, and calls `validateReturnTransport()` unmodified; every generated venue receives a status, no default or omission; the bridge never writes `venues_meta.json` or anything else; Python wrapper passes the metadata path as an **argv element**, never `shell=True` or a constructed shell string; a per-venue `invalid` status is a **result** (generation continues); Node missing, a nonzero exit, non-JSON stdout, or a missing per-venue status are each a **broken-bridge failure**, distinguishable from the per-venue case, that a caller can use to stop before the atomic replace (`PLAN.md`, "The return-validator bridge")
+- **Required verification**: `.venv/bin/pytest tests/python/` — new fixture tests covering a real per-venue `invalid` result, each broken-bridge case (Node missing, nonzero exit, non-JSON stdout, a venue omitted from the output), and a round-trip against `data/venues_meta.json`; `node --test tests/js/*.test.js` as a no-regression check (`validateReturnTransport()` itself is unmodified — 142 passing must stay unaffected); `git status`/`git diff` confined to the new bridge script, the Python wrapper, `tests/python/`, `HANDOFF.md`, `reviews/LEDGER.md`
 - **Claude gate result**: `GATE_PASS`
-- **Gate evidence**: `reviews/IMP-008-gate.md`
-- **Review record**: `reviews/IMP-008.md` — round 1 `APPROVE`, no findings
-- **Independent review**: `codex_terra`, medium — 1 round, complete
-- **User decision**: 2026-09-03 — approved, and commit authorized; recorded in `DECISIONS.md`
-- **Next action**: None — terminal. A new task requires a new assignment ID.
+- **Independent review**: `required` — `codex_terra`, medium
+- **Gate evidence**: `reviews/IMP-009-gate.md`
+- **Review record**: `reviews/IMP-009.md` — round 1 `CHANGES_REQUESTED` (`IMP-009-R1-F01`, accepted and corrected), round 2 `APPROVE` (finding `resolved`, no new findings, one non-blocking observation)
+- **User decision**: 2026-09-03 — approved for close.
+- **Next action**: Commit is a separate, unrequested gate — ask the user to authorize it; once authorized, commit scoped to this assignment's paths and mark `IMP-009` `completed`.
