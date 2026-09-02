@@ -100,30 +100,34 @@ record, including two real bugs found and fixed in the spread analysis after an 
 `data/venues_meta.json` carries `venue_type`/`area`/`baseline_seatability` for all 28 — every venue
 has a real assessment (`usually_available`, `mixed`, `dependable`, or `poor`), none left `unknown`.
 
-**Phase 1 is in progress.** `web/ranking.js`'s pure-function core is built and tested (132 tests,
+**Phase 1 is in progress.** `web/ranking.js`'s pure-function core is built and tested (142 tests,
 `node --test tests/js/*.test.js`): hours resolution and feasibility tiers, session-end
-return-transport and `overall_tier`, `relative_busyness` banding and `seat_confidence`, and Plan B
-recalculation with `backup_strength` grading — see `DECISIONS.md`'s `IMP-001` through `IMP-004`
-entries for what each added. Concrete opening steps for what's still open, in order:
+return-transport and `overall_tier`, `relative_busyness` banding and `seat_confidence`, Plan B
+recalculation with `backup_strength` grading, and the `("N-Mm")` travel-band parser — see
+`DECISIONS.md`'s `IMP-001` through `IMP-005` entries for what each added.
 
-1. ~~Resolve the multi-day-period design gap in `resolve_hours`.~~ **Done, 2026-08-29.** Resolving it
-   turned up four more defects in the same hours-ingestion step, and all five are settled together —
-   see `DECISIONS.md`, "Hours ingestion: five defects resolved as one contract". The fetcher now has a
-   written contract to be built against: decompose multi-day periods at ingestion, treat a 24-hour
-   venue as an unbounded period rather than one closing at midnight, read `truncated` as a window
-   edge, compute and validate the seven-day window, and materialise every date in it. No code was
-   written; this was a design decision.
-2. Write the `access[][].band` / `fallbacks[].travel_band` ("N-Mm") → minutes parser. Both
-   `resolveOverallFeasibility` and Plan B's `evaluatePlanBFallback` take pre-resolved travel minutes
-   as a deliberate scope boundary so far — this unblocks running either against real
-   `venues_meta.json` data.
-3. Write `build/refresh.py` and the two real fetchers (`fetch_hours.py`, `fetch_busyness.py`), then
-   `app.js` and `index.template.html` — nothing is runnable end-to-end without this orchestration/UI
-   shell.
+**The Phase 1 orchestration architecture is settled** (`ARCH-002`, closed 2026-09-03). It covers the
+fetch layer and the new `data/venue_sources.json` registry, the coarsening contract, refresh
+orchestration, the Node return-validator bridge, the top-level ranking pipeline entry point, HTML
+generation and the frontend shell — design only, no code. `PLAN.md` is the contract;
+`DECISIONS.md`'s `ARCH-002` entry records the reasoning.
 
-Per `CLAUDE.md`'s workflow rule, step 3 should start with a plan-mode critique of `PLAN.md`'s
-Phase 1 section against the repo as it now stands, run on `opusplan` — not a straight port of the
-Phase 0 probe scripts.
+What is still open is the implementation, in the dependency order `PLAN.md`'s "Phase 1
+implementation order" records:
+
+1. Venue-source registry and bootstrap, plus the hours parser and `fetch_hours`
+2. SerpApi transport and parser, plus `fetch_busyness`
+3. The Node return-validator bridge
+4. The top-level ranking pipeline entry point in `ranking.js`
+5. The coarsening stage
+6. Frontend shell and the fixture-driven HTML generator
+7. Complete refresh orchestration, generation integration, a maintained `holidays.json`, and the
+   `Makefile` target
+8. Live refresh and manual acceptance
+
+Steps 1-6 are testable against fixtures and touch no network; step 7 is where the contract is first
+wired end to end; step 8 is the only step that spends an API call. Separately, `return_transport`
+data is still unfilled across all 28 venues, which step 8's out-of-core-span acceptance case needs.
 
 The probe scripts that produced Phase 0's data:
 
