@@ -106,17 +106,22 @@ return-transport and `overall_tier`, `relative_busyness` banding and `seat_confi
 recalculation with `backup_strength` grading, and the `("N-Mm")` travel-band parser — see
 `DECISIONS.md`'s `IMP-001` through `IMP-005` entries for what each added.
 
+The Python fetch layer has landed too (62 tests, `.venv/bin/pytest tests/python/`): the
+venue-source registry and its bootstrap, the hours parser and `fetch_hours` (`IMP-006`, with the
+GAP 2 zero-length-entry fix in `IMP-007`), and the SerpApi transport/parser and `fetch_busyness`
+(`IMP-008`) — see `DECISIONS.md`'s `IMP-006` through `IMP-008` entries.
+
 **The Phase 1 orchestration architecture is settled** (`ARCH-002`, closed 2026-09-03). It covers the
 fetch layer and the new `data/venue_sources.json` registry, the coarsening contract, refresh
 orchestration, the Node return-validator bridge, the top-level ranking pipeline entry point, HTML
 generation and the frontend shell — design only, no code. `PLAN.md` is the contract;
 `DECISIONS.md`'s `ARCH-002` entry records the reasoning.
 
-What is still open is the implementation, in the dependency order `PLAN.md`'s "Phase 1
-implementation order" records:
+What remains is the rest of the implementation, in the dependency order `PLAN.md`'s "Phase 1
+implementation order" records — steps 1 and 2 are done:
 
-1. Venue-source registry and bootstrap, plus the hours parser and `fetch_hours`
-2. SerpApi transport and parser, plus `fetch_busyness`
+1. ~~Venue-source registry and bootstrap, plus the hours parser and `fetch_hours`~~ — done (`IMP-006`, `IMP-007`)
+2. ~~SerpApi transport and parser, plus `fetch_busyness`~~ — done (`IMP-008`)
 3. The Node return-validator bridge
 4. The top-level ranking pipeline entry point in `ranking.js`
 5. The coarsening stage
