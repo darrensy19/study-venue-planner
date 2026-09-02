@@ -1,0 +1,259 @@
+{
+  "regularOpeningHours": {
+    "openNow": false,
+    "periods": [
+      {
+        "open": {
+          "day": 0,
+          "hour": 8,
+          "minute": 0
+        },
+        "close": {
+          "day": 0,
+          "hour": 22,
+          "minute": 0
+        }
+      },
+      {
+        "open": {
+          "day": 1,
+          "hour": 8,
+          "minute": 0
+        },
+        "close": {
+          "day": 1,
+          "hour": 22,
+          "minute": 0
+        }
+      },
+      {
+        "open": {
+          "day": 2,
+          "hour": 8,
+          "minute": 0
+        },
+        "close": {
+          "day": 2,
+          "hour": 22,
+          "minute": 0
+        }
+      },
+      {
+        "open": {
+          "day": 3,
+          "hour": 8,
+          "minute": 0
+        },
+        "close": {
+          "day": 3,
+          "hour": 22,
+          "minute": 0
+        }
+      },
+      {
+        "open": {
+          "day": 4,
+          "hour": 8,
+          "minute": 0
+        },
+        "close": {
+          "day": 4,
+          "hour": 22,
+          "minute": 0
+        }
+      },
+      {
+        "open": {
+          "day": 5,
+          "hour": 8,
+          "minute": 0
+        },
+        "close": {
+          "day": 5,
+          "hour": 22,
+          "minute": 0
+        }
+      },
+      {
+        "open": {
+          "day": 6,
+          "hour": 8,
+          "minute": 0
+        },
+        "close": {
+          "day": 6,
+          "hour": 22,
+          "minute": 0
+        }
+      }
+    ],
+    "weekdayDescriptions": [
+      "Monday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Tuesday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Wednesday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Thursday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Friday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Saturday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Sunday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM"
+    ],
+    "nextOpenTime": "2026-08-29T00:00:00Z"
+  },
+  "currentOpeningHours": {
+    "openNow": false,
+    "periods": [
+      {
+        "open": {
+          "day": 0,
+          "hour": 8,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 8,
+            "day": 30
+          }
+        },
+        "close": {
+          "day": 0,
+          "hour": 22,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 8,
+            "day": 30
+          }
+        }
+      },
+      {
+        "open": {
+          "day": 1,
+          "hour": 8,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 8,
+            "day": 31
+          }
+        },
+        "close": {
+          "day": 1,
+          "hour": 22,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 8,
+            "day": 31
+          }
+        }
+      },
+      {
+        "open": {
+          "day": 3,
+          "hour": 8,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 9,
+            "day": 2
+          }
+        },
+        "close": {
+          "day": 3,
+          "hour": 22,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 9,
+            "day": 2
+          }
+        }
+      },
+      {
+        "open": {
+          "day": 4,
+          "hour": 8,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 9,
+            "day": 3
+          }
+        },
+        "close": {
+          "day": 4,
+          "hour": 22,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 9,
+            "day": 3
+          }
+        }
+      },
+      {
+        "open": {
+          "day": 5,
+          "hour": 8,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 9,
+            "day": 4
+          }
+        },
+        "close": {
+          "day": 5,
+          "hour": 22,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 9,
+            "day": 4
+          }
+        }
+      },
+      {
+        "open": {
+          "day": 6,
+          "hour": 8,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 8,
+            "day": 29
+          }
+        },
+        "close": {
+          "day": 6,
+          "hour": 22,
+          "minute": 0,
+          "date": {
+            "year": 2026,
+            "month": 8,
+            "day": 29
+          }
+        }
+      }
+    ],
+    "weekdayDescriptions": [
+      "Monday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Tuesday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Wednesday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Thursday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Friday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Saturday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM",
+      "Sunday: 8:00\u202fAM\u2009\u2013\u200910:00\u202fPM"
+    ],
+    "nextOpenTime": "2026-08-29T00:00:00Z",
+    "specialDays": [
+      {
+        "date": {
+          "year": 2026,
+          "month": 9,
+          "day": 1
+        },
+        "closed": true
+      }
+    ]
+  },
+  "_synthetic": "SYNTHETIC FIXTURE \u2014 no saved Phase 0 payload contains specialDays; built by hand to exercise the explicit-closure path."
+}

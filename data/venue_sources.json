@@ -1,0 +1,172 @@
+{
+  "venues": [
+    {
+      "venue_id": "starbucks-centrepoint",
+      "place_id": "ChIJRZ1c0JYZ2jERZi1GJIoRVy0",
+      "resolved_name": "Starbucks Centrepoint",
+      "resolved_address": "176 Orchard Rd, #01-41/42 Centrepoint, Singapore 238843"
+    },
+    {
+      "venue_id": "starbucks-singhealth-tower",
+      "place_id": "ChIJdz_uG8MZ2jERWgyvDAP7F60",
+      "resolved_name": "Starbucks SingHealth Tower",
+      "resolved_address": "10 Hospital Blvd, #01-02 SingHealth Tower, Singapore 168582"
+    },
+    {
+      "venue_id": "starbucks-wisma-atria",
+      "place_id": "ChIJkQL5B5IZ2jER520GahisXVQ",
+      "resolved_name": "Starbucks Wisma Atria",
+      "resolved_address": "435 Orchard Rd, #01-34 to #01-36 Wisma Atria, Singapore 238877"
+    },
+    {
+      "venue_id": "starbucks-utown",
+      "place_id": "ChIJ3SWtPfUa2jERQaXuDgcJ4uc",
+      "resolved_name": "Starbucks",
+      "resolved_address": "8 College Ave W, B1-01, Singapore 138608"
+    },
+    {
+      "venue_id": "starbucks-chinatown-food-street",
+      "place_id": "ChIJt5nUihUZ2jERPTdMOfNKjZc",
+      "resolved_name": "Starbucks",
+      "resolved_address": "37 Smith St, #01-01 & #02-01, Singapore 058950"
+    },
+    {
+      "venue_id": "starbucks-fusionopolis",
+      "place_id": "ChIJg2RzREUa2jERTWEw-CdqYP0",
+      "resolved_name": "Starbucks - Fusionopolis",
+      "resolved_address": "1 Fusionopolis Wy, #01-07 / #02-14, Singapore 138632"
+    },
+    {
+      "venue_id": "starbucks-rochester-park",
+      "place_id": "ChIJTyS910Ia2jERCTho_ldH97E",
+      "resolved_name": "Starbucks Rochester Park",
+      "resolved_address": "37 Rochester Dr, Singapore 138640"
+    },
+    {
+      "venue_id": "starbucks-west-mall",
+      "place_id": "ChIJd2Ve700R2jERIK2KnTMT4C8",
+      "resolved_name": "Starbucks - West Mall",
+      "resolved_address": "1 Bukit Batok Central Link, #01-32 West Mall, Singapore 658713"
+    },
+    {
+      "venue_id": "starbucks-hillv2",
+      "place_id": "ChIJ9XU8l1IQ2jERZFVUmQayS6A",
+      "resolved_name": "Starbucks - HillV2",
+      "resolved_address": "4 Hillview Rise, #01-05 HillV2, Singapore 667979"
+    },
+    {
+      "venue_id": "starbucks-hometeamns-bukit-batok",
+      "place_id": "ChIJ_8i9xA4R2jERt6f-QY9hHWU",
+      "resolved_name": "Starbucks HomeTeamNS Bukit Batok",
+      "resolved_address": "2 Bukit Batok West Ave 7 01-01/02/03 HomeTeamNS, 2 Bukit Batok West Ave 7, Clubhouse, Singapore 659003"
+    },
+    {
+      "venue_id": "starbucks-united-square",
+      "place_id": "ChIJ79DF5-cZ2jERF3Y7mXwGcpc",
+      "resolved_name": "Starbucks United Square",
+      "resolved_address": "101 Thomson Rd, #01-01 United Square, Singapore 307591"
+    },
+    {
+      "venue_id": "starbucks-tekka-place",
+      "place_id": "ChIJG_j_BI0Z2jER6Q9Sl7nEhaY",
+      "resolved_name": "Starbucks Tekka Place",
+      "resolved_address": "2 Serangoon Rd, #01-06/07/08/29 Tekka Place, Singapore 218227"
+    },
+    {
+      "venue_id": "starbucks-the-central",
+      "place_id": "ChIJt7a1YKgZ2jERzg8I3Z03fag",
+      "resolved_name": "Starbucks",
+      "resolved_address": "6 Eu Tong Sen St, #01-29 The Central, Singapore 059817"
+    },
+    {
+      "venue_id": "starbucks-valley-point",
+      "place_id": "ChIJHao5Q4EZ2jERZ2a53B7V0wI",
+      "resolved_name": "Starbucks Valley Point",
+      "resolved_address": "491 River Valley Rd, #01 - 16 Valley Point Shopping Centre, Singapore 248371"
+    },
+    {
+      "venue_id": "starbucks-ue-square",
+      "place_id": "ChIJRcgWPJ8Z2jER0csaY54NMQ0",
+      "resolved_name": "Starbucks UE Square",
+      "resolved_address": "83 Clemenceau Ave, #01-31 UE Square, Singapore 239918"
+    },
+    {
+      "venue_id": "starbucks-the-cathay",
+      "place_id": "ChIJCwc9Ib0Z2jERoAUtX6VD_u4",
+      "resolved_name": "Starbucks The Cathay",
+      "resolved_address": "2 Handy Rd, #01-01 The Cathay, Singapore 229233"
+    },
+    {
+      "venue_id": "starbucks-one-holland-village",
+      "place_id": "ChIJXV4K9bgb2jERnyYM2k6rii4",
+      "resolved_name": "Starbucks - One Holland Village",
+      "resolved_address": "7 Holland Vlg Wy, #01-56 One, Singapore 275748"
+    },
+    {
+      "venue_id": "starbucks-jurong-point",
+      "place_id": "ChIJmRnrx-wP2jERJn7vciQERpo",
+      "resolved_name": "Starbucks - Jurong Point",
+      "resolved_address": "63 Jurong West Central 3, #03-52/52A Jurong Point, Singapore 648331"
+    },
+    {
+      "venue_id": "starbucks-hillion-mall",
+      "place_id": "ChIJoxiTV7sR2jERP_IEEklCR1s",
+      "resolved_name": "Starbucks Hillion Mall",
+      "resolved_address": "17 Petir Rd, B1-28/29/30, Singapore 678278"
+    },
+    {
+      "venue_id": "starbucks-chinatown-point",
+      "place_id": "ChIJGbsjt3UZ2jERV1PZEcbDcnQ",
+      "resolved_name": "Starbucks",
+      "resolved_address": "133 New Bridge Rd, #01-08, Singapore 059413"
+    },
+    {
+      "venue_id": "starbucks-ion-orchard",
+      "place_id": "ChIJyRIV6Y0Z2jER4IB6WdnCOTo",
+      "resolved_name": "Starbucks ION Orchard",
+      "resolved_address": "2 Orchard Turn, #B3 - 59, Singapore 238801"
+    },
+    {
+      "venue_id": "starbucks-delfi-orchard",
+      "place_id": "ChIJvzeLuYwZ2jERj4-DCD4SoSE",
+      "resolved_name": "Starbucks Delfi Orchard",
+      "resolved_address": "402 Orchard Rd, #01-01, Singapore 238876"
+    },
+    {
+      "venue_id": "starbucks-orchard-gateway",
+      "place_id": "ChIJMVtx1ZYZ2jER3n2e_ke1RH8",
+      "resolved_name": "Starbucks Orchard Gateway",
+      "resolved_address": "277 Orchard Rd, B2-04 Orchard, Gateway 238858"
+    },
+    {
+      "venue_id": "starbucks-takashimaya",
+      "place_id": "ChIJSdO1rRsZ2jER3iQFjJKZET8",
+      "resolved_name": "Starbucks Takashimaya",
+      "resolved_address": "391A Orchard Road, #B1-01,Takashimaya Shopping Centre, Civic Plaza, Singapore 238873"
+    },
+    {
+      "venue_id": "baker-cook-eng-kong-park",
+      "place_id": "ChIJv-E7qyUR2jERayzYYA22XYo",
+      "resolved_name": "Baker & Cook - Eng Kong Park",
+      "resolved_address": "21 Eng Kong Ter, Singapore 598993"
+    },
+    {
+      "venue_id": "coffee-bean-west-mall",
+      "place_id": "ChIJsaG12D4Q2jEREGLtQIJZepU",
+      "resolved_name": "The Coffee Bean & Tea Leaf",
+      "resolved_address": "1 Bukit Batok Central, #01-09 West Mall, Singapore 658713"
+    },
+    {
+      "venue_id": "coffee-bean-imm",
+      "place_id": "ChIJva6Ydg4Q2jERHRL1rllbVQ4",
+      "resolved_name": "The Coffee Bean & Tea Leaf",
+      "resolved_address": "2 Jurong East Street 21, #01-126 IMM Building, Singapore 609601"
+    },
+    {
+      "venue_id": "coffee-bean-balmoral-plaza",
+      "place_id": "ChIJkU7EIY8Z2jERDAOGHbODWgU",
+      "resolved_name": "The Coffee Bean & Tea Leaf",
+      "resolved_address": "271 Bukit Timah Rd, #01-07 Balmoral Plaza, Singapore 259708"
+    }
+  ]
+}

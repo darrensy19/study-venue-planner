@@ -2057,6 +2057,32 @@ added (142 total), each confirmed to fail against the pre-correction code before
 (`codex_terra`, scoped to the correction delta) approved with no findings. User approved and
 authorized close. Full detail in `reviews/IMP-005.md` and `reviews/IMP-005-gate.md`.
 
+## 2026-09-03 — IMP-006 closed: venue-source registry + bootstrap, hours parser, `fetch_hours` implemented
+
+Implemented Phase 1 implementation-order step 1 per `ARCH-002`'s settled design. `build/bootstrap_venue_sources.py`
+seeds `data/venue_sources.json` once from `data/phase0/place_ids.csv`'s 28 `confident` rows, refusing to run
+(writing nothing) if the registry already exists — a true one-time step, since the registry is hand-maintained
+afterward. `scraper/venue_sources.py` holds the reusable precondition check (all four fields nonempty, both
+ID sets unique, exact `venue_id` agreement with `venues_meta.json`), run before any API call. `scraper/hours.py`
+implements the full hours-ingestion contract: `regularOpeningHours` decomposition at `day_gap >= 2` (0/1 left to
+the runtime one-day lookback), `currentOpeningHours` decomposition at every `day_gap >= 1` (a distinct, forced
+threshold — current-authority dates never get a runtime lookback, so `current_hours_by_date` must be
+self-contained per date; documented in the module docstring and independently confirmed by the pre-gate and
+`codex_terra`), the computed-and-validated seven-day window, truncation handling with `continues_beyond_window`
+propagation, and the materialised `current_hours_by_date` map. `scraper/fetchers.py` adds `fetch_hours(source,
+api_key)`, taking a full registry record and propagating transport/parse failures without writing any file.
+
+Pre-gate ran twice: invocation 1 `GATE_FAIL` — the required-verification line named cross-midnight, split-period,
+missing-field, and `day_gap` 2-and-6 test categories that had no test at all; invocation 2 `GATE_PASS` after 8
+tests were added closing every named gap. Round 1 (`codex_terra`) found one Medium finding —
+`IMP-006-R1-F01`: a truncated endpoint's boundary was validated by date only, then its clock value was silently
+coerced (open forced to 0, close forced to 1440) rather than checked against the contract's 00:00 / 23:59
+requirement, so a malformed source clock at an otherwise-valid boundary date fabricated coverage instead of
+failing loudly. Corrected by validating the clock alongside the date on both boundaries, raising rather than
+coercing on a mismatch; 2 new regression tests added (47 total). Round 2 (`codex_terra`, correction re-review)
+approved with the finding resolved and no new findings. User approved and authorized close. Full detail in
+`reviews/IMP-006.md` and `reviews/IMP-006-gate.md`.
+
 ## 2026-09-03 — ARCH-002 closed: Phase 1 orchestration/UI-shell architecture formalized
 
 Formalized the approved Phase 1 architecture into `PLAN.md` and `CLAUDE.md` — design only, no
