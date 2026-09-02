@@ -188,12 +188,21 @@ def _decompose_current_period(period, window_start, window_end):
 
     entries = []
     for offset in range(span_days + 1):
+        entry_open = open_minutes if offset == 0 else 0
+        entry_close = real_close_abs - offset * 1440
+        if entry_close == entry_open:
+            # A close landing exactly at this date's midnight (entry_close == 0,
+            # since entry_open is 0 on every non-anchor day) reaches this date
+            # without touching it: the half-open [open, close) interval is
+            # empty here. Emitting it would fabricate a zero-length period
+            # (BL-001 / GAP 2) instead of correctly contributing nothing.
+            # Deliberately exact equality, not <=: an entry_close < entry_open
+            # is a different, out-of-scope malformed shape (close before open
+            # on the anchor day) and must fall through unchanged, not be
+            # silently swallowed here.
+            continue
         this_date = open_date + timedelta(days=offset)
-        entry = {
-            "open": open_minutes if offset == 0 else 0,
-            "close": real_close_abs - offset * 1440,
-            "always_open": False,
-        }
+        entry = {"open": entry_open, "close": entry_close, "always_open": False}
         if close_truncated:
             # Propagates to every entry of the chain, not just the last —
             # each one is a window artifact, not a real closing event.

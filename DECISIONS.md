@@ -2083,6 +2083,28 @@ coercing on a mismatch; 2 new regression tests added (47 total). Round 2 (`codex
 approved with the finding resolved and no new findings. User approved and authorized close. Full detail in
 `reviews/IMP-006.md` and `reviews/IMP-006-gate.md`.
 
+## 2026-09-03 — IMP-007 closed: fixed GAP 2 (`BL-001`) — a `currentOpeningHours` period closing exactly at 00:00 no longer fabricates a zero-length entry
+
+Fixed `BACKLOG.md`'s `BL-001`, found during this session's own `/close` review of `IMP-006` after it
+had already closed: `scraper/hours.py`'s `_decompose_current_period` emitted a spurious zero-length
+`{open: 0, close: 0}` entry on the calendar date a period's close merely *reaches* at exactly 00:00
+(e.g. `08-29 07:30 → 08-30 00:00`), instead of correctly contributing no entry to that date at all —
+the half-open `[open, close)` interval never touches it. Fixed by skipping an emitted entry whenever
+its computed `open == close` for that offset, scoped precisely to zero length: an unrelated,
+out-of-scope malformed shape (a same-day period closing *before* it opens) is deliberately left to
+fall through unchanged rather than being silently swallowed by the same guard. 3 new regression tests
+(a `day_gap == 1` midnight-close case, a `day_gap >= 2` span where only the trailing zero-length entry
+is skipped, and a non-midnight control) — 50 Python tests total, all 47 pre-existing tests unmodified.
+`node --test` unaffected (142 passing) since the fix is Python-only.
+
+Pre-gate `GATE_PASS` on the first invocation. Round 1 (`codex_terra`) `APPROVE`, no findings — the
+reviewer independently reconstructed both the midnight-close reproduction and the close-before-open
+control, and confirmed no other call site or test relied on the old zero-length-entry behaviour. User
+approved and authorized close. GAP 1 (the other half of the same source finding) required no fix — it
+matched `IMP-006`'s independently-derived `day_gap >= 1` current-hours decomposition design exactly.
+Full detail in `reviews/IMP-007.md` and `reviews/IMP-007-gate.md`; the discovery process is recorded
+in project memory (`project_study_venue_planner_imp_006_hours_registry`).
+
 ## 2026-09-03 — ARCH-002 closed: Phase 1 orchestration/UI-shell architecture formalized
 
 Formalized the approved Phase 1 architecture into `PLAN.md` and `CLAUDE.md` — design only, no

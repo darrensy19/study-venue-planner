@@ -337,3 +337,69 @@ def test_current_missing_close_date_fails_validation():
     del first["close"]["date"]
     with pytest.raises(HoursValidationError, match="close.date"):
         parse_hours(payload, REQUEST_DATE)
+
+
+def _replace_period_for_date(payload, target_date, new_period):
+    periods = payload["currentOpeningHours"]["periods"]
+    payload["currentOpeningHours"]["periods"] = [
+        p for p in periods if p["open"]["date"] != target_date
+    ] + [new_period]
+    return payload
+
+
+def test_current_period_closing_exactly_at_midnight_emits_no_entry_on_next_date():
+    """BL-001 / GAP 2: 08-29 07:30 -> 08-30 00:00 (day_gap=1, close exactly at
+    midnight) must produce exactly one entry, anchored to 08-29 — never a
+    spurious zero-length {open:0, close:0} entry on 08-30. The half-open
+    [open, close) interval does not touch a date the close merely reaches."""
+    payload = load_fixture("ordinary_venue")
+    _replace_period_for_date(
+        payload,
+        {"year": 2026, "month": 8, "day": 29},
+        {
+            "open": {"day": 6, "hour": 7, "minute": 30, "date": {"year": 2026, "month": 8, "day": 29}},
+            "close": {"day": 0, "hour": 0, "minute": 0, "date": {"year": 2026, "month": 8, "day": 30}},
+        },
+    )
+    result = parse_hours(payload, REQUEST_DATE)
+    assert result["current_hours_by_date"]["2026-08-29"]["periods"] == [
+        {"open": 450, "close": 1440, "always_open": False}
+    ]
+    # 08-30 keeps only its own ordinary period from the base fixture — no
+    # extra {open: 0, close: 0} contributed by the 08-29 span.
+    assert result["current_hours_by_date"]["2026-08-30"]["periods"] == [
+        {"open": 480, "close": 1320, "always_open": False}
+    ]
+
+
+def test_current_multiday_span_closing_exactly_at_midnight_skips_only_the_final_entry():
+    """A day_gap>=2 span whose close also lands exactly at midnight: every
+    interior day still gets its self-contained entry, and only the final
+    (zero-length) date is skipped — not the whole decomposition."""
+    payload = load_fixture("ordinary_venue")
+    _replace_period_for_date(
+        payload,
+        {"year": 2026, "month": 8, "day": 29},
+        {
+            "open": {"day": 6, "hour": 7, "minute": 30, "date": {"year": 2026, "month": 8, "day": 29}},
+            "close": {"day": 1, "hour": 0, "minute": 0, "date": {"year": 2026, "month": 8, "day": 31}},
+        },
+    )
+    result = parse_hours(payload, REQUEST_DATE)
+    by_date = result["current_hours_by_date"]
+    assert by_date["2026-08-29"]["periods"] == [{"open": 450, "close": 2880, "always_open": False}]
+    assert by_date["2026-08-30"]["periods"] == [
+        {"open": 480, "close": 1320, "always_open": False},  # the date's own ordinary period
+        {"open": 0, "close": 1440, "always_open": False},  # the interior span-in entry
+    ]
+    # 08-31's own ordinary period only — no trailing {open: 0, close: 0}.
+    assert by_date["2026-08-31"]["periods"] == [{"open": 480, "close": 1320, "always_open": False}]
+
+
+def test_current_period_not_closing_at_midnight_is_unaffected():
+    """Control: an ordinary period whose close is not exactly midnight must
+    still produce its normal entry — the fix must not skip anything else."""
+    result = parse_hours(load_fixture("ordinary_venue"), REQUEST_DATE)
+    assert result["current_hours_by_date"]["2026-08-29"]["periods"] == [
+        {"open": 480, "close": 1320, "always_open": False}
+    ]

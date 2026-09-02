@@ -23,3 +23,4 @@ event history the sampling audit reads instead.
 | `IMP-005` | 2026-08-31 | implementation | travel-band ("N-Mm") string-to-minutes parser for access[][].band / fallbacks[].travel_band |
 | `ARCH-002` | 2026-09-01 | architecture/high-level | Phase 1 orchestration/UI-shell architecture — fetch layer, venue-source registry, coarsening, refresh orchestration, return-validator bridge, ranking pipeline, HTML generation, frontend shell |
 | `IMP-006` | 2026-09-03 | implementation | Phase 1 step 1: venue-source registry + bootstrap, hours parser, fetch_hours |
+| `IMP-007` | 2026-09-03 | implementation | Fix GAP 2: currentOpeningHours decomposition emits a zero-length entry on a period closing exactly at 00:00 |
