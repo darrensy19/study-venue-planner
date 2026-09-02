@@ -1,0 +1,9 @@
+{
+  "_synthetic": "hand-built — a local_results candidate missing data_id/gps_coordinates has not been observed in real Phase 0 payloads; exercises the malformed-candidate failure path",
+  "local_results": [
+    {
+      "title": "Example Cafe With No Coordinates",
+      "place_id": "ChIJexampleplaceid00000000001"
+    }
+  ]
+}

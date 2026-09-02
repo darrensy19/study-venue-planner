@@ -1,0 +1,14 @@
+{
+  "_synthetic": "hand-built — no saved Phase 0 payload ever took the local_results branch; every real query (venue name + exact address) collapsed to place_results (DECISIONS.md, 'Popular Times coverage, take two')",
+  "local_results": [
+    {
+      "title": "Example Cafe",
+      "place_id": "ChIJexampleplaceid00000000000",
+      "data_id": "0x0000000000000000:0x0000000000000000",
+      "gps_coordinates": {
+        "latitude": 1.3,
+        "longitude": 103.8
+      }
+    }
+  ]
+}

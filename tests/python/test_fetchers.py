@@ -1,7 +1,9 @@
-"""scraper/fetchers.py — fetch_hours, against fixture responses only.
+"""scraper/fetchers.py — fetch_hours and fetch_busyness, against fixture
+responses only.
 
-`place_details` is monkeypatched in every test here; nothing touches the
-network, per HANDOFF.md's required verification for IMP-006.
+`place_details` / `search_maps` / `place_by_data` are monkeypatched in
+every test here; nothing touches the network, per HANDOFF.md's required
+verification for IMP-006 and IMP-008.
 """
 
 import json
@@ -11,8 +13,10 @@ from pathlib import Path
 import pytest
 
 import scraper.fetchers as fetchers
+from scraper.busyness import BusynessValidationError
 from scraper.hours import HoursValidationError
 from scraper.places import PlacesError
+from scraper.serpapi import SerpApiError
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -81,4 +85,142 @@ def test_fetch_hours_propagates_parse_failure_and_writes_nothing(monkeypatch, tm
     files_before = list(tmp_path.iterdir())
     with pytest.raises(HoursValidationError, match="malformed"):
         fetchers.fetch_hours(SOURCE, "fake-api-key", request_date=date(2026, 8, 29))
+    assert list(tmp_path.iterdir()) == files_before
+
+
+def test_fetch_busyness_returns_histogram_when_search_collapses_with_data(monkeypatch):
+    seen_queries = []
+
+    def fake_search_maps(query_text, api_key):
+        seen_queries.append((query_text, api_key))
+        return load_fixture("serpapi_search_collapsed_with_data")
+
+    def fail_place_by_data(data_param, api_key):
+        raise AssertionError("the data-param retry must not be spent when the first response has data")
+
+    monkeypatch.setattr(fetchers, "search_maps", fake_search_maps)
+    monkeypatch.setattr(fetchers, "place_by_data", fail_place_by_data)
+
+    result = fetchers.fetch_busyness(SOURCE, "fake-api-key")
+
+    assert seen_queries == [
+        ("Starbucks Centrepoint, 176 Orchard Rd, Singapore 238843", "fake-api-key")
+    ]
+    assert result == {
+        "mon": [
+            {"hour": 12, "busyness": 80},
+            {"hour": 13, "busyness": 82},
+            {"hour": 14, "busyness": 90},
+            {"hour": 15, "busyness": 67},
+        ],
+        "tue": [
+            {"hour": 12, "busyness": 65},
+            {"hour": 13, "busyness": 67},
+            {"hour": 14, "busyness": 71},
+            {"hour": 15, "busyness": 71},
+        ],
+    }
+
+
+def test_fetch_busyness_retries_via_data_param_after_empty_first_response(monkeypatch):
+    calls = []
+
+    def fake_search_maps(query_text, api_key):
+        calls.append("search")
+        return load_fixture("serpapi_search_collapsed_empty")
+
+    def fake_place_by_data(data_param, api_key):
+        calls.append("data")
+        assert data_param.startswith("!4m5!3m4!1s")
+        return load_fixture("serpapi_data_retry_found")
+
+    monkeypatch.setattr(fetchers, "search_maps", fake_search_maps)
+    monkeypatch.setattr(fetchers, "place_by_data", fake_place_by_data)
+
+    result = fetchers.fetch_busyness(SOURCE, "fake-api-key")
+
+    assert calls == ["search", "data"]
+    assert result != {}
+
+
+def test_fetch_busyness_confirmed_absent_only_after_both_routes_empty(monkeypatch):
+    calls = []
+
+    def fake_search_maps(query_text, api_key):
+        calls.append("search")
+        return load_fixture("serpapi_search_collapsed_confirmed_absent")
+
+    def fake_place_by_data(data_param, api_key):
+        calls.append("data")
+        return load_fixture("serpapi_data_retry_confirmed_absent")
+
+    monkeypatch.setattr(fetchers, "search_maps", fake_search_maps)
+    monkeypatch.setattr(fetchers, "place_by_data", fake_place_by_data)
+
+    result = fetchers.fetch_busyness(SOURCE, "fake-api-key")
+
+    assert calls == ["search", "data"]
+    assert result == {}
+
+
+def test_fetch_busyness_follows_local_results_candidate_via_data_param(monkeypatch):
+    """A synthetic case (real queries always collapse) — the local_results
+    branch always spends the data-param retry, since no histogram can be
+    read off the search response itself."""
+    calls = []
+
+    def fake_search_maps(query_text, api_key):
+        calls.append("search")
+        return load_fixture("serpapi_local_results_synthetic")
+
+    def fake_place_by_data(data_param, api_key):
+        calls.append("data")
+        assert "0x0000000000000000" in data_param
+        return load_fixture("serpapi_data_retry_found")
+
+    monkeypatch.setattr(fetchers, "search_maps", fake_search_maps)
+    monkeypatch.setattr(fetchers, "place_by_data", fake_place_by_data)
+
+    result = fetchers.fetch_busyness(SOURCE, "fake-api-key")
+
+    assert calls == ["search", "data"]
+    assert result != {}
+
+
+def test_fetch_busyness_raises_on_no_search_match(monkeypatch):
+    monkeypatch.setattr(
+        fetchers, "search_maps", lambda q, k: load_fixture("serpapi_no_match_synthetic")
+    )
+    monkeypatch.setattr(
+        fetchers, "place_by_data", lambda d, k: (_ for _ in ()).throw(AssertionError("unreachable"))
+    )
+
+    with pytest.raises(BusynessValidationError, match="no search match"):
+        fetchers.fetch_busyness(SOURCE, "fake-api-key")
+
+
+def test_fetch_busyness_raises_on_candidate_missing_data_id_or_coordinates(monkeypatch):
+    monkeypatch.setattr(
+        fetchers,
+        "search_maps",
+        lambda q, k: load_fixture("serpapi_local_results_missing_fields_synthetic"),
+    )
+    monkeypatch.setattr(
+        fetchers, "place_by_data", lambda d, k: (_ for _ in ()).throw(AssertionError("unreachable"))
+    )
+
+    with pytest.raises(BusynessValidationError, match="missing data_id"):
+        fetchers.fetch_busyness(SOURCE, "fake-api-key")
+
+
+def test_fetch_busyness_propagates_transport_failure_and_writes_nothing(monkeypatch, tmp_path):
+    def failing_search_maps(query_text, api_key):
+        raise SerpApiError("SerpApi returned 500", status=500, body="server error")
+
+    monkeypatch.setattr(fetchers, "search_maps", failing_search_maps)
+
+    monkeypatch.chdir(tmp_path)
+    files_before = list(tmp_path.iterdir())
+    with pytest.raises(SerpApiError):
+        fetchers.fetch_busyness(SOURCE, "fake-api-key")
     assert list(tmp_path.iterdir()) == files_before

@@ -1,0 +1,59 @@
+{
+  "place_results": {
+    "title": "Starbucks Centrepoint",
+    "place_id": "ChIJRZ1c0JYZ2jERZi1GJIoRVy0",
+    "data_id": "0x31da1996d05c9d45:0x2d57118a24462d66",
+    "gps_coordinates": {
+      "latitude": 1.3017641,
+      "longitude": 103.8397677
+    },
+    "popular_times": {
+      "graph_results": {
+        "monday": [
+          {
+            "time": "12 PM",
+            "info": "Usually a little busy",
+            "busyness_score": 80
+          },
+          {
+            "time": "1 PM",
+            "info": "Usually as busy as it gets",
+            "busyness_score": 82
+          },
+          {
+            "time": "2 PM",
+            "info": "Usually as busy as it gets",
+            "busyness_score": 90
+          },
+          {
+            "time": "3 PM",
+            "info": "Usually a little busy",
+            "busyness_score": 67
+          }
+        ],
+        "tuesday": [
+          {
+            "time": "12 PM",
+            "info": "Usually a little busy",
+            "busyness_score": 65
+          },
+          {
+            "time": "1 PM",
+            "info": "Usually a little busy",
+            "busyness_score": 67
+          },
+          {
+            "time": "2 PM",
+            "info": "Usually a little busy",
+            "busyness_score": 71
+          },
+          {
+            "time": "3 PM",
+            "info": "Usually a little busy",
+            "busyness_score": 71
+          }
+        ]
+      }
+    }
+  }
+}
