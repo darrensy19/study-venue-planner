@@ -8,11 +8,11 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 - **ID**: `IMP-009`
 - **Work type**: implementation
-- **State**: `user_approved`
+- **State**: `completed`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, medium
 - **Route triggers**: correctness depends on a negative/fail-closed path — the broken-bridge-vs-malformed-venue distinction (`PLAN.md`, "The return-validator bridge": a nonzero exit, missing Node, non-JSON stdout, or a venue missing its status must be distinguishable from a per-venue `invalid` result, which is not an error) (`WORKFLOW.md`'s "correctness depends on negative or fail-closed paths" hard trigger)
-- **Baseline commit**: `0d5712b`
+- **Baseline commit**: `0d5712b`; implementation `112d245`
 - **Artifact under review**: `build/validate_return_transport.mjs` (new), `build/return_validator_bridge.py` (new), `tests/python/test_return_validator_bridge.py` (new)
 - **Objective**: Phase 1 step 3 (`PLAN.md`, "Phase 1 implementation order") — a narrow Node script that imports the already-implemented `validateReturnTransport()` from `web/ranking.js`, reads a `venues_meta.json` path from argv, and writes structured JSON to stdout; plus a Python wrapper that invokes it via `subprocess.run([...])` and distinguishes a per-venue `invalid` result from a broken-bridge failure
 - **Scope exclusions**: `build/refresh.py` orchestration wiring (step 7, not yet built); the `ranking.js` pipeline entry point (step 4); the coarsening stage (step 5); frontend/generator (step 6); no change to `validateReturnTransport()`'s own logic or its existing `tests/js` coverage — settled contract, read-only import
@@ -23,4 +23,4 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Gate evidence**: `reviews/IMP-009-gate.md`
 - **Review record**: `reviews/IMP-009.md` — round 1 `CHANGES_REQUESTED` (`IMP-009-R1-F01`, accepted and corrected), round 2 `APPROVE` (finding `resolved`, no new findings, one non-blocking observation)
 - **User decision**: 2026-09-03 — approved for close.
-- **Next action**: Commit is a separate, unrequested gate — ask the user to authorize it; once authorized, commit scoped to this assignment's paths and mark `IMP-009` `completed`.
+- **Next action**: None — terminal. A new task requires a new assignment ID.

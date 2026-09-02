@@ -2173,3 +2173,29 @@ Pre-gate `GATE_PASS` on the first invocation, brief generated mechanically via
 traced the same search/retry sequence against `PLAN.md` and `DECISIONS.md`, confirmed all fail-closed
 paths, and reran both test suites. User approved and authorized close. Full detail in
 `reviews/IMP-008.md` and `reviews/IMP-008-gate.md`.
+
+## 2026-09-03 — IMP-009 closed: Node return-validator bridge implemented
+
+Implemented Phase 1 implementation-order step 3: `build/validate_return_transport.mjs` (a narrow
+Node script that imports the already-implemented `validateReturnTransport()` from `web/ranking.js`,
+reads a `venues_meta.json` path from argv, and writes structured JSON and nothing else to stdout) and
+`build/return_validator_bridge.py` (the Python side — `subprocess.run` with the metadata path as an
+argv element, never `shell=True`). `validateReturnTransport()` itself was already built as part of
+`IMP-002`'s return-transport work and is unmodified; this assignment was narrower than "the
+return-validator bridge" sounds — just the CLI wrapper and the Python caller around an existing
+implementation. Distinguishes a per-venue `invalid` result (ordinary data, generation continues) from
+a broken bridge — Node missing, a nonzero exit, non-JSON stdout, or a per-venue status missing —
+which raises `BridgeError`, the signal a future `build/refresh.py` (step 7, not yet built) can use to
+stop before the atomic replace.
+
+Round 1 (`codex_terra`) `CHANGES_REQUESTED`: `IMP-009-R1-F01` — the wrapper checked only that stdout
+was a JSON object with every expected key, never the *shape* of each per-venue value, so `null`, `{}`,
+or an unknown `state` all passed through as accepted results rather than failing closed. Fixed with
+`_is_valid_status()`, validating every entry against the exact schema `validateReturnTransport()`
+emits (`{state:"ok"}` or `{state:"invalid",reason:<string>}`); 7 new parametrized fixture tests cover
+the malformed shapes via real Node stubs, and the pre-existing genuine-malformed-band test (a real
+`validateReturnTransport()` output, not a stub) confirms a legitimate `invalid` result is unaffected.
+Round 2 `APPROVE`, finding resolved, no new findings — one non-blocking observation that extra fields
+on an otherwise-valid status object aren't prohibited by the contract. 78 Python tests total (71 + 7
+new), `node --test` unaffected (142 passing, no `web/` file touched). Full detail in
+`reviews/IMP-009.md` and `reviews/IMP-009-gate.md`.
