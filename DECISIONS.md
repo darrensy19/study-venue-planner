@@ -2149,3 +2149,27 @@ finding at any round, and the coarsening *mechanism* — candidate selection, cu
 processed-prefix authority, pre-fetch histogram stamping, atomic replace — was never itself
 challenged; what churned was the accuracy of the document's claims about it. Gate `GATE_PASS`;
 round 9 `APPROVE` with `Could not verify` **None**. Full record: [reviews/ARCH-002.md](reviews/ARCH-002.md).
+
+## 2026-09-03 — IMP-008 closed: SerpApi transport/parser and `fetch_busyness` implemented
+
+Implemented Phase 1 implementation-order step 2: `scraper/serpapi.py` (transport — `search_maps`,
+`place_by_data`, `SerpApiError`, mirroring `places.py`'s split) and `scraper/busyness.py` (parser —
+`extract_histogram`, `BusynessValidationError`, mirroring `hours.py`'s split), plus
+`fetch_busyness(source)` in `scraper/fetchers.py`. Carries over the validated search-then-retry
+design from `DECISIONS.md`'s "Popular Times coverage, take two" rather than reimplementing it: a
+resolved-name-plus-address search, direct return when the first response's collapsed `place_results`
+already carries a populated histogram, a `data`-parameter retry (built from that response's
+`data_id` + `gps_coordinates`) before an empty `popular_times` is accepted as confirmed absence, and
+the same handling for the (never yet observed in real data) uncollapsed `local_results` shape. An
+empty histogram is a legitimate result, not an error — distinct from `BusynessValidationError`, which
+marks a genuinely malformed or unidentifiable response (no search match; a candidate missing
+`data_id`/coordinates). Both failure types propagate to the caller uncaught; neither fetcher writes a
+file. 12 new Python tests (62 total), fixtures trimmed from real Phase 0 raw responses under
+`data/phase0/raw/busyness/` except two labelled `_synthetic` for branches no real query ever took.
+`node --test` unaffected (142 passing) — Python-only change.
+
+Pre-gate `GATE_PASS` on the first invocation, brief generated mechanically via
+`.cross-agent-workflow/gate_brief.py`. Round 1 (`codex_terra`) `APPROVE`, no findings — independently
+traced the same search/retry sequence against `PLAN.md` and `DECISIONS.md`, confirmed all fail-closed
+paths, and reran both test suites. User approved and authorized close. Full detail in
+`reviews/IMP-008.md` and `reviews/IMP-008-gate.md`.

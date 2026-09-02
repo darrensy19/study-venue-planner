@@ -80,3 +80,4 @@ unfiltered sequence, and never recomputing it, is what keeps the rate actually 1
 | 2026-09-03 | completed | ARCH-002 | codex_sol_high | |
 | 2026-09-03 | completed | IMP-006 | codex_terra | |
 | 2026-09-03 | completed | IMP-007 | codex_terra | |
+| 2026-09-03 | completed | IMP-008 | codex_terra | |
