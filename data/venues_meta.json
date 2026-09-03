@@ -62,7 +62,18 @@
     ],
     "preference": 6,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "00:15-00:20"
+          },
+          "basis": "last-bus connection toward home, single service, no transfer; checked against published 2026 operator timetables, extends well past the equivalent train option"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-singhealth-tower": {
     "brand": "starbucks",
@@ -97,7 +108,18 @@
     ],
     "preference": 1,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:45-23:50"
+          },
+          "basis": "last-train connection toward home via one interchange transfer, with the connection buffer confirmed against published 2026 timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-wisma-atria": {
     "brand": "starbucks",
@@ -157,7 +179,18 @@
     ],
     "preference": 5,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:50-23:55"
+          },
+          "basis": "last-train connection toward home via one interchange transfer, with the connection buffer confirmed against published 2026 timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-utown": {
     "brand": "starbucks",
@@ -230,7 +263,18 @@
     ],
     "preference": 4,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "00:00-00:05"
+          },
+          "basis": "single-line last-train connection toward home, no transfer required; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-fusionopolis": {
     "brand": "starbucks",
@@ -269,7 +313,18 @@
     ],
     "preference": 2,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:20-23:25"
+          },
+          "basis": "last-bus connection toward home via one interchange transfer — FLAGGED: this chains the very last trip of each of two separate bus services back-to-back with very little buffer between them; treat as fragile, recheck live conditions before relying on it, and prefer leaving earlier when possible rather than counting on this exact connection"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-rochester-park": {
     "brand": "starbucks",
@@ -313,7 +368,18 @@
     ],
     "preference": 8,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:40-23:45"
+          },
+          "basis": "last-bus connection toward home via one interchange transfer, with a comfortable buffer confirmed on the connecting leg; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-west-mall": {
     "brand": "starbucks",
@@ -357,7 +423,18 @@
         "mode": "cycle",
         "travel_band": "25-30m"
       }
-    ]
+    ],
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:20-23:25"
+          },
+          "basis": "last-bus connection toward home from the nearest bus interchange; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-hillv2": {
     "brand": "starbucks",
@@ -401,7 +478,18 @@
         "mode": "cycle",
         "travel_band": "25-30m"
       }
-    ]
+    ],
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:35-23:40"
+          },
+          "basis": "last-bus connection toward home, single service, no transfer; checked against published 2026 operator timetables, extends slightly past the equivalent train option"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-hometeamns-bukit-batok": {
     "brand": "starbucks",
@@ -434,7 +522,18 @@
     "fallbacks": [],
     "preference": 7,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:05-23:10"
+          },
+          "basis": "estimated last-connection band toward home via a multi-leg bus journey; the connecting leg's timing wasn't independently confirmed against a single-service timetable, worth rechecking before relying on it late at night"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-united-square": {
     "brand": "starbucks",
@@ -464,7 +563,18 @@
     ],
     "preference": 24,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:50-23:55"
+          },
+          "basis": "last-bus connection toward home, requiring roughly a 15-minute walk to reach the boarding stop, single service after that; checked against published 2026 operator timetables, extends well past the equivalent train option"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-tekka-place": {
     "brand": "starbucks",
@@ -499,7 +609,18 @@
     ],
     "preference": 10,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "00:15-00:20"
+          },
+          "basis": "single-line last-train connection toward home, no transfer required; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-the-central": {
     "brand": "starbucks",
@@ -548,7 +669,18 @@
     ],
     "preference": 19,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:50-23:55"
+          },
+          "basis": "last-bus connection toward home via one interchange transfer; checked against published 2026 operator timetables, extends slightly past the equivalent train option"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-valley-point": {
     "brand": "starbucks",
@@ -588,7 +720,18 @@
     ],
     "preference": 22,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:40-23:45"
+          },
+          "basis": "single direct bus service toward home, stop right outside the venue, no transfer; checked against published 2026 operator timetables — replaces an earlier unreliable multi-transfer rail estimate with a solid single-service connection"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-ue-square": {
     "brand": "starbucks",
@@ -642,7 +785,18 @@
     ],
     "preference": 20,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "00:00-00:05"
+          },
+          "basis": "single-line last-train connection toward home, no transfer required; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-the-cathay": {
     "brand": "starbucks",
@@ -697,7 +851,18 @@
     ],
     "preference": 15,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:55-00:00"
+          },
+          "basis": "last-train connection toward home via one interchange transfer, with the connection buffer confirmed against published 2026 timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-one-holland-village": {
     "brand": "starbucks",
@@ -736,7 +901,18 @@
     ],
     "preference": 13,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:50-23:55"
+          },
+          "basis": "last-bus connection toward home ending directly at the home-corridor MRT station, no transfer; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-jurong-point": {
     "brand": "starbucks",
@@ -760,7 +936,18 @@
     "fallbacks": [],
     "preference": 27,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:50-23:55"
+          },
+          "basis": "last-bus connection toward home from the nearest bus interchange; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-hillion-mall": {
     "brand": "starbucks",
@@ -793,7 +980,18 @@
     "fallbacks": [],
     "preference": 26,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:25-23:30"
+          },
+          "basis": "single-line last-train connection toward home, no transfer required; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-chinatown-point": {
     "brand": "starbucks",
@@ -837,7 +1035,18 @@
     ],
     "preference": 14,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "00:05-00:10"
+          },
+          "basis": "single-line last-train connection toward home, no transfer required; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-ion-orchard": {
     "brand": "starbucks",
@@ -897,7 +1106,18 @@
     ],
     "preference": 18,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:50-23:55"
+          },
+          "basis": "last-train connection toward home via one interchange transfer, with the connection buffer confirmed against published 2026 timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-delfi-orchard": {
     "brand": "starbucks",
@@ -952,7 +1172,18 @@
     ],
     "preference": 25,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:35-23:40"
+          },
+          "basis": "last-train connection toward home via one interchange transfer; the walk to the boarding station itself was the less-certain part of this estimate, worth rechecking"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-orchard-gateway": {
     "brand": "starbucks",
@@ -1012,7 +1243,18 @@
     ],
     "preference": 17,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "00:15-00:20"
+          },
+          "basis": "last-bus connection toward home, single service, no transfer; checked against published 2026 operator timetables, extends well past the equivalent train option"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "starbucks-takashimaya": {
     "brand": "starbucks",
@@ -1072,7 +1314,18 @@
     ],
     "preference": 11,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "00:10-00:15"
+          },
+          "basis": "last-bus connection toward home, single service, no transfer; checked against published 2026 operator timetables, extends well past the equivalent train option"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "baker-cook-eng-kong-park": {
     "brand": "baker_and_cook",
@@ -1153,7 +1406,18 @@
         "mode": "cycle",
         "travel_band": "25-30m"
       }
-    ]
+    ],
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:20-23:25"
+          },
+          "basis": "last-bus connection toward home from the nearest bus interchange; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "coffee-bean-imm": {
     "brand": "coffee_bean",
@@ -1186,7 +1450,18 @@
     "fallbacks": [],
     "preference": 28,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "23:35-23:40"
+          },
+          "basis": "last-bus connection toward home from the nearest bus interchange; checked against published 2026 operator timetables"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   },
   "coffee-bean-balmoral-plaza": {
     "brand": "coffee_bean",
@@ -1231,6 +1506,17 @@
     ],
     "preference": 23,
     "closing_buffer_minutes": null,
-    "holiday_policy": "unknown"
+    "holiday_policy": "unknown",
+    "return_transport": {
+      "origin_a": {
+        "transit": {
+          "default": {
+            "last_departure_band": "00:20-00:25"
+          },
+          "basis": "last-bus connection toward home, single service, no transfer; checked against published 2026 operator timetables, extends slightly past the equivalent train option"
+        }
+      }
+    },
+    "holiday_return_policy": "unknown"
   }
 }

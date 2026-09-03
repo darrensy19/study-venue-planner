@@ -2501,3 +2501,31 @@ architecture.
 `reviews/AUDIT-LOG.md` also backfilled a `completed` row for `IMP-013`, which was missed at that
 assignment's own close — found while preparing IMP-014's close-time audit-log entry. Append-only;
 the existing rows were not reordered, only the missing one added.
+
+## 2026-09-04 — `return_transport`/`holiday_return_policy` data fill: 26/28 venues, out-of-protocol
+
+Hand-curated per `PLAN.md`'s "Data contract" for `return_transport`, outside the assignment system
+(personal transit data, not code). All 28 venues need an `access[origin_a].transit` entry; researched
+each via public transit timetables (train first, then a bus-alternative pass once it became clear
+`transit` is a single generic mode and the design's own rule is "MAX over admissible modes" — the
+latest workable option, train or bus, whichever is later).
+
+**26/28 filled.** `baker-cook-eng-kong-park` needs no entry — it already carries an unconditional
+`walk` mode at `access.origin_a`, which is schedule-free and settles the return leg regardless of
+`return_transport`. `starbucks-utown` stays genuinely unverified: its only route (a public bus to
+Clementi Interchange) has no confirmed onward connection to the home corridor at that hour — checked
+directly (MRT: last train long gone; the one bus serving both stops leaves Clementi 24 minutes
+*before* the connecting bus even arrives; no night-bus network exists) and correctly resolves to no
+recorded route, not a research gap.
+
+One real correctness issue surfaced and was corrected before anything was committed: an initial pass
+used the Circle Line for four venues (`starbucks-one-holland-village`, `starbucks-utown`,
+`starbucks-fusionopolis`, `starbucks-rochester-park`), routing via Botanic Gardens. That data was
+reverted — Circle Line "Clockwise"/"Anticlockwise" direction labels turned out to be defined
+*oppositely* by different sources (Land Transport Guru vs. Wikipedia), and per-station timing tables
+list multiple terminus rows that are easy to misread as one journey's schedule. Three of the four were
+subsequently re-resolved via a bus route instead (which avoids the ambiguous labeling entirely);
+`starbucks-utown` was the one that stayed unresolved, as above. No standing weekly Friday/Saturday
+last-train extension exists in 2026 (only ad hoc extensions on specific public-holiday-eve nights,
+which the schema's `by_weekday` can't represent anyway) — confirmed via SMRT/LTA source, corrects an
+assumption in the original data-fill request.
