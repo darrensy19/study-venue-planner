@@ -77,8 +77,16 @@ sampled, the remaining list is `[1, 2, 3, 5, 6, 7, ...]`, whose 4th entry is com
 completion 8 — every completion after the first sample becomes a candidate almost immediately, and
 the rate silently runs far hotter than "1 in 4." Assigning the ordinal once, from the full
 unfiltered sequence, and never recomputing it, is what keeps the rate actually 1-in-4.
+
+Continued from the row above (`IMP-005`) — split into a second table only because the reference
+material above landed between them; document order, which is what `audit_due.py` reads, is
+unaffected by the split.
+
+| Date | Event | Assignment ID | Verification route | Detail |
+| --- | --- | --- | --- | --- |
 | 2026-09-03 | completed | ARCH-002 | codex_sol_high | |
 | 2026-09-03 | completed | IMP-006 | codex_terra | |
 | 2026-09-03 | completed | IMP-007 | codex_terra | |
 | 2026-09-03 | completed | IMP-008 | codex_terra | |
+| 2026-09-03 | completed | IMP-009 | codex_terra | |
 | 2026-09-03 | completed | IMP-010 | codex_terra | |
