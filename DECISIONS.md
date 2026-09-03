@@ -2432,3 +2432,20 @@ All 11 entries in `data/holidays.json` are now sourced and verified: the 6 fixed
 dates from `IMP-013`'s close, Good Friday from the Gregorian Easter computation, and these 4 movable
 dates against the MOM gazette above. The "4 unverified" note from `IMP-013`'s close is resolved —
 `data/holidays.json` no longer carries any unverified date.
+
+## 2026-09-03 — `build/refresh.py`'s `main()`: fixed a wrong live-credential env-var name
+
+Small, separate fix — not a reopening of `IMP-013` and not a review finding against it; no
+assignment ID needed (`WORKFLOW.md`, "Flagging, without opening"). Found while preparing a `/close`
+checkpoint, not by a test: `main()` is deliberately untested (it touches live credentials/network,
+correctly out of the automated suite per `CLAUDE.md`'s "Anything touching the network is out of
+scope for automated tests"), so this slipped through `IMP-013`'s review.
+
+`main()` read `SERPAPI_API_KEY` from the environment, but this repo's established convention —
+`build/phase0_busyness.py:212` (`require_env("SERPAPI_KEY")`), and the real local `.env` — is
+`SERPAPI_KEY`. Corrected both the read and the error message. `refresh()` itself, the tested and
+reviewed orchestration function, was never affected — this was a one-line CLI entry-point bug that
+would have made `make refresh` exit immediately with "must both be set" on its very first live run,
+despite a real key being present in `.env`. Confirmed both `GOOGLE_PLACES_API_KEY` and `SERPAPI_KEY`
+now resolve via `load_dotenv()` against the real `.env` (key presence checked, values never printed
+or logged).

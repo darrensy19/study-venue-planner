@@ -306,10 +306,10 @@ def main():
 
     load_dotenv()
     hours_api_key = os.environ.get("GOOGLE_PLACES_API_KEY")
-    busyness_api_key = os.environ.get("SERPAPI_API_KEY")
+    busyness_api_key = os.environ.get("SERPAPI_KEY")
     if not hours_api_key or not busyness_api_key:
         sys.exit(
-            "GOOGLE_PLACES_API_KEY and SERPAPI_API_KEY must both be set "
+            "GOOGLE_PLACES_API_KEY and SERPAPI_KEY must both be set "
             "(in .env or the environment)"
         )
 
