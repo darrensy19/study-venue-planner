@@ -6,21 +6,16 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: `IMP-014`
-- **Work type**: implementation
+- **ID**: `ARCH-003`
+- **Work type**: architecture/high-level
 - **State**: `completed`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
-- **Verification route**: `codex_terra` — Terra, medium
-- **Route triggers**: money / external side effects (`WORKFLOW.md` hard trigger) — this is the first refresh ever run against live Google Places + SerpApi credentials rather than fixtures or stubs
-- **Baseline commit**: `01bd0f4`
-- **Artifact under review**: `data/venues.json` (new, live-refreshed, 28/28 venues: hours `ok`, histogram `ok`, `return_transport_status` `ok`, 0 removed/invalid), `web/index.html` (new, generated from that data, 3 embedded JSON blocks parse cleanly, no `</script>` escaping defect); no code changes — the live run surfaced no defect
-- **Objective**: Phase 1 step 8 (`PLAN.md`'s "Phase 1 implementation order" item 8, lines 2281-2305) — run `make refresh` live for the first time and complete manual acceptance
-- **Scope exclusions**: `return_transport`/`holiday_return_policy` hand-curated data fill (separate, privacy-sensitive, out-of-protocol); the outbound-mirror ARCH (deliberately unscoped); no code changes are expected unless the live run surfaces a defect
-- **Acceptance criteria**: `PLAN.md` lines 2296-2304 verbatim — a live session ending inside the core span (07:00–21:30) producing Plan A and a Plan B with a viable fallback, needing no `return_transport` data at all; a live session ending outside the core span with none recorded, correctly producing the second refusal rather than a recommendation; the generated `index.html` passing the generated-artifact assertions, opened from `file://`, and read on the iPhone
-- **Required verification**: `make refresh` run live — 28/28 venues ok, 0 removed; `.venv/bin/pytest tests/python/ -q` — 188 passed; `node --test tests/js/*.test.js` — 184 passed, both independently rerun by the gate; Scenario A (leave 09:00, 5h, Origin B/Transit) and Scenario B (leave 23:00, 5h, Origin B/Walk) both confirmed twice: in a real desktop browser, and — after the gate flagged that a Chromium-viewport stand-in doesn't exercise real WebKit — on the user's actual iPhone in real Safari (served over a temporary local HTTP server, since Files-app Quick Look does not execute the app's JS): no horizontal scroll, Plan A = Starbucks Chinatown Food Street/`robust`/`core_span` for A, exact refusal "...ending at 04:07" for B. Local server torn down after
-- **Claude gate result**: `GATE_PASS` (invocation 1, fresh-context subagent) — independently reran both test suites and the `rankVenues()` scenarios itself; flagged the iPhone-substitution gap, since resolved on real device as above
-- **Gate evidence**: `reviews/IMP-014-gate.md`
-- **Independent review**: round 1 (`codex_terra`) `APPROVE` — no findings, reported 2026-09-04
-- **Review record**: `reviews/IMP-014.md`
-- **User decision**: approved — user authorized close after round-1 `APPROVE`
-- **Next action**: none — assignment closed; Phase 1 implementation-order steps 1-8 are now all complete. Open a new ID for the `return_transport`/`holiday_return_policy` data fill or the outbound-mirror ARCH before Phase 2 can start
+- **Verification route**: `codex_sol` — Sol, effort medium (round 1); de-escalated to `codex_terra` (round 2) and `codex_terra_low` (round 3) per the correction-delta table as the remaining fix narrowed
+- **Baseline commit**: `dde868b`
+- **Artifact under review**: `PLAN.md` (new "Getting there: outbound-mirror transport" section, `data/venues_meta.json` contract addition, ranking-pipeline integration, testing/open-questions updates, `RETURN_CORE_*`/`RETURN_SERVICE_DAY_START_MINUTES` → `SERVICE_*` rename) and `CLAUDE.md` (matching non-negotiables and testing additions, same rename); no code changes — implementation is future `IMP-###` work
+- **Objective**: transcribe the approved outbound-mirror design (`docs/superpowers/specs/2026-09-04-outbound-mirror-design.md`, 4 revisions, user-approved) into `PLAN.md`/`CLAUDE.md`
+- **Claude gate result**: `GATE_PASS` — `reviews/ARCH-003-gate.md`
+- **Independent review**: round 1 (`codex_sol`) `CHANGES_REQUESTED`, round 2 (`codex_terra`) `CHANGES_REQUESTED`, round 3 (`codex_terra_low`) `APPROVE` — `ARCH-003-R1-F01` resolved
+- **Review record**: `reviews/ARCH-003.md`
+- **User decision**: approved — user authorized close after round-3 `APPROVE`
+- **Next action**: none — assignment closed. Three candidates remain open per `DECISIONS.md`/`BACKLOG.md`: Phase 2 seat logging, the outbound-mirror's own future extensions (pre-dawn "wait" modelling, generalized cycling-safety cutoff — both explicitly deferred by this assignment), `data/venues_meta.json` hand-curation of real `outbound_transport` data (out-of-protocol, like the `return_transport` fill was), and `BACKLOG.md`'s `BL-002` (web design/UX pass). Open a new ID when ready to proceed

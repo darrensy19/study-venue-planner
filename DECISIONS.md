@@ -2555,3 +2555,20 @@ entries use the new names going forward.
 The remaining privacy protection is unchanged and was never about the field names: `data/venues_meta.json`
 still carries no exact travel minutes, only ordinal rank plus a coarse band — see `PLAN.md`'s "Privacy:
 bands, not exact minutes."
+
+## 2026-09-04 — `ARCH-003`: outbound-mirror transport design formalized into `PLAN.md`/`CLAUDE.md`
+
+Closed, approved after 3 review rounds (`codex_sol` → `codex_terra` → `codex_terra_low`, de-escalating
+as the remaining correction narrowed). Transcribes the out-of-protocol design at
+`docs/superpowers/specs/2026-09-04-outbound-mirror-design.md` (4 revisions, user-approved) into a new
+"Getting there: outbound-mirror transport" section in `PLAN.md`, mirroring "Getting home"'s structure:
+a hard filter rather than a feasibility tier, `outbound_transport` keyed by origin, diagnostics-only
+`outbound_transport_status` with `resolve_outbound_service` as the sole runtime authority, and two
+user-facing exclusion labels (`"outbound_gap"`, `"outbound_data_error"`) distinct from their four
+internal reasons. `RETURN_CORE_FROM_MINUTES`/`RETURN_CORE_UNTIL_MINUTES`/`RETURN_SERVICE_DAY_START_MINUTES`
+renamed to `SERVICE_*` throughout both files, now shared with the return leg. The only review finding
+(`ARCH-003-R1-F01`) caught that the transcription's whole-dataset ownership sequence and exhaustive
+taxonomy never accounted for the new outbound removals, and that an early fix still conflated the
+internal reason with the user-facing label — both corrected across rounds 2–3; see `reviews/ARCH-003.md`
+for the full finding history. No code changed — `ranking.js`/`build/refresh.py` implementation and
+`data/venues_meta.json` hand-curation remain future `IMP-###` work.
