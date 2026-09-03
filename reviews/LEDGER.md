@@ -28,3 +28,4 @@ event history the sampling audit reads instead.
 | `IMP-009` | 2026-09-03 | implementation | Phase 1 step 3: Node return-validator bridge (validateReturnTransport export + subprocess.run bridge) |
 | `IMP-010` | 2026-09-03 | implementation | Phase 1 step 4: top-level whole-dataset ranking pipeline entry point in ranking.js |
 | `IMP-011` | 2026-09-03 | implementation | Phase 1 step 5: the coarsening stage (raw seat-log -> committed data/seatlog.csv) |
+| `IMP-012` | 2026-09-03 | implementation | Phase 1 step 6: frontend shell + fixture-driven HTML generator |
