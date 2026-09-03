@@ -2285,3 +2285,49 @@ self-caught during non-vacuity verification and fixed before committing, disclos
 response rather than silently cleaned up. Round 2 (`codex_terra`, scoped to the correction delta)
 `APPROVE`, finding resolved, no new findings. User approved and authorized close. Full detail in
 `reviews/IMP-011.md` and `reviews/IMP-011-gate.md`.
+
+## 2026-09-03 — IMP-012 closed: frontend shell + fixture-driven HTML generator implemented
+
+Implemented Phase 1 implementation-order step 6: `build/generate.py` (merges `data/venues.json` with
+`data/venues_meta.json` by `id`, failing generation on an ID mismatch in either direction; inlines
+the merged venue list, holidays, and the seat log as `<script type="application/json">` blocks with
+every `<` escaped to its six-character JSON unicode form; concatenates `ranking.js` then `app.js`
+into one `<script type="module">`, `app.js`'s fixed-form import stripped, after checking the two
+files declare no colliding top-level names; validates the generated artifact structurally — no
+external `<script>`/stylesheet, no unresolved import, no `fetch()`, at most one external reference
+(the manifest), all paths relative, every venue carrying `return_transport_status`); `web/app.js`
+(the hand-written DOM shell — one state object, one `render(state)`, reimplements no ranking or
+return-policy logic); `web/index.template.html`, `web/style.css`, `web/manifest.webmanifest`.
+Pre-gate `GATE_PASS` (invocation 1) — see `reviews/IMP-012-gate.md`; it flagged one acceptance
+clause the primary's own brief hadn't explicitly disclosed as deferred (the page "renders and
+functions correctly when the manifest is removed" is structurally implied but not runtime-exercised),
+corrected into `HANDOFF.md` before review.
+
+Round 1 (`codex_terra`) `CHANGES_REQUESTED`: `IMP-012-R1-F01`, High — `PLAN.md:1754`/`2263-2265`
+require every ranked row (Plan A and every "More alternatives" row alike) to show both feasibility
+tiers and the overall tier, the named binding constraint and return mode, `usable_minutes`,
+`latest_leave_at`, travel, `backup_strength`, and preference; the shipped candidate object and
+`app.js` exposed only the composed tier. Corrected by threading `hoursTier`/`returnTier`/
+`bindingConstraint`/`returnBasis`/`returnModes`/`latestLeaveAt` through `resolveReturnBound` →
+`resolveReturnFeasibility` → `resolveOverallFeasibilityAtArrivals` → `rankVenues`'s candidate — every
+value already computed internally, none re-derived — and rendering the full field set on Plan A and
+every alternative row.
+
+Round 2 (`codex_terra`) `CHANGES_REQUESTED` on the same finding: the correction hard-coded
+`bindingConstraint: "venue_close"` for every unverified-return candidate, even a 24/7 (`COVERED`)
+venue with no real closing constraint at all — contradicting the simultaneously-displayed
+`latestLeaveAt: "UNDETERMINED"` on the same candidate. Corrected by deriving the hours-only binding
+constraint from `hoursResult.latestLeaveAt`'s own three-way outcome (no active period stays absent;
+`COVERED`/`"UNDETERMINED"` becomes `"none"`; a genuine finite close becomes `"venue_close"`) —
+`app.js` needed no change, since its label map already handled `"none"` correctly and simply had
+never been reached. Round 3 (`codex_terra`, scoped to the correction delta) `APPROVE`, finding
+resolved, no new findings.
+
+The review record itself needed one self-repair mid-loop: Codex's round-3 write inserted its
+`## Review round 3` section before round 2's own section, breaking the file's required chronological
+order (`finding_state.py` reduces status by reading events top-to-bottom, so an out-of-order file is
+unreadable as a coherent history). Codex diagnosed and fixed its own misplacement before round 3 was
+treated as final — a document-ordering repair only, no code or test content changed.
+
+User approved and authorized commit and close. Full detail in `reviews/IMP-012.md` and
+`reviews/IMP-012-gate.md`.
