@@ -2408,3 +2408,27 @@ Round 1 (`codex_terra`) `APPROVE`, no findings — independently traced the same
 last-known-good logic against `PLAN.md`, reran both suites, and ran its own isolated dry-run against
 the real registry. User approved and authorized close. Full detail in `reviews/IMP-013.md` and
 `reviews/IMP-013-gate.md`.
+
+## 2026-09-03 — `data/holidays.json`: Hari Raya Puasa corrected against the official MOM calendar
+
+Small, separate data-maintenance fix — not a reopening of `IMP-013` (closed above) and not a review
+finding against it; no assignment ID needed (`WORKFLOW.md`, "Flagging, without opening" — a bounded
+data fix trips no hard Codex trigger).
+
+`IMP-013`'s close flagged 4 of `data/holidays.json`'s 11 dates as unverified lunar/Islamic-calendar
+estimates (Hari Raya Puasa, Hari Raya Haji, Vesak Day, Deepavali), to be checked against Singapore's
+official gazette before any live refresh. Checked against
+[MOM's current 2026 public holidays calendar](https://www.mom.gov.sg/employment-practices/public-holidays):
+Hari Raya Haji (2026-05-27), Vesak Day (2026-05-31), and Deepavali (2026-11-08) all matched the
+estimates as stored — no change. **Hari Raya Puasa was wrong**: stored as `2026-03-20`, the official
+date is **`2026-03-21`**. Corrected in `data/holidays.json`.
+
+The file continues to model only the actual holiday date, per its own documented schema (`PLAN.md`,
+"`data/holidays.json` — hand-maintained": "dates only... no maintenance-status enum") — no separate
+observed-substitute-Monday entry was added, since the app's calendar policy doesn't currently call
+for one and the file isn't the place to encode that judgement speculatively.
+
+All 11 entries in `data/holidays.json` are now sourced and verified: the 6 fixed/PLAN.md-canonical
+dates from `IMP-013`'s close, Good Friday from the Gregorian Easter computation, and these 4 movable
+dates against the MOM gazette above. The "4 unverified" note from `IMP-013`'s close is resolved —
+`data/holidays.json` no longer carries any unverified date.
