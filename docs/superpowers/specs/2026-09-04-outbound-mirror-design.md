@@ -6,11 +6,20 @@ assignment. This document is the input to that formalization, not a substitute f
 reviewable artifact, when this is opened as an assignment, is the diff this design forces into
 `PLAN.md` and `CLAUDE.md`, exactly as `ARCH-001` was reviewed against `plan.md`/`CLAUDE.md` directly,
 not against a separate spec file. This doc exists to settle the design before that transcription, per
-the project's own convention. Revised once after approval to resolve two internal inconsistencies
-(the `MALFORMED` control-flow contradiction between "Evaluation" and "Validation stage"; the
-holiday-field non-goal overclaiming a shared physical route) and to close the one open question
-(outbound cycling-safety cutoff, resolved as Decision 7) — see git history for the pre-revision
-version if needed.
+the project's own convention. Revised twice after initial approval — see git history for prior
+versions:
+
+- **First revision**: resolved two internal inconsistencies (the `MALFORMED` control-flow
+  contradiction between "Evaluation" and "Validation stage"; the holiday-field non-goal overclaiming a
+  shared physical route) and closed the one open question (outbound cycling-safety cutoff, resolved as
+  Decision 7).
+- **Second revision**: corrected the first revision's own overcorrection — it had made
+  `outbound_transport_status` a **venue-wide** precondition, which silently contradicted the design's
+  positive-evidence rules (a schedule-free mode or a core-span query settles the question without
+  reading timetable data at all; a malformed *unrelated* entry must not be able to override that).
+  Validity is now scoped **per origin/mode**, consulted only at step 4, with a diagnostics-only
+  venue-level rollup. Also softened Decision 5's claim about operator behavior to a stated model
+  assumption rather than an empirical claim about network-wide practice.
 
 **Origin:** `PLAN.md`'s "Getting home: session-end return transport" section, "What this design
 deliberately does not do", flagged this explicitly: *"It does not model the outbound mirror. Whether
@@ -62,13 +71,15 @@ Reached through structured brainstorming; each is a real fork, not a default.
    shape would serve it") — see "Data contract" below. No first-departure field, exactly as
    `return_transport` deliberately omits one.
 5. **No new holiday field.** `holiday_return_policy` is read directly by the new resolver; no
-   `holiday_outbound_policy`. The reuse rests on a narrower claim than "same route": which day-type
-   schedule a given calendar date maps to (weekday / Saturday / Sunday-holiday) is a **date-level
-   classification** applied network-wide by the operators, independent of which physical route, line,
-   transfers, or service path is being travelled. Reusing the field only requires that classification
-   to match between the outbound and return legs — **it does not require, and this design does not
-   assume, the same physical route in both directions.** The actual `last_departure_band` facts for
-   outbound and return remain independent transport-service data and may differ arbitrarily; only the
+   `holiday_outbound_policy`. The reuse rests on a narrower claim than "same route": `holiday_return_policy`
+   encodes **a date-level service-day classification (weekday / Saturday / Sunday-holiday) that this
+   model assumes is shared by the outbound and return legs for the relevant venue/service** — not that
+   the two legs travel the same physical route, line, transfers, or service path. This is a stated
+   model assumption, not an empirical claim about how transit operators behave network-wide. Reusing
+   the field only requires that classification to match between the outbound and return legs — **it
+   does not require, and this design does not assume, the same physical route in both directions.**
+   The actual `last_departure_band` facts for outbound and return remain independent transport-service
+   data and may differ arbitrarily; only the
    holiday-type classification is assumed shared. Precedent for one field governing both legs already
    exists: `wet_weather_mode` substitutes the outbound mode *and* drops `cycle` from the return set.
    The field keeps its existing name (`holiday_return_policy`) despite now governing both directions —
@@ -133,17 +144,18 @@ A **total function**, evaluated once (no dual bounds — see "Why this isn't sim
 ```
 outbound_admissible(venue, origin, mode, leave_at_abs, service_date) -> PASS | EXCLUDED
 
-# Preconditions, established upstream, not re-checked here:
-#   (a) access[origin][mode] is present. This function only ever runs for a mode
-#       already known to have a recorded route -- it answers WHEN service runs,
-#       never WHETHER a route exists, exactly as the return leg's core-span step
-#       answers WHEN, never WHETHER (PLAN.md:1120-1131). "Inside the core span ->
-#       pass" below means this outbound-timetable check passes; it composes with,
-#       and never substitutes for, that independent reachability filter.
-#   (b) outbound_transport_status.state == "ok" for this venue -- see "Validation
-#       stage" below. A venue whose stamp is missing or invalid never reaches this
-#       function at all for a schedule-bound mode outside the core span, mirroring
-#       the return leg's own STEP 0 precondition (PLAN.md:1169-1173).
+# Precondition, established by the EXISTING pipeline stage, not re-checked here:
+# access[origin][mode] is present. This function only ever runs for a mode already
+# known to have a recorded route -- it answers WHEN service runs, never WHETHER a
+# route exists, exactly as the return leg's core-span step answers WHEN, never
+# WHETHER (PLAN.md:1120-1131). "Inside the core span -> pass" below means this
+# outbound-timetable check passes; it composes with, and never substitutes for,
+# that independent reachability filter.
+#
+# outbound_transport_status is deliberately NOT a whole-function precondition --
+# see step 4. Steps 1-3 below never consult it at all. A malformed entry for one
+# (origin, mode) pair must never affect a schedule-free candidate, a core-span
+# query, or a different origin/mode for the same venue -- see "Validation stage".
 
 clock = leave_at_abs - abs(service_date, 0)
 
@@ -167,17 +179,22 @@ if SERVICE_CORE_FROM_MINUTES <= clock <= SERVICE_CORE_UNTIL_MINUTES:
 if SERVICE_DAY_START_MINUTES <= clock < SERVICE_CORE_FROM_MINUTES:
     return EXCLUDED(reason: "pre_dawn_gap")
 
-# 4. Only now is outbound_transport read. Precondition (b) means resolved is never
-#    MALFORMED here on the normal ranking path -- validation already excluded such
-#    venues before ranking ever runs. The resolver stays defensively total (it CAN
-#    return MALFORMED) and the branch below is kept as an unreachable guard, mirroring
-#    the return leg's own redundant MALFORMED check inside "Evaluating one bound":
-#    "MALFORMED at step 5 stays as a redundant runtime guard and should be unreachable
-#    whenever the stage has run" (PLAN.md:1247).
+# 4. Only now -- and only for THIS (origin, mode) pair -- is outbound timetable
+#    data consulted at all. The precondition here is scoped, not venue-wide:
+#    outbound_transport_status.by_origin_mode[origin][mode].state == "ok". An
+#    "invalid" stamp for THIS pair excludes only this candidate; it says nothing
+#    about a different origin, a different mode, or a schedule-free/core-span query
+#    that never reaches this line for ANY origin/mode (see Validation stage).
+#    resolve_outbound_service stays defensively total (it CAN independently detect
+#    MALFORMED via normalise_band) and the branch below is a redundant guard for
+#    this specific pair once validated -- mirroring the return leg's own redundant
+#    MALFORMED check ("MALFORMED at step 5 stays as a redundant runtime guard and
+#    should be unreachable whenever the stage has run", PLAN.md:1247), just scoped
+#    one level finer than the return leg's venue-wide stamp.
 resolved = resolve_outbound_service(venue, origin, mode, service_date)
 
 if resolved is MALFORMED:
-    return EXCLUDED(reason: "invalid_metadata")   # unreachable in normal operation; see above
+    return EXCLUDED(reason: "invalid_metadata")   # unreachable for THIS pair once validated; see above
 if resolved is MISSING:
     return EXCLUDED(reason: "missing_data")        # Decision 2 -- silence is not a pass
 if leave_at_abs > abs(service_date, resolved.last_departure_band.lo):   # pessimistic (earlier) edge
@@ -214,45 +231,68 @@ return leg (`PLAN.md:971-974`).
 
 `validate_outbound_transport`, a new step in `build/refresh.py` alongside `validate_return_transport`
 — same contract: mandatory, unconditional (hand-maintained metadata, runs even on a fully failed
-fetch), classifies rather than aborts, stamps `outbound_transport_status` per venue
-(`{state: "ok" | "invalid", reason?}`) across every reachable `outbound_transport` entry
-(`default` and every `by_weekday` key, every origin, every mode). Same `MISSING`-shapes-stamp-`ok`
-rule as `validate_return_transport` (`PLAN.md:2390`): an absent block, an absent origin/mode, and a
-selected entry with no `last_departure_band` are all `MISSING`, not `invalid` — only a **present**
-band that fails `normalise_band` is `invalid`. `outbound_admissible`'s precondition is
-`outbound_transport_status.state == "ok"` for the venue, exactly mirroring the return leg's own
-STEP 0 precondition (`PLAN.md:1169-1173`); an absent or `invalid` stamp means the venue never reaches
-`outbound_admissible` at all for a schedule-bound mode outside the core span. This is what makes the
-`MALFORMED` branch inside `outbound_admissible`'s pseudocode unreachable in normal operation — see
-"Evaluation" above.
+fetch), classifies rather than aborts, and walks every reachable `outbound_transport` entry (`default`
+and every `by_weekday` key, every origin, every mode) across the whole of `venues_meta.json`, exactly
+as `validate_return_transport` does. **It differs from the return leg in one deliberate way: it stamps
+validity per origin/mode, never per venue**, precisely to avoid the failure this revision exists to
+correct — see "Pipeline integration" below.
+
+```json
+"outbound_transport_status": {
+  "by_origin_mode": {
+    "home":   {"transit": {"state": "ok"}},
+    "office": {"transit": {"state": "invalid", "reason": "..."}}
+  },
+  "any_invalid": true
+}
+```
+
+`by_origin_mode[origin][mode]` is the only part ranking ever reads, and only for the one pair the
+candidate being evaluated actually needs, only at step 4 of `outbound_admissible` — never venue-wide,
+and never for a schedule-free mode or a core-span query, neither of which reads this structure at all.
+`any_invalid` is a **diagnostics-only rollup** — true if any origin/mode pair for this venue is
+`invalid` — so a maintainer scanning `data/venues.json` can find broken venues in one pass.
+**Ranking must never read `any_invalid`**; only `by_origin_mode[origin][mode]` may gate a candidate.
+
+Same `MISSING`-shapes-stamp-`ok` rule as `validate_return_transport` (`PLAN.md:2390`), applied per
+pair: an absent block, an absent origin/mode, and a selected entry with no `last_departure_band` all
+stamp `{"state": "ok"}` for that pair — only a **present** band that fails `normalise_band` stamps
+`{"state": "invalid", "reason": …}` for that specific pair, leaving every other pair's stamp
+unaffected.
+
+**Loud, at two different times, for two different audiences.** The mandatory generation-time walk
+still flags every broken `(venue, origin, mode)` combination — in refresh diagnostics/output —
+regardless of whether any live query ever needs it; that is what "loud" means for whoever maintains
+the data, and it does not depend on the finer scoping above. Separately, a live ranking query produces
+the user-facing `"outbound_gap"` removal notice (see "Pipeline integration") only when a candidate it
+is actually evaluating hits an invalid entry; that is what "loud" means for the person using the tool.
+This two-tier loudness, not a single venue-wide gate, is what makes step 4's `MALFORMED` branch a
+redundant guard scoped to one `(origin, mode)` pair — never a venue-wide one.
 
 ## Pipeline integration
 
 Folds into ranking-pipeline **step 1 (hard filter — reachability)**, next to the existing missing-
-`access`-entry filter (`PLAN.md:1530`) — never into step 3 (feasibility tier). A venue/mode combination
-failing `outbound_admissible` is excluded from ranking entirely for that `leave_at`, the same category
-as "mode isn't viable there," not a ranked-but-demoted candidate. A venue removed by
-`validate_outbound_transport`'s `invalid` stamp is excluded even earlier — at generation time, before
-the ranking pipeline runs at all for any `leave_at` — exactly mirroring how an invalid
-`return_transport_status` works today.
+`access`-entry filter (`PLAN.md:1530`) — never into step 3 (feasibility tier). A venue/origin/mode
+combination failing `outbound_admissible` is excluded from ranking entirely for that `leave_at`, the
+same category as "mode isn't viable there," not a ranked-but-demoted candidate.
 
-**Two different removal points, and the reason-wording follows the return leg's own precedent for
-keeping them distinct.** `invalid_metadata` is not something `outbound_admissible` produces on the
-normal path (see "Evaluation" and "Validation stage" above) — a venue with malformed
-`outbound_transport` data is removed **at generation time**, by `validate_outbound_transport` itself,
-independent of any specific `leave_at`, exactly as an invalid `return_transport_status` removes a venue
-from ranking at *every* hour (`PLAN.md:1594,2389`). It gets its own loud, generation-time diagnostic —
-mirroring `return_transport_status`'s `{"state": "invalid", "reason": …}` shape — and stays **distinct**
-from the query-time reasons below, for the same reason `CLAUDE.md` insists `unverified` and an invalid
-return record must never share wording: one means "the data has a bug," the other means "nothing is
-recorded or nothing runs at your time" — the fixes differ, so the wording must too.
+**One evaluation point, one scope: the specific candidate being ranked.** All four internal reasons
+`outbound_admissible` can produce — `pre_dawn_gap`, `missing_data`, `after_last_departure`, and
+`invalid_metadata` — are decided at ranking time, scoped to the exact `(venue, origin, mode, leave_at)`
+combination the candidate represents. **None of them is a venue-wide, query-independent removal**: a
+broken `outbound_transport.office.transit` entry excludes only an *office*-origin, *transit*-mode
+candidate outside the core span — never a *home*-origin candidate, never a schedule-free candidate,
+and never a core-span query for that same origin/mode, since those paths return at steps 1–2 without
+ever consulting `outbound_transport_status`. This is the correction this revision makes: an earlier
+draft gated the whole venue on one venue-level stamp, which silently contradicted the design's own
+positive-evidence rules — a schedule-free mode or a core-span query settles the question without
+reading timetable data at all, so a malformed *unrelated* entry must never be able to override that.
 
-The three reasons `outbound_admissible` itself can produce — `pre_dawn_gap`, `missing_data`,
-`after_last_departure` — are query-time (they depend on the chosen `leave_at`) and share one unified
-user-facing label, **`"outbound_gap"`**, on the generated page's removal notice for that query,
-mirroring the return leg's "degradation must be visible" rule (`PLAN.md:1101-1103`). All three mean the
-same thing to the person choosing a venue — *this option isn't available for your leave time* — and
-are retained individually only for diagnostics.
+All four reasons share one unified user-facing label, **`"outbound_gap"`**, on the generated page's
+removal notice for the specific query that hits them, mirroring the return leg's "degradation must be
+visible" rule (`PLAN.md:1101-1103`). They are retained individually only for diagnostics. Independently
+of whether any query ever surfaces one, `validate_outbound_transport`'s generation-time walk flags
+every broken `(venue, origin, mode)` pair on its own — see "Validation stage".
 
 ## Non-goals
 
@@ -294,9 +334,16 @@ Mirroring `PLAN.md`'s own "What this design deliberately does not do" for the re
 - `tests/js/`: `outbound_admissible` and `resolve_outbound_service` coverage mirroring the return
   leg's test list structure (schedule-free positive evidence, core-span waiver assuming access already
   filtered, pre-dawn unconditional exclusion, `MAX`-free single-edge comparison, `by_weekday`
-  precedence, holiday-field reuse producing the *same* holiday behavior as the return leg for the same
-  venue/date).
+  precedence, holiday-field reuse producing the *same* holiday-classification behavior as the return
+  leg for the same venue/date) — **plus the scoping correction itself as its own required case**: a
+  venue with an `invalid` `outbound_transport_status` entry for one origin/mode must still resolve
+  `PASS` for a schedule-free candidate, a core-span query, and a different origin/mode at that same
+  venue; only the specific invalid pair, outside the core span, returns `EXCLUDED`.
 - `tests/python/`: `validate_outbound_transport` coverage mirroring `validate_return_transport`'s
-  (missing-shapes stamp `ok`, malformed stamps `invalid`, one malformed venue doesn't block the write).
+  (missing-shapes stamp `ok`, malformed stamps `invalid`, one malformed venue doesn't block the write)
+  — **scoped per origin/mode**: a malformed `office` entry stamps only `office`'s pair `invalid` while
+  a well-formed `home` pair stamps `ok` independently; `any_invalid` is true whenever any pair is
+  invalid but must never be read by ranking (a dedicated test asserting `outbound_admissible` never
+  touches it, only `by_origin_mode`).
 - `data/venues_meta.json`: a new hand-curation pass, `outbound_transport` per venue per relevant
   origin — out-of-protocol data work, like the `return_transport` fill was.
