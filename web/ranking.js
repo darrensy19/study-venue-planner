@@ -1332,3 +1332,381 @@ export function resolveFeasibilityAtArrivals(venue, holidays, params) {
     surplusUpper: upperNone ? undefined : upper.surplus,
   };
 }
+
+// --- The whole-dataset ranking pipeline entry point -------------------------
+//
+// plan.md's "The ranking pipeline" / "One entry point, pure, whole-dataset":
+// everything above this section is reached through rankVenues(), the single
+// function app.js calls once per render. No DOM, no I/O.
+
+/** `closing_buffer_minutes: null` in venues_meta.json means "use this
+ * constant" (plan.md, "data/venues_meta.json"). */
+export const CLOSING_BUFFER_DEFAULT_MINUTES = 30;
+
+function resolveClosingBufferMinutes(venue) {
+  return venue.closing_buffer_minutes ?? CLOSING_BUFFER_DEFAULT_MINUTES;
+}
+
+/**
+ * resolveOutboundMode(venue, origin, mode, raining) -> mode string.
+ *
+ * wet_weather_mode substitution (plan.md's "Control resolution" / "The rain
+ * toggle's effect is explicit"): when raining, venue.wet_weather_mode[origin]
+ * may name a substitute for the selected mode — the venue is then reached,
+ * and its access band read, via the SUBSTITUTE mode, not the one requested.
+ * A mode with no recorded substitute is simply unavailable in the rain and is
+ * returned unchanged; this function makes no viability judgement of its own,
+ * the caller's ordinary access-lookup rules decide what happens next.
+ */
+export function resolveOutboundMode(venue, origin, mode, raining) {
+  if (!raining) return mode;
+  return venue.wet_weather_mode?.[origin]?.[mode] ?? mode;
+}
+
+/**
+ * validatePreferenceSnapshot(venues) -> Map<venueId, reason>
+ *
+ * The whole-dataset `preference` invariant (plan.md, "Choosing among several
+ * fallbacks": a strict total order, no ties, validated before any ranking key
+ * reads it). Missing or non-integer fails that venue alone; a value shared by
+ * two-or-more venues fails every venue carrying it, since the order between
+ * them is genuinely undetermined and there is no basis for keeping one. A
+ * venue absent from the returned map holds a valid, unique preference.
+ */
+export function validatePreferenceSnapshot(venues) {
+  const invalid = new Map();
+  const byValue = new Map();
+  for (const v of venues) {
+    if (!Number.isInteger(v.preference)) {
+      invalid.set(v.id, "preference is missing or not an integer");
+      continue;
+    }
+    if (!byValue.has(v.preference)) byValue.set(v.preference, []);
+    byValue.get(v.preference).push(v.id);
+  }
+  for (const ids of byValue.values()) {
+    if (ids.length > 1) {
+      for (const id of ids) {
+        invalid.set(id, `preference value is shared by ${ids.length} venues — order between them is undetermined`);
+      }
+    }
+  }
+  return invalid;
+}
+
+function formatClockTime(abs) {
+  const minutes = clockMinutesOfDay(abs);
+  const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
+  const mm = String(minutes % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+// The 8-key ranking order (plan.md, "The ranking pipeline") and the
+// fallback-selection order's shared tiers (plan.md, "Choosing among several
+// fallbacks") both rank the same four/five values; kept as one set of tables
+// so the two orderings can never silently drift apart.
+const TIER_RANK = { robust: 3, tight: 2, shorter: 1, unverified: 0 };
+const CONFIDENCE_RANK = { dependable: 4, usually_available: 3, mixed: 2, poor: 1, unknown: 0 };
+const BACKUP_RANK = { strong: 2, salvage: 1, none: 0 };
+
+/**
+ * compareCandidates(a, b) -> negative if a ranks before b. The 8-key order
+ * exactly: overall_tier, seat_confidence, backup_strength, travel_minutes_mid
+ * (least first), preference (lower number first — the same "1 is best"
+ * ordinal convention access[][].rank already uses; no venue in the current
+ * dataset yet fixes this direction on its own, so it is an implementation
+ * choice flagged here for reviewer confirmation), surplus_mid through
+ * surplusSortKey() only, then venue_id as a final stable guard.
+ */
+function compareCandidates(a, b) {
+  if (TIER_RANK[a.tier] !== TIER_RANK[b.tier]) return TIER_RANK[b.tier] - TIER_RANK[a.tier];
+  const ca = CONFIDENCE_RANK[a.seatConfidence.confidence];
+  const cb = CONFIDENCE_RANK[b.seatConfidence.confidence];
+  if (ca !== cb) return cb - ca;
+  if (BACKUP_RANK[a.backupStrength] !== BACKUP_RANK[b.backupStrength]) {
+    return BACKUP_RANK[b.backupStrength] - BACKUP_RANK[a.backupStrength];
+  }
+  if (a.travelMinutesMid !== b.travelMinutesMid) return a.travelMinutesMid - b.travelMinutesMid;
+  if (a.preference !== b.preference) return a.preference - b.preference;
+  const sa = surplusSortKey(a.surplusMid ?? AT_LEAST_0);
+  const sb = surplusSortKey(b.surplusMid ?? AT_LEAST_0);
+  if (sa !== sb) return sb - sa;
+  return a.venueId < b.venueId ? -1 : a.venueId > b.venueId ? 1 : 0;
+}
+
+/**
+ * compareFallbacks(a, b) -> the 7-key fallback-selection order (plan.md,
+ * "Choosing among several fallbacks"): backup_strength, overall_tier,
+ * seat_confidence, fallback travel burden from Plan A, preference, then
+ * venue_id. Key 6 (surplus_mid) is deliberately omitted: plan.md states keys
+ * 6 and 7 are "unreachable between two distinct ranked venues" once
+ * preference has decided, and reached only in the degenerate self-comparison
+ * case — so venue_id alone already keeps this total and deterministic
+ * without re-deriving a fallback's surplus, which would mean re-evaluating
+ * (and, for an unviable cycle link, illegitimately reading) data
+ * evaluatePlanBFallback deliberately left untouched.
+ */
+function compareFallbacks(a, b) {
+  if (BACKUP_RANK[a.result.strength] !== BACKUP_RANK[b.result.strength]) {
+    return BACKUP_RANK[b.result.strength] - BACKUP_RANK[a.result.strength];
+  }
+  const ta = TIER_RANK[a.result.overallTier] ?? -1;
+  const tb = TIER_RANK[b.result.overallTier] ?? -1;
+  if (ta !== tb) return tb - ta;
+  const ca = CONFIDENCE_RANK[a.result.confidence] ?? -1;
+  const cb = CONFIDENCE_RANK[b.result.confidence] ?? -1;
+  if (ca !== cb) return cb - ca;
+  if (a.travelMinutesMid !== b.travelMinutesMid) return a.travelMinutesMid - b.travelMinutesMid;
+  if (a.preference !== undefined && b.preference !== undefined && a.preference !== b.preference) {
+    return a.preference - b.preference;
+  }
+  return a.fallbackVenueId < b.fallbackVenueId ? -1 : a.fallbackVenueId > b.fallbackVenueId ? 1 : 0;
+}
+
+/**
+ * selectPlanBFallback(venue, holidays, params, venueById) -> the winning
+ * fallback evaluation (plan.md's "Choosing among several fallbacks"), or
+ * `null` when the venue has no `fallbacks[]` at all. Each fallback is
+ * evaluated exactly once, via evaluatePlanBFallback — never re-evaluated,
+ * no Plan C.
+ */
+function selectPlanBFallback(venue, holidays, params, venueById) {
+  const links = venue.fallbacks ?? [];
+  if (links.length === 0) return null;
+
+  const evaluated = [];
+  for (const link of links) {
+    const fallbackVenue = venueById.get(link.venue_id);
+    if (!fallbackVenue) continue; // a fallback naming an unknown venue is a data-authoring defect outside this contract
+
+    // A fallback venue is still a venue: plan.md's taxonomy states a
+    // non-OPERATIONAL venue is "never Plan A or Plan B", and STEP 0's
+    // return-status precondition is a fact about the venue, not about the
+    // primary-candidate path alone. Both gates apply here exactly as they
+    // do in the main per-venue loop, before this fallback is ever evaluated.
+    if (fallbackVenue.business_status !== "OPERATIONAL") continue;
+    const fallbackReturnStatus = fallbackVenue.return_transport_status;
+    if (!fallbackReturnStatus || fallbackReturnStatus.state !== "ok") continue;
+
+    const band = normaliseTravelBand(link.travel_band);
+    if (band.kind !== "present") continue; // fallbacks[].travel_band is always added complete, per plan.md
+
+    const result = evaluatePlanBFallback(fallbackVenue, holidays, {
+      fallbackMode: link.mode,
+      fallbackTravelMinutesMid: band.mid,
+      fallbackTravelMinutesUpper: band.upper,
+      planAArrivalMidAbs: params.arrivalMidAbs,
+      planAArrivalUpperAbs: params.arrivalUpperAbs,
+      bicycleWithYou: params.bicycleWithYou,
+      raining: params.raining,
+      durationMinutes: params.durationMinutes,
+      closingBufferMinutes: resolveClosingBufferMinutes(fallbackVenue),
+      toleranceMinutes: params.toleranceMinutes,
+      returnToleranceMinutes: params.returnToleranceMinutes,
+      cycleLatestMinutes: params.cycleLatestMinutes,
+      seatCheckBufferMinutes: params.seatCheckBufferMinutes,
+      minSessionMinutes: params.minSessionMinutes,
+      minConfidence: params.minConfidence,
+    });
+
+    evaluated.push({
+      fallbackVenueId: link.venue_id,
+      mode: link.mode,
+      travelMinutesMid: band.mid,
+      preference: fallbackVenue.preference,
+      result,
+    });
+  }
+
+  if (evaluated.length === 0) return null;
+  evaluated.sort(compareFallbacks);
+  return evaluated[0];
+}
+
+/**
+ * rankVenues(snapshot, controls) -> the whole ranking pipeline entry point.
+ *
+ * snapshot: `{ venues: [...], holidays: {...} }` — the whole embedded
+ * dataset. controls: `{ origin, mode, raining, departureDate,
+ * leaveAtMinutes, durationMinutes, toleranceMinutes, returnToleranceMinutes,
+ * cycleLatestMinutes, seatCheckBufferMinutes, minSessionMinutes,
+ * minConfidence }` — the session request plus provisional-constant
+ * overrides, threaded straight through to the underlying functions exactly
+ * as they already accept them.
+ *
+ * Ownership order, exactly per plan.md's "One entry point, pure,
+ * whole-dataset":
+ *   1. control resolution — per venue, wet_weather_mode substitution and
+ *      bicycle_with_you (whether THIS venue's resolved outbound mode is
+ *      "cycle")
+ *   2. snapshot validation — `preference`, over the whole venue list, before
+ *      any ranking key reads it
+ *   3. travel-band parsing and per-venue arrivals
+ *   4. return-status STEP 0 removal
+ *   5. evaluation — hours, return, combined feasibility, busyness,
+ *      seat_confidence
+ *   6. Plan B evaluation for every candidate, before backup_strength ranks
+ *      Plan A
+ *   7. grouping, refusals and final ordering
+ *
+ * Returns `{ planA, groups, alternatives, travelUnknown, removed, refusals }`:
+ *   - `planA` — the single best candidate (never `unverified` — plan.md: "a
+ *     venue whose overall_tier is unverified can never be Plan A"), or
+ *     `null` if nothing at all is ranked.
+ *   - `groups` — `{ ranked, shorter, unverified }`, each an array of
+ *     candidates in full ranking order (plan.md's "ranked and unranked
+ *     taxonomy": `ranked` covers `robust`/`tight`; `shorter` and `unverified`
+ *     are their own groups).
+ *   - `alternatives` — every candidate except `planA`, grouped by `area`,
+ *     order preserved within each group (plan.md: "Alternatives are grouped
+ *     by area").
+ *   - `travelUnknown` — venues with an explicit-`null` access entry: `[{
+ *     venueId }]`.
+ *   - `removed` — every unranked-removal row of the taxonomy table, each
+ *     `{ venueId, reason, kind }`. Access-key-missing venues (hard-filtered)
+ *     are absent even from here — plan.md: "not a candidate at all".
+ *   - `refusals` — `{ noLowRiskOption, noVerifiedReturn }`. `noLowRiskOption`
+ *     is true when no candidate reaches at least `mixed` seat_confidence.
+ *     `noVerifiedReturn` is the requested session's end time (`"HH:MM"`,
+ *     from the best `unverified` candidate) when `ranked` and `shorter` are
+ *     both empty but a qualifying `unverified` candidate exists, else `null`
+ *     — plan.md's second refusal, for the return leg specifically.
+ */
+export function rankVenues(snapshot, controls) {
+  const { venues, holidays } = snapshot;
+  const {
+    origin, mode, raining,
+    departureDate, leaveAtMinutes, durationMinutes,
+    toleranceMinutes, returnToleranceMinutes, cycleLatestMinutes,
+    seatCheckBufferMinutes, minSessionMinutes, minConfidence,
+  } = controls;
+
+  const venueById = new Map(venues.map((v) => [v.id, v]));
+  const invalidPreference = validatePreferenceSnapshot(venues);
+  const departureAbs = absMinutes(departureDate, leaveAtMinutes);
+
+  const removed = [];
+  const travelUnknown = [];
+  const candidates = [];
+
+  for (const venue of venues) {
+    if (invalidPreference.has(venue.id)) {
+      removed.push({ venueId: venue.id, reason: invalidPreference.get(venue.id), kind: "preference_invalid" });
+      continue;
+    }
+    if (venue.business_status !== "OPERATIONAL") {
+      removed.push({ venueId: venue.id, reason: `business_status is ${venue.business_status}`, kind: "not_operational" });
+      continue;
+    }
+
+    const resolvedMode = resolveOutboundMode(venue, origin, mode, raining);
+    const destAccess = venue.access?.[origin] ?? {};
+    if (!Object.prototype.hasOwnProperty.call(destAccess, resolvedMode)) {
+      continue; // hard-filtered: not a candidate at all, not even the travel-unknown group
+    }
+    const accessEntry = destAccess[resolvedMode];
+    if (accessEntry == null) {
+      travelUnknown.push({ venueId: venue.id });
+      continue;
+    }
+
+    const travelBand = normaliseTravelBand(accessEntry.band);
+    if (travelBand.kind !== "present") {
+      removed.push({ venueId: venue.id, reason: `access band: ${travelBand.reason ?? "not measured"}`, kind: "access_band_invalid" });
+      continue;
+    }
+
+    const returnStatus = venue.return_transport_status;
+    if (!returnStatus || returnStatus.state !== "ok") {
+      removed.push({
+        venueId: venue.id,
+        reason: returnStatus ? `return_transport_status is ${returnStatus.state}` : "return_transport_status is absent — never validated",
+        kind: "return_data_broken",
+      });
+      continue;
+    }
+
+    const bicycleWithYou = resolvedMode === "cycle";
+    const overall = resolveOverallFeasibility(venue, holidays, {
+      departureDate, leaveAtMinutes,
+      travelMinutesMid: travelBand.mid, travelMinutesUpper: travelBand.upper,
+      durationMinutes, closingBufferMinutes: resolveClosingBufferMinutes(venue), toleranceMinutes,
+      bicycleWithYou, raining, returnToleranceMinutes, cycleLatestMinutes,
+    });
+
+    if (overall.tier === "invalid") {
+      removed.push({ venueId: venue.id, reason: overall.reason, kind: "contradictory_hours" });
+      continue;
+    }
+    if (overall.tier === "hours-unknown") {
+      removed.push({ venueId: venue.id, reason: "hours could not be resolved for this arrival", kind: "hours_unknown" });
+      continue;
+    }
+
+    const arrivalMidAbs = departureAbs + travelBand.mid;
+    const arrivalUpperAbs = departureAbs + travelBand.upper;
+
+    const busyness = resolveBusynessBand(venue, arrivalMidAbs);
+    const seatConfidence = resolveSeatConfidence(venue.baseline_seatability, busyness);
+
+    const planB = selectPlanBFallback(venue, holidays, {
+      arrivalMidAbs, arrivalUpperAbs, bicycleWithYou, raining,
+      durationMinutes, toleranceMinutes, returnToleranceMinutes, cycleLatestMinutes,
+      seatCheckBufferMinutes, minSessionMinutes, minConfidence,
+    }, venueById);
+
+    candidates.push({
+      venueId: venue.id,
+      area: venue.area,
+      tier: overall.tier,
+      seatConfidence,
+      backupStrength: planB ? planB.result.strength : "none",
+      travelMinutesMid: travelBand.mid,
+      preference: venue.preference,
+      surplusMid: overall.surplusMid,
+      usableMinutesMid: overall.usableMinutesMid,
+      metricsBasis: overall.metricsBasis,
+      sessionEndMidAbs: arrivalMidAbs + durationMinutes,
+      planB: planB && planB.result.strength !== "none" ? {
+        venueId: planB.fallbackVenueId,
+        mode: planB.mode,
+        overallTier: planB.result.overallTier,
+        strength: planB.result.strength,
+        usableMinutesMid: planB.result.usableMinutesMid,
+      } : null,
+    });
+  }
+
+  candidates.sort(compareCandidates);
+
+  const groups = {
+    ranked: candidates.filter((c) => c.tier === "robust" || c.tier === "tight"),
+    shorter: candidates.filter((c) => c.tier === "shorter"),
+    unverified: candidates.filter((c) => c.tier === "unverified"),
+  };
+
+  const planA = groups.ranked[0] ?? groups.shorter[0] ?? null;
+
+  const alternatives = {};
+  for (const c of candidates) {
+    if (c === planA) continue;
+    (alternatives[c.area] ??= []).push(c);
+  }
+
+  const qualifying = candidates.filter((c) => meetsConfidenceFloor(c.seatConfidence.confidence, "mixed"));
+  const noLowRiskOption = qualifying.length === 0;
+
+  let noVerifiedReturn = null;
+  if (groups.ranked.length === 0 && groups.shorter.length === 0 && groups.unverified.length > 0) {
+    noVerifiedReturn = formatClockTime(groups.unverified[0].sessionEndMidAbs);
+  }
+
+  return {
+    planA,
+    groups,
+    alternatives,
+    travelUnknown,
+    removed,
+    refusals: { noLowRiskOption, noVerifiedReturn },
+  };
+}

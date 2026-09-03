@@ -39,6 +39,10 @@ import {
   meetsConfidenceFloor,
   resolveBackupStrength,
   evaluatePlanBFallback,
+  resolveOutboundMode,
+  validatePreferenceSnapshot,
+  rankVenues,
+  CLOSING_BUFFER_DEFAULT_MINUTES,
 } from "../../web/ranking.js";
 
 // --- fixture builders ------------------------------------------------------
@@ -1783,4 +1787,501 @@ test("evaluatePlanBFallback: the salvage/none floor reads the return-capped usab
   assert.equal(r.usableMinutesMid, 55); // last departure 1305 - arrival 1250, never the raw 180m duration
   assert.equal(r.strength, "none");
   assert.equal(r.reason, "below_minimum_minutes");
+});
+
+// --- rankVenues: the whole-dataset entry point ------------------------------
+
+/** A complete venue for rankVenues tests. Defaults to an always-open Monday
+ * venue, reachable by walk (schedule-free, so the return leg is "robust" by
+ * positive evidence with no return_transport data needed at all), dependable
+ * baseline, no popularTimes (busyness "unknown" via insufficient coverage) —
+ * the "everything about this venue is fine" baseline every taxonomy-row test
+ * starts from and overrides exactly one thing. */
+function fullVenue(overrides = {}) {
+  const {
+    id,
+    preference = 1,
+    area = "Test Area",
+    baseline = "dependable",
+    businessStatus = "OPERATIONAL",
+    access = { origin_a: { walk: { band: "5-10m", rank: 1 } } },
+    returnStatus = { state: "ok" },
+    validFrom = "2099-01-01",
+    validThrough = "2099-01-07",
+    byDate = {},
+    regular = { mon: known([{ open: 0, always_open: true }]) },
+    popularTimes = {},
+    fallbacks = [],
+    wetWeatherMode,
+    closingBufferMinutes = 0,
+    returnTransport,
+    holidayReturnPolicy,
+  } = overrides;
+  const v = makeVenue({ validFrom, validThrough, byDate, regular });
+  Object.assign(v, {
+    id,
+    preference,
+    area,
+    baseline_seatability: baseline,
+    business_status: businessStatus,
+    access,
+    return_transport_status: returnStatus,
+    popularTimes,
+    fallbacks,
+    closing_buffer_minutes: closingBufferMinutes,
+  });
+  if (wetWeatherMode) v.wet_weather_mode = wetWeatherMode;
+  if (returnTransport) v.return_transport = returnTransport;
+  if (holidayReturnPolicy) v.holiday_return_policy = holidayReturnPolicy;
+  return v;
+}
+
+const BASE_CONTROLS = {
+  origin: "origin_a",
+  mode: "walk",
+  raining: false,
+  departureDate: "2024-01-01", // a Monday
+  leaveAtMinutes: 600,
+  durationMinutes: 180,
+  toleranceMinutes: 15,
+  returnToleranceMinutes: 10,
+  cycleLatestMinutes: null,
+  seatCheckBufferMinutes: 10,
+  minSessionMinutes: 90,
+  minConfidence: "mixed",
+};
+
+function findCandidate(result, id) {
+  return [...result.groups.ranked, ...result.groups.shorter, ...result.groups.unverified].find((c) => c.venueId === id);
+}
+
+// --- resolveOutboundMode ------------------------------------------------
+
+test("resolveOutboundMode: returns the requested mode unchanged when not raining", () => {
+  const venue = fullVenue({ id: "v1", wetWeatherMode: { origin_a: { cycle: "transit" } } });
+  assert.equal(resolveOutboundMode(venue, "origin_a", "cycle", false), "cycle");
+});
+
+test("resolveOutboundMode: substitutes the recorded mode when raining", () => {
+  const venue = fullVenue({ id: "v1", wetWeatherMode: { origin_a: { cycle: "transit" } } });
+  assert.equal(resolveOutboundMode(venue, "origin_a", "cycle", true), "transit");
+});
+
+test("resolveOutboundMode: a mode with no recorded substitute is returned unchanged when raining", () => {
+  const venue = fullVenue({ id: "v1", wetWeatherMode: { origin_a: { cycle: "transit" } } });
+  assert.equal(resolveOutboundMode(venue, "origin_a", "walk", true), "walk");
+});
+
+// --- validatePreferenceSnapshot ------------------------------------------
+
+test("validatePreferenceSnapshot: every venue with a valid, unique preference is absent from the result", () => {
+  const venues = [fullVenue({ id: "a", preference: 1 }), fullVenue({ id: "b", preference: 2 })];
+  const invalid = validatePreferenceSnapshot(venues);
+  assert.equal(invalid.size, 0);
+});
+
+test("validatePreferenceSnapshot: a missing or non-integer preference fails that venue only", () => {
+  const missingPreference = fullVenue({ id: "a" });
+  delete missingPreference.preference; // "undefined" as an override would fall through to the fixture's own default
+  const venues = [
+    missingPreference,
+    fullVenue({ id: "b", preference: 1.5 }),
+    fullVenue({ id: "c", preference: 2 }),
+  ];
+  const invalid = validatePreferenceSnapshot(venues);
+  assert.ok(invalid.has("a"));
+  assert.ok(invalid.has("b"));
+  assert.ok(!invalid.has("c"));
+});
+
+test("validatePreferenceSnapshot: a duplicated preference value fails every venue sharing it, not a third venue with a unique value", () => {
+  const venues = [
+    fullVenue({ id: "a", preference: 3 }),
+    fullVenue({ id: "b", preference: 3 }),
+    fullVenue({ id: "c", preference: 4 }),
+  ];
+  const invalid = validatePreferenceSnapshot(venues);
+  assert.ok(invalid.has("a"));
+  assert.ok(invalid.has("b"));
+  assert.ok(!invalid.has("c"));
+});
+
+// --- rankVenues: the ranked/unranked taxonomy, one test per row ------------
+
+test("taxonomy: overall_tier robust or tight lands in the main ranked group", () => {
+  const venues = [fullVenue({ id: "v1" })]; // always-open, walk access -> robust
+  const r = rankVenues({ venues, holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.groups.ranked.length, 1);
+  assert.equal(r.groups.ranked[0].venueId, "v1");
+  assert.equal(r.groups.ranked[0].tier, "robust");
+});
+
+test("taxonomy: overall_tier shorter lands in its own group", () => {
+  const venues = [fullVenue({ id: "v1", regular: { mon: known([{ open: 0, close: 60 }]) } })]; // far too little open time
+  const r = rankVenues({ venues, holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.groups.shorter.length, 1);
+  assert.equal(r.groups.shorter[0].venueId, "v1");
+  assert.equal(r.groups.ranked.length, 0);
+});
+
+test("taxonomy: overall_tier unverified is ranked in its own group, but barred from Plan A", () => {
+  const venues = [
+    fullVenue({
+      id: "v1",
+      access: { origin_a: { transit: { band: "5-10m", rank: 1 } } }, // schedule-bound only
+    }),
+  ];
+  // leave at 20:00 + 7m travel (floor((5+10)/2)) + 180m duration -> session
+  // ends 23:07, outside the core span (07:00-21:30) and the pre-dawn gap,
+  // with no return_transport data recorded at all -> unverified.
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200 };
+  const r = rankVenues({ venues, holidays: {} }, controls);
+  assert.equal(r.groups.unverified.length, 1);
+  assert.equal(r.groups.unverified[0].venueId, "v1");
+  assert.equal(r.groups.unverified[0].tier, "unverified");
+  assert.equal(r.groups.ranked.length, 0);
+  assert.equal(r.groups.shorter.length, 0);
+  assert.equal(r.planA, null); // the only candidate is unverified, so there is no Plan A
+});
+
+test("taxonomy: an access entry of explicit null is unranked in its own travel-time-unknown group", () => {
+  const venues = [fullVenue({ id: "v1", access: { origin_a: { walk: null } } })];
+  const r = rankVenues({ venues, holidays: {} }, BASE_CONTROLS);
+  assert.deepEqual(r.travelUnknown, [{ venueId: "v1" }]);
+  assert.equal(findCandidate(r, "v1"), undefined);
+  assert.equal(r.removed.find((x) => x.venueId === "v1"), undefined);
+});
+
+test("taxonomy: a missing access[origin][mode] key is hard-filtered — not a candidate anywhere, not even travel-unknown", () => {
+  const venues = [fullVenue({ id: "v1", access: { origin_a: {} } })];
+  const r = rankVenues({ venues, holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.travelUnknown.length, 0);
+  assert.equal(r.removed.length, 0);
+  assert.equal(findCandidate(r, "v1"), undefined);
+});
+
+test("taxonomy: return_transport_status absent or not ok is an unranked removal with a visible diagnostic", () => {
+  const absentVenue = fullVenue({ id: "absent", preference: 1 });
+  delete absentVenue.return_transport_status; // "undefined" as an override would fall through to the fixture's own default
+  const venues = [
+    absentVenue,
+    fullVenue({ id: "invalid", preference: 2, returnStatus: { state: "invalid", reason: "malformed band" } }),
+  ];
+  const r = rankVenues({ venues, holidays: {} }, BASE_CONTROLS);
+  const absent = r.removed.find((x) => x.venueId === "absent");
+  const invalid = r.removed.find((x) => x.venueId === "invalid");
+  assert.ok(absent && absent.kind === "return_data_broken");
+  assert.ok(invalid && invalid.kind === "return_data_broken");
+  assert.equal(findCandidate(r, "absent"), undefined);
+  assert.equal(findCandidate(r, "invalid"), undefined);
+});
+
+// IMP-010 pre-gate finding: plan.md's ownership order runs travel-band
+// parsing (step 3) before return-status STEP 0 removal (step 4). When a
+// venue carries both a malformed access band and a broken return status, the
+// diagnostic must name the access-band defect, not the return-status one.
+test("taxonomy: a malformed access band is diagnosed even when return_transport_status is also broken, per the stated step order", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { origin_a: { walk: { band: "not-a-band", rank: 1 } } },
+    returnStatus: { state: "invalid", reason: "malformed band" },
+  });
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed);
+  assert.equal(removed.kind, "access_band_invalid");
+});
+
+test("taxonomy: hours UNKNOWN is an unranked removal, distinct from closed", () => {
+  // BASE_CONTROLS departs 2024-01-01, outside this venue's (far-future)
+  // current-hours window, so a holiday on that date resolves via the
+  // holiday_unknown authority before regular_hours is ever consulted.
+  const venue = fullVenue({ id: "v1" });
+  const r = rankVenues({ venues: [venue], holidays: { "2024-01-01": { name: "Test Holiday" } } }, BASE_CONTROLS);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed && removed.kind === "hours_unknown");
+  assert.equal(findCandidate(r, "v1"), undefined);
+});
+
+test("taxonomy: contradictory hours (disagreeing matching periods) is an unranked validation failure", () => {
+  const venue = fullVenue({
+    id: "v1",
+    regular: {
+      mon: known([
+        { open: 0, close: 700 },
+        { open: 0, close: 800 }, // both match arrival 600, disagreeing on period_end_abs
+      ]),
+    },
+  });
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed && removed.kind === "contradictory_hours");
+  assert.equal(findCandidate(r, "v1"), undefined);
+});
+
+test("taxonomy: an upper-bound NONE is ranked, failing robust while the midpoint still evaluates to tight", () => {
+  const venue = fullVenue({
+    id: "v1",
+    validFrom: "2026-08-29",
+    validThrough: "2026-09-04",
+    byDate: { "2026-08-31": known([{ open: 0, close: 925 }]) }, // open only through 15:25
+    access: { origin_a: { walk: { band: "10-30m", rank: 1 } } }, // mid=20, upper=30
+  });
+  const controls = {
+    ...BASE_CONTROLS,
+    departureDate: "2026-08-31",
+    leaveAtMinutes: 900, // mid arrival 920 (inside), upper arrival 930 (NONE, >= 925)
+    durationMinutes: 1,
+    toleranceMinutes: 15,
+  };
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const c = findCandidate(r, "v1");
+  assert.ok(c);
+  assert.equal(c.tier, "tight");
+});
+
+test("taxonomy: a midpoint NONE cannot be tight and falls to the shorter group", () => {
+  const venue = fullVenue({
+    id: "v1",
+    validFrom: "2026-08-29",
+    validThrough: "2026-09-04",
+    byDate: { "2026-08-31": closed() },
+  });
+  const r = rankVenues({ venues: [venue], holidays: {} }, { ...BASE_CONTROLS, departureDate: "2026-08-31" });
+  const c = findCandidate(r, "v1");
+  assert.ok(c);
+  assert.equal(c.tier, "shorter");
+  assert.equal(r.removed.find((x) => x.venueId === "v1"), undefined); // ranked, not removed
+});
+
+test("taxonomy: neither bound having an active period is still ranked, as shorter", () => {
+  const venue = fullVenue({
+    id: "v1",
+    validFrom: "2026-08-29",
+    validThrough: "2026-09-04",
+    byDate: { "2026-08-31": closed() }, // both mid and upper arrivals land on a closed date
+  });
+  const r = rankVenues({ venues: [venue], holidays: {} }, { ...BASE_CONTROLS, departureDate: "2026-08-31" });
+  assert.equal(r.groups.shorter.length, 1);
+  assert.equal(r.groups.ranked.length, 0);
+});
+
+test("taxonomy: a missing or malformed preference is an unranked removal, that venue only", () => {
+  const good = fullVenue({ id: "good", preference: 1 });
+  const bad = fullVenue({ id: "bad" });
+  delete bad.preference; // "undefined" as an override would fall through to the fixture's own default
+  const r = rankVenues({ venues: [good, bad], holidays: {} }, BASE_CONTROLS);
+  const removed = r.removed.find((x) => x.venueId === "bad");
+  assert.ok(removed && removed.kind === "preference_invalid");
+  assert.equal(findCandidate(r, "good").venueId, "good");
+  assert.equal(findCandidate(r, "bad"), undefined);
+});
+
+test("taxonomy: a preference value duplicated across venues removes every venue carrying it", () => {
+  const a = fullVenue({ id: "a", preference: 5 });
+  const b = fullVenue({ id: "b", preference: 5 });
+  const c = fullVenue({ id: "c", preference: 6 });
+  const r = rankVenues({ venues: [a, b, c], holidays: {} }, BASE_CONTROLS);
+  assert.ok(r.removed.find((x) => x.venueId === "a" && x.kind === "preference_invalid"));
+  assert.ok(r.removed.find((x) => x.venueId === "b" && x.kind === "preference_invalid"));
+  assert.equal(findCandidate(r, "c").venueId, "c");
+});
+
+test("taxonomy: a non-OPERATIONAL venue is an unranked removal in its own notice naming the business_status", () => {
+  const venue = fullVenue({ id: "v1", businessStatus: "CLOSED_PERMANENTLY" });
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed && removed.kind === "not_operational");
+  assert.match(removed.reason, /CLOSED_PERMANENTLY/);
+});
+
+// --- rankVenues: the 8-key ranking order ------------------------------------
+
+test("ranking order: overall_tier decides first — robust beats tight regardless of every later key", () => {
+  const robust = fullVenue({ id: "robust", preference: 99, baseline: "poor" });
+  const tight = fullVenue({
+    id: "tight",
+    preference: 1,
+    baseline: "dependable",
+    validFrom: "2026-08-29",
+    validThrough: "2026-09-04",
+    byDate: { "2026-08-31": known([{ open: 0, close: 925 }]) },
+    access: { origin_a: { walk: { band: "10-30m", rank: 1 } } }, // mid=20, upper=30 -> upper NONE at close 925
+  });
+  const controls = { ...BASE_CONTROLS, departureDate: "2026-08-31", leaveAtMinutes: 900, durationMinutes: 1 };
+  // robust venue evaluated on the same date needs its own always-open regular hours, unaffected by tight's byDate override (different venue objects).
+  const r = rankVenues({ venues: [tight, robust], holidays: {} }, controls);
+  assert.equal(r.planA.venueId, "robust");
+  assert.deepEqual(r.groups.ranked.map((c) => c.venueId), ["robust", "tight"]);
+});
+
+test("ranking order: within equal tiers, seat_confidence decides next", () => {
+  const strong = fullVenue({ id: "strong", preference: 1, baseline: "dependable" });
+  const weak = fullVenue({ id: "weak", preference: 2, baseline: "poor" });
+  const r = rankVenues({ venues: [weak, strong], holidays: {} }, BASE_CONTROLS);
+  assert.deepEqual(r.groups.ranked.map((c) => c.venueId), ["strong", "weak"]);
+});
+
+test("ranking order: within equal tier and confidence, backup_strength decides next", () => {
+  const withFallback = fullVenue({
+    id: "with-fallback",
+    preference: 1,
+    fallbacks: [{ venue_id: "fb", mode: "walk", travel_band: "1-3m" }],
+  });
+  const withoutFallback = fullVenue({ id: "without-fallback", preference: 2 });
+  const fb = fullVenue({ id: "fb", preference: 3, baseline: "dependable" });
+  const r = rankVenues({ venues: [withoutFallback, withFallback, fb], holidays: {} }, BASE_CONTROLS);
+  const withFb = findCandidate(r, "with-fallback");
+  const withoutFb = findCandidate(r, "without-fallback");
+  assert.equal(withFb.backupStrength, "strong");
+  assert.equal(withoutFb.backupStrength, "none");
+  const order = r.groups.ranked.map((c) => c.venueId).filter((id) => id !== "fb");
+  assert.deepEqual(order, ["with-fallback", "without-fallback"]);
+});
+
+test("ranking order: within equal tier/confidence/backup_strength, less travel burden wins", () => {
+  const near = fullVenue({ id: "near", preference: 1, access: { origin_a: { walk: { band: "1-3m", rank: 1 } } } });
+  const far = fullVenue({ id: "far", preference: 2, access: { origin_a: { walk: { band: "20-30m", rank: 1 } } } });
+  const r = rankVenues({ venues: [far, near], holidays: {} }, BASE_CONTROLS);
+  assert.deepEqual(r.groups.ranked.map((c) => c.venueId), ["near", "far"]);
+});
+
+test("ranking order: preference decides once tier/confidence/backup/travel all tie, lower number first", () => {
+  const preferred = fullVenue({ id: "preferred", preference: 1 });
+  const lessPreferred = fullVenue({ id: "less-preferred", preference: 2 });
+  const r = rankVenues({ venues: [lessPreferred, preferred], holidays: {} }, BASE_CONTROLS);
+  assert.deepEqual(r.groups.ranked.map((c) => c.venueId), ["preferred", "less-preferred"]);
+});
+
+test("ranking order: surplus_mid is the final tiebreak, through surplusSortKey only", () => {
+  // Two venues tied on every earlier key (same tier/confidence/backup/travel/
+  // preference is impossible without duplicating preference, which would
+  // trip snapshot validation — so this proves the comparator reaches surplus
+  // by giving both venues distinct preference values that happen to compare
+  // in the OPPOSITE direction of their surplus, and asserting surplus lost
+  // to preference (preference is a higher key), then isolating surplus with
+  // preference held constant is not possible under the strict-total-order
+  // rule. Instead: assert surplusSortKey is actually consulted by giving one
+  // venue AT_LEAST_0 (an unproven margin) and the other a real, larger
+  // proven surplus, with preference tied via two venues in different areas
+  // is not needed — same preference is disallowed, so this test targets
+  // surplusSortKey's tag-safety directly instead.
+  assert.equal(surplusSortKey(AT_LEAST_0), 0);
+  assert.equal(surplusSortKey(finiteSurplus(50)) > surplusSortKey(AT_LEAST_0), true);
+});
+
+// --- rankVenues: fallback selection (7-key order) ---------------------------
+
+test("fallback selection: among several fallback links, the one with the best backup_strength wins", () => {
+  const primary = fullVenue({
+    id: "primary",
+    preference: 1,
+    fallbacks: [
+      { venue_id: "weak-fallback", mode: "walk", travel_band: "1-3m" },
+      { venue_id: "strong-fallback", mode: "walk", travel_band: "1-3m" },
+    ],
+  });
+  const weakFallback = fullVenue({ id: "weak-fallback", preference: 2, baseline: "poor" }); // confidence below the floor -> none
+  const strongFallback = fullVenue({ id: "strong-fallback", preference: 3, baseline: "dependable" }); // -> strong
+  const r = rankVenues({ venues: [primary, weakFallback, strongFallback], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "primary");
+  assert.equal(c.backupStrength, "strong");
+  assert.equal(c.planB.venueId, "strong-fallback");
+});
+
+// IMP-010 pre-gate finding: a fallback venue is still a venue — plan.md's
+// taxonomy states a non-OPERATIONAL venue is "never Plan A or Plan B", and
+// STEP 0's return-status precondition is a fact about the venue, not about
+// the primary-candidate path alone. Without the fix, selectPlanBFallback
+// read the fallback straight from the unfiltered venue map and evaluated it
+// with neither gate applied.
+test("fallback selection: a non-OPERATIONAL fallback venue is never selected as Plan B", () => {
+  const primary = fullVenue({
+    id: "primary",
+    preference: 1,
+    fallbacks: [{ venue_id: "closed-fallback", mode: "walk", travel_band: "1-3m" }],
+  });
+  const closedFallback = fullVenue({ id: "closed-fallback", preference: 2, baseline: "dependable", businessStatus: "CLOSED_PERMANENTLY" });
+  const r = rankVenues({ venues: [primary, closedFallback], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "primary");
+  assert.equal(c.backupStrength, "none");
+  assert.equal(c.planB, null);
+});
+
+test("fallback selection: a fallback venue with a broken or absent return_transport_status is never selected as Plan B", () => {
+  const primary = fullVenue({
+    id: "primary",
+    preference: 1,
+    fallbacks: [{ venue_id: "broken-return-fallback", mode: "walk", travel_band: "1-3m" }],
+  });
+  const brokenReturnFallback = fullVenue({
+    id: "broken-return-fallback",
+    preference: 2,
+    baseline: "dependable",
+    returnStatus: { state: "invalid", reason: "malformed band" },
+  });
+  const r = rankVenues({ venues: [primary, brokenReturnFallback], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "primary");
+  assert.equal(c.backupStrength, "none");
+  assert.equal(c.planB, null);
+
+  const absentReturnFallback = fullVenue({ id: "broken-return-fallback", preference: 2, baseline: "dependable" });
+  delete absentReturnFallback.return_transport_status;
+  const r2 = rankVenues({ venues: [primary, absentReturnFallback], holidays: {} }, BASE_CONTROLS);
+  const c2 = findCandidate(r2, "primary");
+  assert.equal(c2.backupStrength, "none");
+  assert.equal(c2.planB, null);
+});
+
+// --- rankVenues: refusals ----------------------------------------------------
+
+test("refusals: no candidate reaching mixed confidence yields noLowRiskOption, distinct from the return refusal", () => {
+  const venue = fullVenue({ id: "v1", baseline: "poor" });
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.refusals.noLowRiskOption, true);
+  assert.equal(r.refusals.noVerifiedReturn, null);
+});
+
+test("refusals: every qualifying candidate being unverified yields noVerifiedReturn with the session end time", () => {
+  const venue = fullVenue({
+    id: "v1",
+    baseline: "dependable",
+    access: { origin_a: { transit: { band: "5-10m", rank: 1 } } },
+  });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200 }; // ends 23:07, no return data -> unverified
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  assert.equal(r.refusals.noLowRiskOption, false); // confidence is fine — this is specifically the return refusal
+  assert.equal(r.refusals.noVerifiedReturn, "23:07");
+});
+
+// --- rankVenues: area grouping -----------------------------------------------
+
+test("alternatives are grouped by area, excluding Plan A, order preserved within each group", () => {
+  const planAVenue = fullVenue({ id: "plan-a", area: "North", preference: 1 });
+  const altSameArea = fullVenue({ id: "alt-north", area: "North", preference: 2, baseline: "usually_available" });
+  const altOtherArea = fullVenue({ id: "alt-south", area: "South", preference: 3, baseline: "usually_available" });
+  const r = rankVenues({ venues: [planAVenue, altSameArea, altOtherArea], holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.planA.venueId, "plan-a");
+  assert.deepEqual(r.alternatives.North.map((c) => c.venueId), ["alt-north"]);
+  assert.deepEqual(r.alternatives.South.map((c) => c.venueId), ["alt-south"]);
+  assert.equal(r.alternatives.North.some((c) => c.venueId === "plan-a"), false);
+});
+
+// --- rankVenues: control resolution (wet_weather_mode) ----------------------
+
+test("control resolution: raining substitutes the outbound mode and its access band per venue", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: {
+      origin_a: {
+        cycle: { band: "5-10m", rank: 1 },
+        transit: { band: "20-30m", rank: 2 },
+      },
+    },
+    wetWeatherMode: { origin_a: { cycle: "transit" } },
+  });
+  const dry = rankVenues({ venues: [venue], holidays: {} }, { ...BASE_CONTROLS, mode: "cycle", raining: false });
+  const wet = rankVenues({ venues: [venue], holidays: {} }, { ...BASE_CONTROLS, mode: "cycle", raining: true });
+  assert.equal(findCandidate(dry, "v1").travelMinutesMid, 7); // floor((5+10)/2)
+  assert.equal(findCandidate(wet, "v1").travelMinutesMid, 25); // floor((20+30)/2), via the transit substitute
 });
