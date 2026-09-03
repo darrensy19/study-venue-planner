@@ -26,3 +26,4 @@ event history the sampling audit reads instead.
 | `IMP-007` | 2026-09-03 | implementation | Fix GAP 2: currentOpeningHours decomposition emits a zero-length entry on a period closing exactly at 00:00 |
 | `IMP-008` | 2026-09-03 | implementation | Phase 1 step 2: SerpApi transport/parser and fetch_busyness(source) |
 | `IMP-009` | 2026-09-03 | implementation | Phase 1 step 3: Node return-validator bridge (validateReturnTransport export + subprocess.run bridge) |
+| `IMP-010` | 2026-09-03 | implementation | Phase 1 step 4: top-level whole-dataset ranking pipeline entry point in ranking.js |
