@@ -14,6 +14,7 @@ import pytest
 
 import scraper.fetchers as fetchers
 from scraper.busyness import BusynessValidationError
+from scraper.fetchers import IdentityValidationError
 from scraper.hours import HoursValidationError
 from scraper.places import PlacesError
 from scraper.serpapi import SerpApiError
@@ -85,6 +86,103 @@ def test_fetch_hours_propagates_parse_failure_and_writes_nothing(monkeypatch, tm
     files_before = list(tmp_path.iterdir())
     with pytest.raises(HoursValidationError, match="malformed"):
         fetchers.fetch_hours(SOURCE, "fake-api-key", request_date=date(2026, 8, 29))
+    assert list(tmp_path.iterdir()) == files_before
+
+
+def test_fetch_place_snapshot_returns_identity_and_hours_from_one_call(monkeypatch):
+    seen_calls = []
+
+    def fake_place_details(place_id, api_key):
+        seen_calls.append((place_id, api_key))
+        return load_fixture("place_snapshot_ordinary"), True
+
+    monkeypatch.setattr(fetchers, "place_details", fake_place_details)
+
+    result = fetchers.fetch_place_snapshot(SOURCE, "fake-api-key", request_date=date(2026, 8, 29))
+
+    # Exactly one Places Details call — the whole point of the composite
+    # boundary is not spending a second billed call for data already present.
+    assert seen_calls == [("ChIJRZ1c0JYZ2jERZi1GJIoRVy0", "fake-api-key")]
+    assert result["identity"] == {
+        "place_id": "ChIJRZ1c0JYZ2jERZi1GJIoRVy0",
+        "name": "Starbucks Centrepoint",
+        "lat": 1.3008,
+        "lng": 103.8383,
+        "business_status": "OPERATIONAL",
+    }
+    assert result["hours"]["current_hours_valid_from"] == "2026-08-29"
+    assert result["hours"]["current_hours_by_date"]["2026-08-29"]["state"] == "known"
+
+
+def test_fetch_place_snapshot_uses_source_place_id_never_the_bare_response_id(monkeypatch):
+    """The registry's own place_id is the value written into venues.json,
+    validated against the response rather than blindly replaced by it."""
+    monkeypatch.setattr(
+        fetchers, "place_details", lambda place_id, api_key: (load_fixture("place_snapshot_ordinary"), True)
+    )
+
+    result = fetchers.fetch_place_snapshot(SOURCE, "fake-api-key", request_date=date(2026, 8, 29))
+
+    assert result["identity"]["place_id"] == SOURCE["place_id"]
+
+
+def test_fetch_place_snapshot_rejects_a_returned_id_that_disagrees_with_the_source(monkeypatch):
+    payload = load_fixture("place_snapshot_ordinary")
+    payload["id"] = "ChIJ-some-other-place-entirely"
+    monkeypatch.setattr(fetchers, "place_details", lambda place_id, api_key: (payload, True))
+
+    with pytest.raises(IdentityValidationError, match="does not match"):
+        fetchers.fetch_place_snapshot(SOURCE, "fake-api-key", request_date=date(2026, 8, 29))
+
+
+@pytest.mark.parametrize(
+    "mutate,match",
+    [
+        (lambda p: p.pop("displayName"), "displayName"),
+        (lambda p: p.__setitem__("displayName", {}), "displayName"),
+        (lambda p: p.pop("location"), "location"),
+        (lambda p: p.__setitem__("location", {"latitude": 1.3008}), "location"),
+        (lambda p: p.pop("businessStatus"), "businessStatus"),
+        (lambda p: p.__setitem__("businessStatus", ""), "businessStatus"),
+    ],
+)
+def test_fetch_place_snapshot_rejects_malformed_identity_fields(monkeypatch, mutate, match):
+    payload = load_fixture("place_snapshot_ordinary")
+    mutate(payload)
+    monkeypatch.setattr(fetchers, "place_details", lambda place_id, api_key: (payload, True))
+
+    with pytest.raises(IdentityValidationError, match=match):
+        fetchers.fetch_place_snapshot(SOURCE, "fake-api-key", request_date=date(2026, 8, 29))
+
+
+def test_fetch_place_snapshot_propagates_transport_failure_and_writes_nothing(monkeypatch, tmp_path):
+    def failing_place_details(place_id, api_key):
+        raise PlacesError("place details returned 500", status=500, body="server error")
+
+    monkeypatch.setattr(fetchers, "place_details", failing_place_details)
+
+    monkeypatch.chdir(tmp_path)
+    files_before = list(tmp_path.iterdir())
+    with pytest.raises(PlacesError):
+        fetchers.fetch_place_snapshot(SOURCE, "fake-api-key", request_date=date(2026, 8, 29))
+    assert list(tmp_path.iterdir()) == files_before
+
+
+def test_fetch_place_snapshot_propagates_hours_parse_failure_with_valid_identity(monkeypatch, tmp_path):
+    """A malformed hours payload fails the whole snapshot even though the
+    identity fields alone would have been fine — identity and hours are one
+    Places snapshot, never split at the fetch boundary."""
+    payload = load_fixture("place_snapshot_ordinary")
+    periods = payload["currentOpeningHours"]["periods"]
+    payload["currentOpeningHours"]["periods"] = [
+        p for p in periods if p["open"]["date"] != {"year": 2026, "month": 9, "day": 1}
+    ]
+    monkeypatch.setattr(fetchers, "place_details", lambda place_id, api_key: (payload, True))
+
+    monkeypatch.chdir(tmp_path)
+    files_before = list(tmp_path.iterdir())
+    with pytest.raises(HoursValidationError, match="malformed"):
+        fetchers.fetch_place_snapshot(SOURCE, "fake-api-key", request_date=date(2026, 8, 29))
     assert list(tmp_path.iterdir()) == files_before
 
 

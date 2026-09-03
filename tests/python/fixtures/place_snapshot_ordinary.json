@@ -1,0 +1,78 @@
+{
+  "id": "ChIJRZ1c0JYZ2jERZi1GJIoRVy0",
+  "displayName": {
+    "text": "Starbucks Centrepoint",
+    "languageCode": "en"
+  },
+  "location": {
+    "latitude": 1.3008,
+    "longitude": 103.8383
+  },
+  "businessStatus": "OPERATIONAL",
+  "regularOpeningHours": {
+    "openNow": false,
+    "periods": [
+      {
+        "open": { "day": 0, "hour": 8, "minute": 0 },
+        "close": { "day": 0, "hour": 22, "minute": 0 }
+      },
+      {
+        "open": { "day": 1, "hour": 8, "minute": 0 },
+        "close": { "day": 1, "hour": 22, "minute": 0 }
+      },
+      {
+        "open": { "day": 2, "hour": 8, "minute": 0 },
+        "close": { "day": 2, "hour": 22, "minute": 0 }
+      },
+      {
+        "open": { "day": 3, "hour": 8, "minute": 0 },
+        "close": { "day": 3, "hour": 22, "minute": 0 }
+      },
+      {
+        "open": { "day": 4, "hour": 8, "minute": 0 },
+        "close": { "day": 4, "hour": 22, "minute": 0 }
+      },
+      {
+        "open": { "day": 5, "hour": 8, "minute": 0 },
+        "close": { "day": 5, "hour": 22, "minute": 0 }
+      },
+      {
+        "open": { "day": 6, "hour": 8, "minute": 0 },
+        "close": { "day": 6, "hour": 22, "minute": 0 }
+      }
+    ]
+  },
+  "currentOpeningHours": {
+    "openNow": false,
+    "periods": [
+      {
+        "open": { "day": 0, "hour": 8, "minute": 0, "date": { "year": 2026, "month": 8, "day": 30 } },
+        "close": { "day": 0, "hour": 22, "minute": 0, "date": { "year": 2026, "month": 8, "day": 30 } }
+      },
+      {
+        "open": { "day": 1, "hour": 8, "minute": 0, "date": { "year": 2026, "month": 8, "day": 31 } },
+        "close": { "day": 1, "hour": 22, "minute": 0, "date": { "year": 2026, "month": 8, "day": 31 } }
+      },
+      {
+        "open": { "day": 2, "hour": 8, "minute": 0, "date": { "year": 2026, "month": 9, "day": 1 } },
+        "close": { "day": 2, "hour": 22, "minute": 0, "date": { "year": 2026, "month": 9, "day": 1 } }
+      },
+      {
+        "open": { "day": 3, "hour": 8, "minute": 0, "date": { "year": 2026, "month": 9, "day": 2 } },
+        "close": { "day": 3, "hour": 22, "minute": 0, "date": { "year": 2026, "month": 9, "day": 2 } }
+      },
+      {
+        "open": { "day": 4, "hour": 8, "minute": 0, "date": { "year": 2026, "month": 9, "day": 3 } },
+        "close": { "day": 4, "hour": 22, "minute": 0, "date": { "year": 2026, "month": 9, "day": 3 } }
+      },
+      {
+        "open": { "day": 5, "hour": 8, "minute": 0, "date": { "year": 2026, "month": 9, "day": 4 } },
+        "close": { "day": 5, "hour": 22, "minute": 0, "date": { "year": 2026, "month": 9, "day": 4 } }
+      },
+      {
+        "open": { "day": 6, "hour": 8, "minute": 0, "date": { "year": 2026, "month": 8, "day": 29 } },
+        "close": { "day": 6, "hour": 22, "minute": 0, "date": { "year": 2026, "month": 8, "day": 29 } }
+      }
+    ]
+  }
+}

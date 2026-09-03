@@ -2331,3 +2331,52 @@ treated as final — a document-ordering repair only, no code or test content ch
 
 User approved and authorized commit and close. Full detail in `reviews/IMP-012.md` and
 `reviews/IMP-012-gate.md`.
+
+## 2026-09-03 — IMP-013 in progress: two grounding gaps found against `PLAN.md`, both corrected before generation was wired
+
+Grounding `PLAN.md`'s "Fetch layer and refresh orchestration" against the actual closed code (per
+`CLAUDE.md`'s "critique `PLAN.md` against the repo... before implementing around it") surfaced two
+real contract gaps, both raised with and resolved by the user before `build/refresh.py` was written
+against them.
+
+**Gap 1 — `fetch_hours()` discarded the Places identity fields `data/venues.json` needs.**
+`scraper/fetchers.fetch_hours()` (closed under `IMP-006`) returns only the parsed hours contract,
+even though its one Places Details call already receives `businessStatus`/`displayName`/`location` —
+fields `PLAN.md:1779-1830`'s schema requires per venue and that `IMP-012`'s `HANDOFF.md` had already
+flagged as missing (`app.js`'s `id`-derived display name was an explicit placeholder "pending step
+7's real `data/venues.json` shape"). Resolved by adding `fetch_place_snapshot(source, api_key) ->
+{"identity": {...}, "hours": {...}}` to `scraper/fetchers.py` — one Places Details call, never two —
+rather than extending `fetch_hours()`'s own contract invisibly. `fetch_hours()` is unchanged and
+still the narrower entry point for callers that need only hours. Two safeguards, both user-specified:
+identity and hours are retained together as one last-known-good unit on a Places failure (never a
+fresh identity paired with stale hours or vice versa — see `_merge_hours_source` in
+`build/refresh.py`), and the registry's own `place_id` is what gets written to `venues.json`,
+validated against the response's `id` rather than blindly replaced by it.
+
+**Gap 2 — `build/generate.py`'s `venues_path` never matched `PLAN.md`'s documented `data/venues.json`
+shape.** `PLAN.md:1779-1784` documents `data/venues.json` as a wrapper object (`{"hours_timezone":
+..., "histogram_timezone": ..., "venues": [...]}`), and `build/refresh.py` and `build/coarsen.py`
+both already read/write exactly that wrapper. But `generate_index_html()` (closed under `IMP-012`,
+three review rounds) read `venues_path` as a bare `[...]` array — confirmed in its own tests
+(`tests/python/test_generate.py`, four call sites) — which would have crashed `merge_venues()` the
+first time `refresh.py` ever ran it. The user rejected matching the bare-array shape (option
+considered and explicitly declined): `refresh.py` and `coarsen.py` already depend on the wrapper for
+last-known-good retention, and the two timezone fields are a settled, Phase-0-confirmed contract
+(`PLAN.md:2242`, `DECISIONS.md` 2026-08-29), not stale documentation — dropping them to match
+`generate.py` would have been backwards. Fixed narrowly: `generate_index_html()` now requires the
+wrapper object and reads `payload["venues"]` for the merge; fixtures in `tests/python/test_generate.py`
+updated to the wrapper shape; three new negative-path tests added (a bare array, a missing `venues`
+key, a non-list `venues` value). `web/ranking.js` still never reads either timezone field — this was
+a generation-time correctness defect once `refresh.py` ran, not a documentation-only gap, and not a
+reopened design decision.
+
+**`data/holidays.json`'s movable-date accuracy is a known, flagged gap, not a claimed fact.** Populated
+with all 11 gazetted 2026 SG public holiday days. New Year's Day, Chinese New Year (matching `PLAN.md`'s
+own worked example at line 1923), National Day (matching line 1924), Labour Day and Christmas Day are
+certain. Good Friday is computed from the Gregorian Easter algorithm. Hari Raya Puasa, Hari Raya Haji,
+Vesak Day and Deepavali are lunar/Islamic-calendar estimates, not verified against the official MOM
+gazette — acceptable for wiring and fixture-testing `refresh.py`'s "holidays.json absent or malformed
+fails generation visibly" contract (step 7, this assignment), but **must be checked against the
+official gazette before step 8 (live refresh, out of this assignment's scope)** — a genuinely
+maintained calendar is a live-acceptance precondition (`PLAN.md`, "`data/holidays.json` —
+hand-maintained"), and these four dates are exactly where that has not yet been done.

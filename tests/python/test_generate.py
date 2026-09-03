@@ -298,9 +298,13 @@ def _write(tmp_path, name, content):
 def test_generate_index_html_writes_a_valid_artifact(tmp_path):
     import json
 
-    venues_path = _write(tmp_path, "venues.json", json.dumps([
-        {"id": "a", "business_status": "OPERATIONAL", "return_transport_status": {"state": "ok"}},
-    ]))
+    venues_path = _write(tmp_path, "venues.json", json.dumps({
+        "hours_timezone": "Asia/Singapore",
+        "histogram_timezone": "Asia/Singapore",
+        "venues": [
+            {"id": "a", "business_status": "OPERATIONAL", "return_transport_status": {"state": "ok"}},
+        ],
+    }))
     meta_path = _write(tmp_path, "venues_meta.json", json.dumps({"a": _meta()}))
     holidays_path = _write(tmp_path, "holidays.json", json.dumps({}))
     template_path = _write(tmp_path, "template.html", (FIXTURES / "template.html").read_text())
@@ -326,13 +330,56 @@ def test_generate_index_html_writes_a_valid_artifact(tmp_path):
     validate_generated_artifact(html_text)
 
 
+@pytest.mark.parametrize(
+    "bad_payload,match",
+    [
+        ([{"id": "a"}], "must be the venues.json wrapper object"),
+        ({"hours_timezone": "Asia/Singapore"}, 'missing a "venues" list'),
+        ({"venues": {"a": {"id": "a"}}}, 'missing a "venues" list'),
+    ],
+)
+def test_generate_index_html_rejects_a_malformed_venues_json_wrapper(tmp_path, bad_payload, match):
+    """`venues_path` must be the wrapper object `build/refresh.py` and
+    `build/coarsen.py` both read and write — a bare array, a missing
+    `venues` key, or a non-list `venues` value are all malformed inputs,
+    not alternate accepted forms."""
+    import json
+
+    venues_path = _write(tmp_path, "venues.json", json.dumps(bad_payload))
+    meta_path = _write(tmp_path, "venues_meta.json", json.dumps({"a": _meta()}))
+    holidays_path = _write(tmp_path, "holidays.json", json.dumps({}))
+    template_path = _write(tmp_path, "template.html", (FIXTURES / "template.html").read_text())
+    ranking_path = _write(tmp_path, "ranking.js", RANKING_STUB)
+    app_path = _write(tmp_path, "app.js", APP_STUB)
+    style_path = _write(tmp_path, "style.css", STYLE_STUB)
+    output_path = tmp_path / "index.html"
+
+    with pytest.raises(GenerationError, match=match):
+        generate_index_html(
+            venues_path=venues_path,
+            venues_meta_path=meta_path,
+            holidays_path=holidays_path,
+            seatlog_path=tmp_path / "seatlog.csv",
+            template_path=template_path,
+            ranking_js_path=ranking_path,
+            app_js_path=app_path,
+            style_css_path=style_path,
+            output_path=output_path,
+        )
+    assert not output_path.exists()
+
+
 def test_generate_index_html_fails_loudly_on_id_mismatch_and_writes_nothing(tmp_path):
     import json
 
-    venues_path = _write(tmp_path, "venues.json", json.dumps([
-        {"id": "a", "business_status": "OPERATIONAL", "return_transport_status": {"state": "ok"}},
-        {"id": "orphan-generated", "business_status": "OPERATIONAL", "return_transport_status": {"state": "ok"}},
-    ]))
+    venues_path = _write(tmp_path, "venues.json", json.dumps({
+        "hours_timezone": "Asia/Singapore",
+        "histogram_timezone": "Asia/Singapore",
+        "venues": [
+            {"id": "a", "business_status": "OPERATIONAL", "return_transport_status": {"state": "ok"}},
+            {"id": "orphan-generated", "business_status": "OPERATIONAL", "return_transport_status": {"state": "ok"}},
+        ],
+    }))
     meta_path = _write(tmp_path, "venues_meta.json", json.dumps({"a": _meta()}))
     holidays_path = _write(tmp_path, "holidays.json", json.dumps({}))
     template_path = _write(tmp_path, "template.html", (FIXTURES / "template.html").read_text())
@@ -359,9 +406,13 @@ def test_generate_index_html_fails_loudly_on_id_mismatch_and_writes_nothing(tmp_
 def test_generate_index_html_fails_loudly_when_holidays_json_is_absent(tmp_path):
     import json
 
-    venues_path = _write(tmp_path, "venues.json", json.dumps([
-        {"id": "a", "business_status": "OPERATIONAL", "return_transport_status": {"state": "ok"}},
-    ]))
+    venues_path = _write(tmp_path, "venues.json", json.dumps({
+        "hours_timezone": "Asia/Singapore",
+        "histogram_timezone": "Asia/Singapore",
+        "venues": [
+            {"id": "a", "business_status": "OPERATIONAL", "return_transport_status": {"state": "ok"}},
+        ],
+    }))
     meta_path = _write(tmp_path, "venues_meta.json", json.dumps({"a": _meta()}))
     template_path = _write(tmp_path, "template.html", (FIXTURES / "template.html").read_text())
     ranking_path = _write(tmp_path, "ranking.js", RANKING_STUB)
@@ -388,20 +439,25 @@ def test_generate_index_html_against_the_real_project_files(tmp_path):
     """The integration case: the real `web/ranking.js` and `web/app.js` (once
     written), with a tiny synthetic dataset — proving the actual module-
     inlining and collision contracts hold for the real source, not just the
-    stub fixtures above. `data/venues.json` doesn't exist yet (step 7 isn't
-    built), so the dataset here stays synthetic.
+    stub fixtures above. A synthetic dataset (rather than the real, still
+    largely `unknown`-baseline `data/venues.json`) keeps this test's assertions
+    independent of live data curation.
     """
     import json
 
     project_root = Path(__file__).parent.parent.parent
-    venues_path = _write(tmp_path, "venues.json", json.dumps([
-        {
-            "id": "a",
-            "business_status": "OPERATIONAL",
-            "return_transport_status": {"state": "ok"},
-            "access": {},
-        },
-    ]))
+    venues_path = _write(tmp_path, "venues.json", json.dumps({
+        "hours_timezone": "Asia/Singapore",
+        "histogram_timezone": "Asia/Singapore",
+        "venues": [
+            {
+                "id": "a",
+                "business_status": "OPERATIONAL",
+                "return_transport_status": {"state": "ok"},
+                "access": {},
+            },
+        ],
+    }))
     meta_path = _write(tmp_path, "venues_meta.json", json.dumps({"a": _meta()}))
     holidays_path = _write(tmp_path, "holidays.json", json.dumps({}))
     template_path = _write(tmp_path, "template.html", (FIXTURES / "template.html").read_text())

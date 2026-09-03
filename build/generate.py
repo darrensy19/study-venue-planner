@@ -278,6 +278,15 @@ def generate_index_html(
     visibly"); `seatlog.csv` may legitimately not exist yet — Phase 2 (the
     only writer of real rows) hasn't started — so its absence defaults to no
     rows rather than failing.
+
+    `venues_path` is the `data/venues.json` wrapper object — `{"hours_timezone":
+    ..., "histogram_timezone": ..., "venues": [...]}` (`PLAN.md`, "data/venues.json
+    — generated, never hand-edited") — never a bare venue array. `build/refresh.py`
+    and `build/coarsen.py` both read and write that same wrapper shape; a bare
+    array here is a malformed input, not an alternate accepted form, and the two
+    timezone fields are preserved on disk (this function only reads `venues_path`,
+    never rewrites it) even though nothing in the generated page currently
+    consumes them.
     """
     venues_path = Path(venues_path)
     venues_meta_path = Path(venues_meta_path)
@@ -296,7 +305,17 @@ def generate_index_html(
     except json.JSONDecodeError as exc:
         raise GenerationError(f"holidays.json at {holidays_path} is malformed: {exc}") from exc
 
-    generated_venues = json.loads(venues_path.read_text())
+    venues_payload = json.loads(venues_path.read_text())
+    if not isinstance(venues_payload, dict):
+        raise GenerationError(
+            f"{venues_path} must be the venues.json wrapper object "
+            '({"hours_timezone": ..., "histogram_timezone": ..., "venues": [...]}), '
+            "not a bare array"
+        )
+    generated_venues = venues_payload.get("venues")
+    if not isinstance(generated_venues, list):
+        raise GenerationError(f'{venues_path} is missing a "venues" list')
+
     venues_meta = json.loads(venues_meta_path.read_text())
     seatlog_rows = _read_seatlog(seatlog_path)
 
