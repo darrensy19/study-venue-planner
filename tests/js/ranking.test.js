@@ -2233,6 +2233,55 @@ test("fallback selection: a fallback venue with a broken or absent return_transp
   assert.equal(c2.planB, null);
 });
 
+// IMP-010-R1-F01 (Codex review correction): the whole-dataset `preference`
+// invariant applies to fallback venues too, before any ordering key —
+// including compareFallbacks' own preference comparison and its undocumented
+// venue_id fallthrough — ever reads it. Without the fix, selectPlanBFallback
+// read fallback venues straight from the unfiltered venueById map: with two
+// equal-strength fallbacks and compareFallbacks falling through to venue_id
+// whenever a preference is undefined, the invalid-preference fallback
+// ("bad-a") won the tiebreak over the valid one ("good-z") purely by name.
+test("fallback selection: a fallback venue with a missing preference is excluded, never winning even the undocumented venue_id tiebreak", () => {
+  const primary = fullVenue({
+    id: "primary",
+    preference: 1,
+    fallbacks: [
+      { venue_id: "bad-a", mode: "walk", travel_band: "1-3m" },
+      { venue_id: "good-z", mode: "walk", travel_band: "1-3m" },
+    ],
+  });
+  const badFallback = fullVenue({ id: "bad-a", baseline: "dependable" });
+  delete badFallback.preference; // "undefined" as an override would fall through to the fixture's own default
+  const goodFallback = fullVenue({ id: "good-z", preference: 2, baseline: "dependable" });
+  const r = rankVenues({ venues: [primary, badFallback, goodFallback], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "primary");
+  assert.equal(c.backupStrength, "strong");
+  assert.equal(c.planB.venueId, "good-z");
+});
+
+// A duplicated preference is a subtler case: compareFallbacks' preference
+// comparison itself reads the raw (invalid) values without knowing they were
+// invalidated by a duplicate elsewhere in the snapshot, so "dup-a" (9) would
+// beat "unique-b" (10) on that comparison alone. Only excluding it from
+// `evaluated` entirely — not merely deprioritising it — fixes this.
+test("fallback selection: a fallback venue with a preference duplicated against another venue is excluded, not merely deprioritised", () => {
+  const primary = fullVenue({
+    id: "primary",
+    preference: 1,
+    fallbacks: [
+      { venue_id: "dup-a", mode: "walk", travel_band: "1-3m" },
+      { venue_id: "unique-b", mode: "walk", travel_band: "1-3m" },
+    ],
+  });
+  const dupFallback = fullVenue({ id: "dup-a", preference: 9, baseline: "dependable" });
+  const elsewhereDup = fullVenue({ id: "elsewhere", preference: 9 }); // shares dup-a's preference, invalidating both
+  const uniqueFallback = fullVenue({ id: "unique-b", preference: 10, baseline: "dependable" });
+  const r = rankVenues({ venues: [primary, dupFallback, elsewhereDup, uniqueFallback], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "primary");
+  assert.equal(c.backupStrength, "strong");
+  assert.equal(c.planB.venueId, "unique-b");
+});
+
 // --- rankVenues: refusals ----------------------------------------------------
 
 test("refusals: no candidate reaching mixed confidence yields noLowRiskOption, distinct from the return refusal", () => {

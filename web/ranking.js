@@ -1464,13 +1464,13 @@ function compareFallbacks(a, b) {
 }
 
 /**
- * selectPlanBFallback(venue, holidays, params, venueById) -> the winning
- * fallback evaluation (plan.md's "Choosing among several fallbacks"), or
- * `null` when the venue has no `fallbacks[]` at all. Each fallback is
- * evaluated exactly once, via evaluatePlanBFallback — never re-evaluated,
- * no Plan C.
+ * selectPlanBFallback(venue, holidays, params, venueById, invalidPreference) ->
+ * the winning fallback evaluation (plan.md's "Choosing among several
+ * fallbacks"), or `null` when the venue has no `fallbacks[]` at all. Each
+ * fallback is evaluated exactly once, via evaluatePlanBFallback — never
+ * re-evaluated, no Plan C.
  */
-function selectPlanBFallback(venue, holidays, params, venueById) {
+function selectPlanBFallback(venue, holidays, params, venueById, invalidPreference) {
   const links = venue.fallbacks ?? [];
   if (links.length === 0) return null;
 
@@ -1480,10 +1480,16 @@ function selectPlanBFallback(venue, holidays, params, venueById) {
     if (!fallbackVenue) continue; // a fallback naming an unknown venue is a data-authoring defect outside this contract
 
     // A fallback venue is still a venue: plan.md's taxonomy states a
-    // non-OPERATIONAL venue is "never Plan A or Plan B", and STEP 0's
-    // return-status precondition is a fact about the venue, not about the
-    // primary-candidate path alone. Both gates apply here exactly as they
-    // do in the main per-venue loop, before this fallback is ever evaluated.
+    // non-OPERATIONAL venue is "never Plan A or Plan B", the whole-dataset
+    // `preference` invariant applies before any ordering key reads it, and
+    // STEP 0's return-status precondition is a fact about the venue, not
+    // about the primary-candidate path alone. All three gates apply here
+    // exactly as they do in the main per-venue loop, before this fallback is
+    // ever evaluated (IMP-010-R1-F01: an invalid-preference fallback read
+    // from the unfiltered venue map could win the fallback-selection order —
+    // including the undocumented venue_id tiebreak — despite being an
+    // unranked removal everywhere else in the pipeline).
+    if (invalidPreference.has(fallbackVenue.id)) continue;
     if (fallbackVenue.business_status !== "OPERATIONAL") continue;
     const fallbackReturnStatus = fallbackVenue.return_transport_status;
     if (!fallbackReturnStatus || fallbackReturnStatus.state !== "ok") continue;
@@ -1653,7 +1659,7 @@ export function rankVenues(snapshot, controls) {
       arrivalMidAbs, arrivalUpperAbs, bicycleWithYou, raining,
       durationMinutes, toleranceMinutes, returnToleranceMinutes, cycleLatestMinutes,
       seatCheckBufferMinutes, minSessionMinutes, minConfidence,
-    }, venueById);
+    }, venueById, invalidPreference);
 
     candidates.push({
       venueId: venue.id,
