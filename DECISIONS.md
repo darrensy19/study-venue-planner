@@ -2243,3 +2243,45 @@ entry-point tests (178 total), each with a valid competing fallback proving the 
 selected; both confirmed to fail against the pre-correction code before the fix. Round 2
 (`codex_terra`, scoped to the correction delta) `APPROVE`, finding resolved, no new findings. User
 approved and authorized close. Full detail in `reviews/IMP-010.md` and `reviews/IMP-010-gate.md`.
+
+## 2026-09-03 — IMP-011 closed: the coarsening stage implemented
+
+Implemented Phase 1 implementation-order step 5: `build/coarsen.py`, reading a private, gitignored
+raw seat-log CSV and appending coarsened rows to the committed `data/seatlog.csv`. `processed_count`
+is derived fresh from the committed file each run (no cursor file); the first `processed_count` raw
+rows are re-projected to `(venue_id, day_of_week, hour, outcome)` and compared row-for-row against
+the committed prefix, exactly matching `PLAN.md`'s stated equivalence boundary — a consistency check
+between two records, not an integrity check on either one. New suffix rows are joined against the
+currently-deployed, pre-fetch `data/venues.json` histogram and stamped from that histogram's own
+`last_success_at`. Atomic replace via a same-directory temp file, validated against the committed
+schema before the swap. 50 new tests (128 total after implementation), one per `PLAN.md`'s ~20
+enumerated negative-path fixture cases — every Group 1/Group 2 instance, both insertion/deletion
+boundary pairs, the coordinated-edit cases — plus schema and atomic-replace coverage.
+
+Pre-gate invocation 1 `GATE_FAIL` — a real test-suite defect, not an implementation one:
+`test_insertion_or_deletion_shifting_a_differing_projection_fails` (one of `PLAN.md`'s enumerated
+cases) was vacuous, its fixture supplying a histogram for only one of the two venues its raw suffix
+referenced, so disabling the real prefix-comparison mechanism still made the test raise — via an
+unrelated missing-histogram error — rather than isolating the mismatch it was meant to prove.
+Production behaviour was already correct throughout. Fixed by completing the fixture's histogram,
+plus two secondary non-gating notes (a similarly-masked `status == "failed"` check, and dead code in
+one fixture) the same gate round surfaced. Invocation 2 `GATE_PASS`, all four corrections
+independently re-verified by mutation.
+
+Round 1 (`codex_terra`) `CHANGES_REQUESTED`: `IMP-011-R1-F01`, High — `PLAN.md`'s private raw schema
+states rows must be "append-only and chronological," but `parse_raw_rows` contained no ordering
+check at all; a raw file with reversed `occurred_at` values was silently accepted and committed in
+reversed order. Corrected with `_validate_suffix_chronological()` — deliberately scoped to the
+**suffix** only, not the whole raw file, after a first draft that checked the whole file broke two
+existing, `PLAN.md`-sanctioned Group 1 taxonomy tests (a raw-side reorder wholly inside the
+already-committed prefix, and a coordinated reorder mirrored onto the committed side, both required
+to pass the comparator — `seatlog.csv` drops `occurred_at` entirely, so a prefix row has no
+surviving timestamp to re-validate chronology against in the first place). Compares the absolute
+instant, never the derived `Asia/Singapore` local reading, proven with a dedicated cross-UTC-offset
+regression test; equal-to-predecessor is accepted, only strictly-earlier is rejected. Three new
+regression tests (131 total); two initially shipped with an incomplete histogram fixture and were
+themselves vacuous under mutation — the same masking pattern the pre-gate had already caught once —
+self-caught during non-vacuity verification and fixed before committing, disclosed in the primary
+response rather than silently cleaned up. Round 2 (`codex_terra`, scoped to the correction delta)
+`APPROVE`, finding resolved, no new findings. User approved and authorized close. Full detail in
+`reviews/IMP-011.md` and `reviews/IMP-011-gate.md`.

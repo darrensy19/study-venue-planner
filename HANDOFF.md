@@ -8,7 +8,7 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 - **ID**: `IMP-011`
 - **Work type**: implementation
-- **State**: `review_requested`
+- **State**: `completed`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, medium
 - **Route triggers**: correctness depends on negative/fail-closed paths, and on proving tests are not vacuous — `PLAN.md`'s "The coarsening stage" enumerates ~20 required negative-path fixture cases (malformed rows, an unmirrored prefix change, four boundary-condition pairs for the insertion/deletion mechanism) that a passing-but-wrong implementation could satisfy vacuously; also a destructive-data-operation flavor (atomic replace of the committed, privacy-load-bearing `data/seatlog.csv`) (`WORKFLOW.md` hard triggers)
@@ -19,8 +19,8 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Acceptance criteria**: candidate selection exactly as specified (0/1/2+ raw-log locations, `data/seatlog.raw.csv` or non-recursive `data/raw/*.csv`); both raw and committed schemas fully validated, any malformed row aborting the whole attempt with no partial write; `processed_count` derived from the committed file, never a stored cursor; prefix comparison on the 4-column projection only, row-for-row; every one of `PLAN.md`'s ~20 enumerated fixture cases (Group 1/Group 2 instances, both insertion/deletion boundary pairs, the coordinated-edit cases) implemented with its own non-vacuous test; suffix rows stamped from the *pre-fetch* deployed histogram's own `last_success_at`, never this run's fetch; atomic replace via a same-directory temp file, validated before the swap
 - **Required verification**: `.venv/bin/pytest tests/python/ -q` — 131 passed, 0 failed (128 round-1 + 3 for `IMP-011-R1-F01`); `node --test tests/js/*.test.js` unaffected — 178 passed, no `web/` file touched; `git status`/`git diff` confined to `build/coarsen.py`, `tests/python/test_coarsen.py`, `HANDOFF.md`, `reviews/IMP-011-gate.md`, `reviews/IMP-011.md`; every negative-path test independently confirmed non-vacuous by mutation, re-verified after each round
 - **Claude gate result**: `GATE_FAIL` (invocation 1: `test_insertion_or_deletion_shifting_a_differing_projection_fails` was vacuous — masked by an unrelated missing-histogram error rather than isolating the prefix-comparison mismatch it names) → corrected (fixture given a complete histogram; two secondary non-gating notes also fixed) → `GATE_PASS` (invocation 2)
-- **Independent review**: `required` — `codex_terra`, medium
+- **Independent review**: round 1 `CHANGES_REQUESTED` — `IMP-011-R1-F01` accepted and corrected in `38b5cd8`; round 2 `REPO VALIDATION` on that correction returned `APPROVE` — `IMP-011-R1-F01` `resolved`, no new findings
 - **Gate evidence**: `reviews/IMP-011-gate.md`
-- **Review record**: `reviews/IMP-011.md` (round 1: `CHANGES_REQUESTED` on `IMP-011-R1-F01`, corrected)
-- **User decision**: pending
-- **Next action**: Independent re-review by `codex_terra` of the round-2 (correction) slice — see the fenced handoff prompt.
+- **Review record**: `reviews/IMP-011.md`
+- **User decision**: approved — user authorized close after round-2 `APPROVE`
+- **Next action**: None — terminal. A new task requires a new assignment ID.
