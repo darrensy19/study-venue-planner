@@ -775,7 +775,7 @@ test("resolveReturnBound: the route prerequisite fires inside the core span too 
   const venue = venueWithAccess({});
   const sessionEnd = absMinutes("2026-09-04", 780); // 13:00, inside the core span
   const r = resolveReturnBound(venue, {}, false, false, sessionEnd, "mid");
-  assert.deepEqual(r, { kind: "unverified", basis: "no_recorded_route" });
+  assert.deepEqual(r, { kind: "unverified", basis: "no_recorded_route", modes: [] });
 });
 
 test("resolveReturnBound: inside the core span, zero return_transport reads and a pass; outside it with no data, unverified", () => {
@@ -784,12 +784,12 @@ test("resolveReturnBound: inside the core span, zero return_transport reads and 
 
   const insideSpan = absMinutes("2026-09-04", 780); // 13:00
   const inside = resolveReturnBound(venue, {}, false, false, insideSpan, "mid");
-  assert.deepEqual(inside, { kind: "pass", basis: "core_span", margin: AT_LEAST_0 });
+  assert.deepEqual(inside, { kind: "pass", basis: "core_span", margin: AT_LEAST_0, modes: ["transit"] });
 
   const venueNoData = venueWithAccess({ transit: { band: "20-25m", rank: 1 } }); // return_transport absent
   const outsideSpan = absMinutes("2026-09-04", 1320); // 22:00
   const outside = resolveReturnBound(venueNoData, {}, false, false, outsideSpan, "mid");
-  assert.deepEqual(outside, { kind: "unverified", basis: "no_data" });
+  assert.deepEqual(outside, { kind: "unverified", basis: "no_data", modes: ["transit"] });
 });
 
 test("resolveReturnBound: the core span is inclusive at both ends (21:30 exactly still resolves core_span)", () => {
@@ -797,7 +797,7 @@ test("resolveReturnBound: the core span is inclusive at both ends (21:30 exactly
   venue.return_transport = tripwireReturnTransport();
   const exactlyBoundary = absMinutes("2026-09-04", 1290); // 21:30
   const r = resolveReturnBound(venue, {}, false, false, exactlyBoundary, "mid");
-  assert.deepEqual(r, { kind: "pass", basis: "core_span", margin: AT_LEAST_0 });
+  assert.deepEqual(r, { kind: "pass", basis: "core_span", margin: AT_LEAST_0, modes: ["transit"] });
 });
 
 test("resolveReturnBound: pre-dawn is unverified on a schedule-bound-only set, with zero return_transport reads", () => {
@@ -805,7 +805,7 @@ test("resolveReturnBound: pre-dawn is unverified on a schedule-bound-only set, w
   venue.return_transport = tripwireReturnTransport();
   const preDawn = absMinutes("2026-09-04", 300); // 05:00
   const r = resolveReturnBound(venue, {}, false, false, preDawn, "mid");
-  assert.deepEqual(r, { kind: "unverified", basis: "pre_dawn_gap" });
+  assert.deepEqual(r, { kind: "unverified", basis: "pre_dawn_gap", modes: ["transit"] });
 });
 
 test("resolveReturnBound: an admissible walk settles the pre-dawn gap as positive evidence, robust", () => {
@@ -813,7 +813,7 @@ test("resolveReturnBound: an admissible walk settles the pre-dawn gap as positiv
   venue.return_transport = tripwireReturnTransport(); // must never be read
   const preDawn = absMinutes("2026-09-04", 300); // 05:00
   const r = resolveReturnBound(venue, {}, false, false, preDawn, "mid");
-  assert.deepEqual(r, { kind: "pass", basis: "schedule_free", margin: AT_LEAST_0 });
+  assert.deepEqual(r, { kind: "pass", basis: "schedule_free", margin: AT_LEAST_0, modes: ["walk"] });
 });
 
 test("resolveReturnBound: outside the core span and pre-dawn gap, resolves via the timetable against the service date", () => {
@@ -841,6 +841,47 @@ test("resolveReturnBound: MAX (not MIN) over admissible schedule-bound modes —
   const r = resolveReturnBound(venue, {}, false, false, sessionEnd, "mid");
   assert.equal(r.kind, "pass");
   assert.equal(r.lastDepartureAbs, absMinutes("2026-09-04", 1382)); // shuttle's later midpoint, not transit's
+});
+
+// IMP-012-R1-F01: `modes` is display-only (PLAN.md:1754's "return mode being
+// counted on") and must never influence which departure wins — these two
+// tests hold the winning timestamp fixed and vary only which mode(s) produced
+// it, distinct from "MAX (not MIN)" above, which holds the modes fixed and
+// varies the timestamps.
+test("resolveReturnBound: last_departure basis names only the mode whose own departure is the later, binding one", () => {
+  const venue = venueWithAccess({
+    transit: { band: "20-25m", rank: 1 },
+    bus: { band: "20-25m", rank: 2 }, // a second, synthetic schedule-bound mode
+  });
+  venue.return_transport = {
+    origin_a: {
+      transit: { default: { last_departure_band: "23:00-23:05" } }, // mid edge 1382 — binding
+      bus: { default: { last_departure_band: "22:00-22:05" } }, // mid edge 1322 — earlier, not binding
+    },
+  };
+  const sessionEnd = absMinutes("2026-09-04", 1320); // 22:00, past the core span
+  const r = resolveReturnBound(venue, {}, false, false, sessionEnd, "mid");
+  assert.equal(r.kind, "pass");
+  assert.equal(r.basis, "last_departure");
+  assert.deepEqual(r.modes, ["transit"]);
+});
+
+test("resolveReturnBound: last_departure basis names every mode tied for the binding departure, not an arbitrary one", () => {
+  const venue = venueWithAccess({
+    transit: { band: "20-25m", rank: 1 },
+    bus: { band: "20-25m", rank: 2 },
+  });
+  venue.return_transport = {
+    origin_a: {
+      transit: { default: { last_departure_band: "23:00-23:05" } }, // mid edge 1382
+      bus: { default: { last_departure_band: "23:00-23:05" } }, // identical band — genuine tie
+    },
+  };
+  const sessionEnd = absMinutes("2026-09-04", 1320); // 22:00, past the core span
+  const r = resolveReturnBound(venue, {}, false, false, sessionEnd, "mid");
+  assert.equal(r.kind, "pass");
+  assert.equal(r.basis, "last_departure");
+  assert.deepEqual([...r.modes].sort(), ["bus", "transit"]);
 });
 
 test("resolveReturnBound: a malformed band on the only admissible mode unranks the venue as validation_failure, never unverified", () => {
@@ -2333,4 +2374,91 @@ test("control resolution: raining substitutes the outbound mode and its access b
   const wet = rankVenues({ venues: [venue], holidays: {} }, { ...BASE_CONTROLS, mode: "cycle", raining: true });
   assert.equal(findCandidate(dry, "v1").travelMinutesMid, 7); // floor((5+10)/2)
   assert.equal(findCandidate(wet, "v1").travelMinutesMid, 25); // floor((20+30)/2), via the transit substitute
+});
+
+// --- rankVenues: candidate display fields (IMP-012-R1-F01) -----------------
+//
+// PLAN.md:1754 / 2263-2265 require every ranked row — Plan A and every
+// alternative — to show both feasibility tiers, the overall tier, the
+// binding constraint, the return mode(s) relied on, and latest_leave_at,
+// not just the composed overall tier. These prove the candidate object
+// actually carries those facts (app.js only formats them), across the three
+// binding-limit shapes a candidate can land in.
+
+test("rankVenues candidate: schedule-free return exposes hoursTier/returnTier/bindingConstraint/returnBasis/returnModes/latestLeaveAt", () => {
+  const venue = fullVenue({ id: "v1" }); // always-open Monday, walk access (schedule-free)
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.hoursTier, "robust"); // always_open -> COVERED
+  assert.equal(c.returnTier, "robust"); // schedule-free settles it as positive evidence
+  assert.equal(c.tier, "robust");
+  assert.equal(c.bindingConstraint, "none"); // COVERED hours + AT_LEAST(0) return -> no binding limit
+  assert.equal(c.returnBasis, "schedule_free");
+  assert.deepEqual(c.returnModes, ["walk"]);
+  assert.equal(c.latestLeaveAt, "UNDETERMINED");
+});
+
+test("rankVenues candidate: a finite last-departure return names the binding constraint and mode, with a finite latestLeaveAt", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { origin_a: { transit: { band: "5-10m", rank: 1 } } },
+    returnTransport: { origin_a: { transit: { default: { last_departure_band: "23:20-23:25" } } } },
+  });
+  // leaveAt 20:00 + ~7m travel + 180m duration -> session end ~23:07, past the
+  // core span (21:30), so this genuinely exercises the timetable lookup.
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200, durationMinutes: 180 };
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.hoursTier, "robust"); // always_open -> COVERED
+  assert.equal(c.returnTier, "robust");
+  assert.equal(c.bindingConstraint, "last_departure"); // COVERED hours + finite last departure
+  assert.equal(c.returnBasis, "last_departure");
+  assert.deepEqual(c.returnModes, ["transit"]);
+  assert.equal(typeof c.latestLeaveAt, "number");
+});
+
+// IMP-012-R1-F01 round 2: the hours side of an unverified-return candidate is
+// not always a real closing constraint — a 24/7 (COVERED) venue has none at
+// all, and labelling it "venue_close" contradicts latestLeaveAt's own
+// "UNDETERMINED" ("no known closing constraint within the verified span") on
+// the very same candidate. These two tests hold the *return* side fixed
+// (unverified, no data) and vary only the *hours* side, so the fix must read
+// hoursResult's own outcome rather than assuming one label for every case.
+
+test("rankVenues candidate: an unverified return over 24/7 hours reports no binding constraint at all, never venue_close", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { origin_a: { transit: { band: "5-10m", rank: 1 } } }, // schedule-bound, no return_transport data at all
+    // regular hours default to fullVenue's always-open Monday — COVERED, no real close.
+  });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200, durationMinutes: 180 }; // ends past the core span, no return data
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.hoursTier, "robust");
+  assert.equal(c.returnTier, "unverified");
+  assert.equal(c.tier, "unverified"); // worse-of robust and unverified
+  assert.equal(c.metricsBasis, "hours_only");
+  assert.equal(c.latestLeaveAt, "UNDETERMINED"); // COVERED — no close was reached within the verified span
+  assert.equal(c.bindingConstraint, "none"); // must not contradict the UNDETERMINED latestLeaveAt above
+});
+
+test("rankVenues candidate: an unverified return over a finite-hours venue correctly names venue_close", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { origin_a: { transit: { band: "5-10m", rank: 1 } } }, // schedule-bound, no return_transport data at all
+    regular: { mon: known([{ open: 480, close: 1320 }]) }, // 08:00-22:00, a genuine same-day close
+  });
+  // leaveAt 21:00 + ~7m travel + 35m duration -> arrives 21:07, ends 21:42,
+  // past the core span (21:30) so the return leg genuinely goes unverified;
+  // still well inside the 08:00-22:00 window so the hours side is a real
+  // finite close, not COVERED.
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1260, durationMinutes: 35 };
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.hoursTier, "robust");
+  assert.equal(c.returnTier, "unverified");
+  assert.equal(c.metricsBasis, "hours_only");
+  assert.notEqual(c.latestLeaveAt, "UNDETERMINED");
+  assert.equal(typeof c.latestLeaveAt, "number"); // a genuine finite closing-derived leave-by time
+  assert.equal(c.bindingConstraint, "venue_close"); // the real constraint here, correctly distinguished from the COVERED case above
 });

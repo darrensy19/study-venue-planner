@@ -120,6 +120,29 @@ function el(tag, props = {}, children = []) {
 }
 
 // --- presentation: reads the pipeline's shape, re-derives none of it -------
+//
+// PLAN.md:1754 / 2263-2265 — every ranked row (Plan A and every "More
+// alternatives" row alike) must show seat_confidence with both components,
+// both feasibility tiers and the overall tier, the binding constraint and
+// the return mode being counted on, usable_minutes, latest_leave_at, travel,
+// backup_strength, and preference. Every value read below already exists on
+// the candidate object rankVenues() returns — nothing here decides a tier,
+// an ordering, or a refusal condition.
+
+const BINDING_CONSTRAINT_LABEL = {
+  venue_close: "closing time",
+  last_departure: "last departure home",
+  none: "no binding limit within the verified span",
+};
+
+const RETURN_BASIS_LABEL = {
+  schedule_free: "an admissible walk/cycle route",
+  core_span: "the daytime core service span",
+  last_departure: "the timetable",
+  no_recorded_route: "no recorded route home",
+  pre_dawn_gap: "the pre-dawn service gap",
+  no_data: "no timetable data recorded",
+};
 
 function seatConfidenceLine(candidate) {
   const busyness = candidate.busynessBand;
@@ -128,9 +151,32 @@ function seatConfidenceLine(candidate) {
   return `Baseline: ${candidate.baselineSeatability} · Adjustment: ${adjustmentText} → seat confidence: ${candidate.seatConfidence.confidence}`;
 }
 
+function feasibilityLine(candidate) {
+  return `Hours: ${candidate.hoursTier} · Return: ${candidate.returnTier} · Overall: ${candidate.tier}`;
+}
+
+function bindingLine(candidate) {
+  const constraintText = BINDING_CONSTRAINT_LABEL[candidate.bindingConstraint] ?? "not open at this arrival";
+  const basisText = RETURN_BASIS_LABEL[candidate.returnBasis];
+  const modesText =
+    candidate.returnModes && candidate.returnModes.length > 0 ? ` via ${candidate.returnModes.join("/")}` : "";
+  const returnPart = basisText ? ` — home counted on ${basisText}${modesText}` : "";
+  return `Binding constraint: ${constraintText}${returnPart}`;
+}
+
+function formatLatestLeaveAt(value) {
+  if (value == null) return "not open at this arrival";
+  if (value === "UNDETERMINED") return "no known closing constraint within the verified span";
+  return formatClockFromAbs(value);
+}
+
 function metricsLine(candidate) {
   const basisNote = candidate.metricsBasis === "hours_only" ? " (hours only — return unverified)" : "";
-  return `Usable: ${formatMinutesDisplay(candidate.usableMinutesMid)}${basisNote} · ends ~${formatClockFromAbs(candidate.sessionEndMidAbs)} · ${candidate.travelMinutesMid}m travel`;
+  return `Usable: ${formatMinutesDisplay(candidate.usableMinutesMid)}${basisNote} · latest leave: ${formatLatestLeaveAt(candidate.latestLeaveAt)} · ends ~${formatClockFromAbs(candidate.sessionEndMidAbs)} · ${candidate.travelMinutesMid}m travel`;
+}
+
+function rankingLine(candidate) {
+  return `Backup: ${candidate.backupStrength} · Preference rank: ${candidate.preference}`;
 }
 
 function renderCandidateCard(candidate, title) {
@@ -138,12 +184,17 @@ function renderCandidateCard(candidate, title) {
   const card = el("article", { class: `plan-card tier-${candidate.tier}` });
   card.appendChild(el("h3", { text: `${title}: ${displayName(candidate.venueId)}` }));
   if (venue) card.appendChild(el("p", { class: "area", text: venue.area }));
-  card.appendChild(el("p", { class: "tier", text: `Feasibility: ${candidate.tier}` }));
+  card.appendChild(el("p", { class: "tier", text: feasibilityLine(candidate) }));
+  card.appendChild(el("p", { class: "binding", text: bindingLine(candidate) }));
   card.appendChild(el("p", { class: "seat-confidence", text: seatConfidenceLine(candidate) }));
   card.appendChild(el("p", { class: "metrics", text: metricsLine(candidate) }));
+  card.appendChild(el("p", { class: "ranking", text: rankingLine(candidate) }));
 
   if (candidate.tier === "tight") {
-    card.appendChild(el("p", { class: "warning thin-margin", text: "Thin margin — this session just fits." }));
+    const thinConstraint = BINDING_CONSTRAINT_LABEL[candidate.bindingConstraint] ?? "the binding constraint";
+    card.appendChild(
+      el("p", { class: "warning thin-margin", text: `Thin margin — ${thinConstraint} is close to binding.` })
+    );
   }
   if (candidate.tier === "unverified") {
     card.appendChild(el("p", { class: "warning", text: "Way home not verified — never Plan A." }));
@@ -173,20 +224,15 @@ function renderRemovalNotice(removal) {
 }
 
 function renderAlternatives(alternatives) {
+  // Every alternative gets the same full card as Plan A (PLAN.md:1754) —
+  // grouped by area, but not reduced to a thinner summary.
   const container = el("div", { class: "alternatives" });
   for (const [area, candidates] of Object.entries(alternatives)) {
     const section = el("section", { class: "area-group" });
     section.appendChild(el("h4", { text: area }));
-    const list = el("ul");
     for (const candidate of candidates) {
-      list.appendChild(
-        el("li", {
-          class: `tier-${candidate.tier}`,
-          text: `${displayName(candidate.venueId)} — ${candidate.tier}, ${candidate.seatConfidence.confidence} confidence, backup ${candidate.backupStrength}`,
-        })
-      );
+      section.appendChild(renderCandidateCard(candidate, displayName(candidate.venueId)));
     }
-    section.appendChild(list);
     container.appendChild(section);
   }
   return container;

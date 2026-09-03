@@ -309,35 +309,47 @@ export function resolveReturnBound(
   const clock = clockMinutesOfDay(sessionEndAbs);
 
   const modes = admissibleReturnModes(venue, bicycleWithYou, raining, sessionEndAbs, serviceDate, cycleLatestMinutes);
-  if (modes.size === 0) return { kind: "unverified", basis: "no_recorded_route" };
+  if (modes.size === 0) return { kind: "unverified", basis: "no_recorded_route", modes: [] };
 
-  if ([...modes].some((m) => SCHEDULE_FREE_MODES.has(m))) {
-    return { kind: "pass", basis: "schedule_free", margin: AT_LEAST_0 };
+  const scheduleFreeModes = [...modes].filter((m) => SCHEDULE_FREE_MODES.has(m));
+  if (scheduleFreeModes.length > 0) {
+    // Display-only: which mode(s) actually settle it, not the whole admissible
+    // set — a schedule-bound mode sharing the set isn't why this passed.
+    return { kind: "pass", basis: "schedule_free", margin: AT_LEAST_0, modes: scheduleFreeModes };
   }
 
   if (clock >= RETURN_CORE_FROM_MINUTES && clock <= RETURN_CORE_UNTIL_MINUTES) {
-    return { kind: "pass", basis: "core_span", margin: AT_LEAST_0 };
+    // Every admissible mode works equally here — the span waives the
+    // timetable lookup regardless of which one is used.
+    return { kind: "pass", basis: "core_span", margin: AT_LEAST_0, modes: [...modes] };
   }
 
   if (clock >= RETURN_SERVICE_DAY_START_MINUTES && clock < RETURN_CORE_FROM_MINUTES) {
-    return { kind: "unverified", basis: "pre_dawn_gap" };
+    return { kind: "unverified", basis: "pre_dawn_gap", modes: [...modes] };
   }
 
-  const resolved = [...modes].map((m) => resolveReturnService(venue, holidays, "origin_a", m, serviceDate));
-  const malformed = resolved.find((r) => r.kind === "malformed");
-  if (malformed) return { kind: "validation_failure", reason: malformed.reason };
+  const resolved = [...modes].map((m) => ({ mode: m, result: resolveReturnService(venue, holidays, "origin_a", m, serviceDate) }));
+  const malformed = resolved.find((r) => r.result.kind === "malformed");
+  if (malformed) return { kind: "validation_failure", reason: malformed.result.reason };
 
-  const present = resolved.filter((r) => r.kind === "present");
-  if (present.length === 0) return { kind: "unverified", basis: "no_data" };
+  const present = resolved.filter((r) => r.result.kind === "present");
+  if (present.length === 0) return { kind: "unverified", basis: "no_data", modes: [...modes] };
 
-  const lastDepartureAbs = Math.max(
-    ...present.map((band) => absMinutes(serviceDate, lastDepartureEdge(band, boundKind)))
-  );
+  const departures = present.map((r) => ({
+    mode: r.mode,
+    abs: absMinutes(serviceDate, lastDepartureEdge(r.result, boundKind)),
+  }));
+  const lastDepartureAbs = Math.max(...departures.map((d) => d.abs));
+  // Display-only: the mode(s) whose own last departure is the binding one —
+  // MAX over independent real services, so a tie legitimately names more
+  // than one (docstring above, step 6).
+  const modesRelied = departures.filter((d) => d.abs === lastDepartureAbs).map((d) => d.mode);
   return {
     kind: "pass",
     basis: "last_departure",
     margin: finiteSurplus(lastDepartureAbs - sessionEndAbs),
     lastDepartureAbs,
+    modes: modesRelied,
   };
 }
 
@@ -374,7 +386,7 @@ export function resolveReturnFeasibility(venue, holidays, returnParams) {
     return { tier: "invalid", reason: mid.kind === "validation_failure" ? mid.reason : upper.reason };
   }
   if (mid.kind === "unverified" || upper.kind === "unverified") {
-    return { tier: "unverified", basisMid: mid.basis, basisUpper: upper.basis };
+    return { tier: "unverified", basisMid: mid.basis, basisUpper: upper.basis, modesMid: mid.modes, modesUpper: upper.modes };
   }
 
   const robust = passesFeasibility(upper.margin);
@@ -388,6 +400,8 @@ export function resolveReturnFeasibility(venue, holidays, returnParams) {
     lastDepartureAbsUpper: upper.lastDepartureAbs,
     basisMid: mid.basis,
     basisUpper: upper.basis,
+    modesMid: mid.modes,
+    modesUpper: upper.modes,
   };
 }
 
@@ -449,13 +463,13 @@ function boundBindingMetrics(venue, holidays, arrivalAbs, travelMinutes, duratio
   const combined = combineBindingLimit(ec, closingBufferMinutes, returnOutcome);
 
   if (combined.bindingConstraint === "none") {
-    return { usableMinutes: durationMinutes, surplus: AT_LEAST_0, latestLeaveAt: "UNDETERMINED" };
+    return { usableMinutes: durationMinutes, surplus: AT_LEAST_0, latestLeaveAt: "UNDETERMINED", bindingConstraint: "none" };
   }
   const bindingLimitAbs = combined.bindingLimitAbs;
   const usableMinutes = Math.max(0, Math.min(bindingLimitAbs, arrivalAbs + durationMinutes) - arrivalAbs);
   const surplus = finiteSurplus(bindingLimitAbs - (arrivalAbs + durationMinutes));
   const latestLeaveAt = bindingLimitAbs - durationMinutes - travelMinutes;
-  return { usableMinutes, surplus, latestLeaveAt };
+  return { usableMinutes, surplus, latestLeaveAt, bindingConstraint: combined.bindingConstraint };
 }
 
 /**
@@ -537,7 +551,25 @@ export function resolveOverallFeasibilityAtArrivals(venue, holidays, params) {
 
   const tier = overallTier(hoursResult.tier, returnResult.tier);
 
+  // hoursTier/returnTier/returnBasis*/returnModes* are display-safe facts the
+  // composition already computes — surfaced here, unchanged, so app.js can
+  // show them (PLAN.md:1754/2263-2265) without re-deriving any policy.
   if (returnResult.tier === "unverified") {
+    // Hours-only metrics are never governed by the return leg, but that does
+    // not mean the hours side always carries a real closing constraint —
+    // mirror its own three-way outcome instead of assuming "venue_close"
+    // applies uniformly: `latestLeaveAt` is `undefined` when the midpoint has
+    // no active period (no binding constraint is displayable at all),
+    // "UNDETERMINED" when the hours side is COVERED (no known close within
+    // the verified span — the same "none" state `boundBindingMetrics` uses
+    // for a COVERED+AT_LEAST(0) combined result), or a real finite number
+    // (a genuine closing-time constraint).
+    const hoursBindingConstraint =
+      hoursResult.latestLeaveAt === undefined
+        ? undefined
+        : hoursResult.latestLeaveAt === "UNDETERMINED"
+        ? "none"
+        : "venue_close";
     return {
       tier,
       usableMinutesMid: hoursResult.usableMinutesMid,
@@ -545,6 +577,13 @@ export function resolveOverallFeasibilityAtArrivals(venue, holidays, params) {
       latestLeaveAt: hoursResult.latestLeaveAt,
       surplusUpper: hoursResult.surplusUpper,
       metricsBasis: "hours_only",
+      hoursTier: hoursResult.tier,
+      returnTier: returnResult.tier,
+      returnBasisMid: returnResult.basisMid,
+      returnBasisUpper: returnResult.basisUpper,
+      returnModesMid: returnResult.modesMid,
+      returnModesUpper: returnResult.modesUpper,
+      bindingConstraint: hoursBindingConstraint,
     };
   }
 
@@ -560,6 +599,13 @@ export function resolveOverallFeasibilityAtArrivals(venue, holidays, params) {
     latestLeaveAt: midMetrics?.latestLeaveAt,
     surplusUpper: upperMetrics?.surplus,
     metricsBasis: "combined",
+    hoursTier: hoursResult.tier,
+    returnTier: returnResult.tier,
+    returnBasisMid: returnResult.basisMid,
+    returnBasisUpper: returnResult.basisUpper,
+    returnModesMid: returnResult.modesMid,
+    returnModesUpper: returnResult.modesUpper,
+    bindingConstraint: midMetrics?.bindingConstraint,
   };
 }
 
@@ -1673,7 +1719,13 @@ export function rankVenues(snapshot, controls) {
       preference: venue.preference,
       surplusMid: overall.surplusMid,
       usableMinutesMid: overall.usableMinutesMid,
+      latestLeaveAt: overall.latestLeaveAt,
       metricsBasis: overall.metricsBasis,
+      hoursTier: overall.hoursTier,
+      returnTier: overall.returnTier,
+      bindingConstraint: overall.bindingConstraint,
+      returnBasis: overall.returnBasisMid,
+      returnModes: overall.returnModesMid,
       sessionEndMidAbs: arrivalMidAbs + durationMinutes,
       planB: planB && planB.result.strength !== "none" ? {
         venueId: planB.fallbackVenueId,
