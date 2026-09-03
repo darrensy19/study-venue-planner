@@ -2529,3 +2529,29 @@ subsequently re-resolved via a bus route instead (which avoids the ambiguous lab
 last-train extension exists in 2026 (only ad hoc extensions on specific public-holiday-eve nights,
 which the schema's `by_weekday` can't represent anyway) — confirmed via SMRT/LTA source, corrects an
 assumption in the original data-fill request.
+
+## 2026-09-04 — `origin_a`/`origin_b` renamed to `home`/`office` throughout
+
+The anonymized naming was abandoned. It had already failed at its own purpose: `PLAN.md` (line 766,
+prior to this rename) and this file's 2026-08-31 entry both already stated "`origin_a` (home)" /
+"`origin_b` (work)" in plain committed, pushed prose — the mapping the anonymized field names existed
+to protect was already public. Given that, keeping the schema's actual field names symbolic added
+confusion (the return-leg rule — the return leg always reads `access[home]`, regardless of which
+origin a session started from — reads far more clearly with names that say what they mean) without
+any remaining privacy benefit.
+
+Renamed mechanically (`origin_a` → `home`, `origin_b` → `office`) across `data/venues_meta.json`
+(hand-maintained keys), `web/ranking.js` (3 references), `web/app.js` (the origin selector's values
+and labels), `tests/js/ranking.test.js` (70 fixture references), `PLAN.md` and `CLAUDE.md`.
+`web/index.html` was regenerated from the updated inputs via `build/generate.py`'s
+`generate_index_html` (network-free, per its own docstring — no live API call was made). Both test
+suites pass unchanged (188 Python, 184 JS) since this is a symbol rename with no logic change.
+
+Historical records were deliberately left alone rather than rewritten: `reviews/ARCH-001.md` through
+`reviews/IMP-014.md` and their gate records (sealed, per this file's own summaries of them), and this
+file's own pre-2026-09-04 entries (dated statements true in the terminology of their time). Only new
+entries use the new names going forward.
+
+The remaining privacy protection is unchanged and was never about the field names: `data/venues_meta.json`
+still carries no exact travel minutes, only ordinal rank plus a coarse band — see `PLAN.md`'s "Privacy:
+bands, not exact minutes."

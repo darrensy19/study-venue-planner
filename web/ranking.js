@@ -248,7 +248,7 @@ export function resolveReturnService(venue, holidays, destination, mode, service
  * A total function of only its explicit parameters (session_end_abs and
  * service_date included) — it must be independently callable per bound so
  * mid and upper can land on different admissible sets. Always evaluated
- * against access[origin_a]: the return leg is evaluated against the
+ * against access[home]: the return leg is evaluated against the
  * outbound-home access, never the outbound origin of the trip being made.
  * An empty result is meaningful (no recorded way home) and must never be
  * silently defaulted to non-empty.
@@ -261,7 +261,7 @@ export function admissibleReturnModes(
   serviceDate,
   cycleLatestMinutes = RETURN_CYCLE_LATEST_MINUTES
 ) {
-  const destAccess = venue.access?.origin_a ?? {};
+  const destAccess = venue.access?.home ?? {};
   const modes = new Set(Object.keys(destAccess).filter((m) => destAccess[m] != null));
   if (!bicycleWithYou) modes.delete("cycle");
   if (raining) modes.delete("cycle");
@@ -328,7 +328,7 @@ export function resolveReturnBound(
     return { kind: "unverified", basis: "pre_dawn_gap", modes: [...modes] };
   }
 
-  const resolved = [...modes].map((m) => ({ mode: m, result: resolveReturnService(venue, holidays, "origin_a", m, serviceDate) }));
+  const resolved = [...modes].map((m) => ({ mode: m, result: resolveReturnService(venue, holidays, "home", m, serviceDate) }));
   const malformed = resolved.find((r) => r.result.kind === "malformed");
   if (malformed) return { kind: "validation_failure", reason: malformed.result.reason };
 

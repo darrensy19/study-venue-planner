@@ -763,12 +763,12 @@ resolved bounds, tagged outcomes, and positive evidence before silence.
 
 Three things differ, and all three matter.
 
-**The destination is home, not the origin.** Sessions start from `origin_a` (home) or `origin_b`
-(work); they end by going home. The return leg is therefore evaluated against
-`access[origin_a]` — the modes and routes recorded for the *home* leg — regardless of which origin
+**The destination is home, not the origin.** Sessions start from `home` or `office`; they end by
+going home. The return leg is therefore evaluated against
+`access[home]` — the modes and routes recorded for the *home* leg — regardless of which origin
 the trip started from. *Assumption, stated deliberately:* the session always ends by going home. A
 return-destination control is a plausible later addition; nothing in this design forbids it, which is
-why `return_transport` is keyed by destination rather than hard-coding `origin_a`.
+why `return_transport` is keyed by destination rather than hard-coding `home`.
 
 **The bicycle is a physical object.** `decisions.md`, 2026-08-30 already records that cycling is
 viable only from home, because that is where the bicycle is kept. The return leg inherits the
@@ -815,7 +815,7 @@ same reason: it is resolved **per bound**, so an implicit `session_end` would si
 two bounds into one.
 
 ```
-return_destination = origin_a                       # see the assumption above
+return_destination = home                       # see the assumption above
 
 admissible_return_modes(venue, bicycle_with_you, raining,
                         session_end_abs, service_date) -> set of modes
@@ -1137,7 +1137,7 @@ halves of the question and must not be confused:
 
 | File | Answers | Required inside the span? |
 | --- | --- | --- |
-| `access[origin_a]` | Is there a route home from this venue at all? | **Yes** — unconditionally, at every hour |
+| `access[home]` | Is there a route home from this venue at all? | **Yes** — unconditionally, at every hour |
 | `return_transport` | When does the last service on that route leave? | **No** — the span answers it |
 
 An earlier draft required a `PRESENT` `return_transport` entry before the in-span pass. That
@@ -1228,9 +1228,9 @@ return MARGIN(last_departure_b - session_end_b, basis: "last_departure")
 ```
 
 **Step 1 is the safety property of this whole section**, and its position is load-bearing. An earlier
-draft put the core-span shortcut first, which let a venue with no `access[origin_a]` entry at all —
+draft put the core-span shortcut first, which let a venue with no `access[home]` entry at all —
 or only `null` ones, or none currently admissible — pass as `robust` between 07:00 and 21:30 on the
-strength of a city-wide clock. All 28 current records happen to carry a non-null `origin_a.transit`
+strength of a city-wide clock. All 28 current records happen to carry a non-null `home.transit`
 entry, so the defect was invisible in the data and live in the contract; the schema permits the
 absent case and Plan B evaluates each fallback independently.
 
@@ -1424,7 +1424,7 @@ its own words rather than borrowing the seat-confidence refusal:
 ### Plan B
 
 Plan B is evaluated with the **same machinery at the fallback venue**, using the fallback's own
-`return_transport` block and its own `access[origin_a]` mode set — never Plan A's. Plan B's session
+`return_transport` block and its own `access[home]` mode set — never Plan A's. Plan B's session
 end is `plan_b_arrival_* + duration`, so its later arrival pushes it later into the evening, which is
 precisely when the return constraint starts to bind. A rescue option that strands you is not a rescue.
 
@@ -1445,7 +1445,7 @@ exact values.
 
 ```json
 "return_transport": {
-  "origin_a": {
+  "home": {
     "transit": {
       "default":    {"last_departure_band": "23:20-23:25"},
       "by_weekday": {"fri": {"last_departure_band": "23:50-23:55"},
@@ -1485,7 +1485,7 @@ was checked; never the timetable entry itself.
 
 **Bands, not exact times — and the same privacy trade already accepted.** A last departure toward
 home is weaker information than a travel duration to home: it is dominated by the *venue* end for
-most venues, and the repo already publishes venue coordinates and `access` bands to `origin_a`, which
+most venues, and the repo already publishes venue coordinates and `access` bands to `home`, which
 is the far stronger trilateration signal. What it does add is a hint about the home end, since the
 binding constraint on a long journey is often the last connection there. Coarsened to a five-minute
 band and accepted deliberately, on the same reasoning recorded for `access`.
@@ -1676,7 +1676,7 @@ Plan B is then re-evaluated from scratch using **exactly the same machinery as P
 - `active_period_mid` resolved at `plan_b_arrival_mid`, and `active_period_upper` resolved **independently** at `plan_b_arrival_upper` — each through the absolute-minutes lookup, on its own arrival date, since either can roll past midnight
 - its own `robust` / `tight` / `shorter` tier, computed by the same rule (`robust` requires `active_period_upper` to exist **and** the session to fit before that period's buffer)
 - `seat_confidence` at the **delayed** hour taken from `plan_b_arrival_mid`, which can cross a band boundary
-- its own `return_tier`, from **its own** `return_transport` block and **its own** `access[origin_a]` mode set — never Plan A's, and evaluated at `plan_b_arrival_* + duration`, which is later into the evening and therefore exactly where the return constraint starts to bind
+- its own `return_tier`, from **its own** `return_transport` block and **its own** `access[home]` mode set — never Plan A's, and evaluated at `plan_b_arrival_* + duration`, which is later into the evening and therefore exactly where the return constraint starts to bind
 - **Plan A's `bicycle_with_you`, unchanged** — the bicycle is wherever you rode it, so a trip that started by transit has no `cycle` return at the fallback either. The same input also makes a `fallbacks[].mode == "cycle"` link **unviable** on such a trip, and Plan B must drop it exactly as it drops a fallback closed at the delayed arrival
 - rain and `wet_weather_mode` effects on a leg that may differ from the origin leg — including the removal of `cycle` from the return set
 
@@ -1871,14 +1871,14 @@ The generation step is **not** a build system in this sense — a Python script 
     "closing_buffer_minutes": null,
     "holiday_policy": "unknown",
     "access": {
-      "origin_a": {"cycle": {"rank": 2, "band": "15-20m"},
+      "home": {"cycle": {"rank": 2, "band": "15-20m"},
                    "transit": {"rank": 4, "band": "25-30m"}},
-      "origin_b": {"transit": {"rank": 1, "band": "10-15m"},
+      "office": {"transit": {"rank": 1, "band": "10-15m"},
                    "walk": null}
     },
-    "wet_weather_mode": {"origin_a": {"cycle": "transit"}},
+    "wet_weather_mode": {"home": {"cycle": "transit"}},
     "return_transport": {
-      "origin_a": {
+      "home": {
         "transit": {
           "default":    {"last_departure_band": "23:20-23:25"},
           "by_weekday": {"fri": {"last_departure_band": "23:50-23:55"},
@@ -1908,12 +1908,12 @@ The generation step is **not** a build system in this sense — a Python script 
 - **`closing_buffer_minutes`** — `null` means use `CLOSING_BUFFER_DEFAULT_MINUTES` (30), a named constant in `ranking.js`. The resolved value is what formulas refer to as `closing_buffer`.
 - **`holiday_policy`** — `unknown` (default) or `substitute_sun`. See `holidays.json` below.
 - **`access`** — ordinal rank plus a coarse band, never exact minutes. **Missing** mode key = not viable. Explicit **`null`** = not yet measured.
-- **`wet_weather_mode`** — which mode replaces which when the rain toggle is on, per origin. Without this the toggle's effect is undefined; with it, disabling `cycle` for `origin_a` explicitly selects `transit`, and the resulting later arrival is a visible consequence rather than a silent reorder. A mode with no wet-weather substitute is simply unavailable in the rain.
+- **`wet_weather_mode`** — which mode replaces which when the rain toggle is on, per origin. Without this the toggle's effect is undefined; with it, disabling `cycle` for `home` explicitly selects `transit`, and the resulting later arrival is a visible consequence rather than a silent reorder. A mode with no wet-weather substitute is simply unavailable in the rain.
 - **`fallbacks`** — hand-picked links to plausible nearby venues only. Not a matrix; most venues will have zero, one or two.
 - **`return_transport`** — the latest departure **from the venue** that still gets you home, per destination and per schedule-bound mode, as a five-minute clock band. Only `transit` needs an entry; `walk` and `cycle` are schedule-free and their viability is already carried by `access`. Optional `by_weekday` overrides, resolved by `resolve_return_service`. Absent means **`unverified`**, never "service exists"; malformed means a **per-venue validation failure**, not `unverified`. Full contract in "Getting home: session-end return transport".
 - **`holiday_return_policy`** — `unknown` (default) or `substitute_sun`. **A separate field from `holiday_policy`**, which governs the busyness curve: one field meaning two things is the mistake `preference` and `baseline_seatability` were split to avoid.
 
-**Privacy: bands, not exact minutes.** This file is committed to a public repo. Exact travel times from `home` and `work` to venues whose coordinates are published would trilaterate both origins. Rank plus a five-minute band gives the pipeline what it consumes — ordering, a midpoint, and an upper bound — while widening the inference considerably. Origins are `origin_a` / `origin_b`; the mapping is not committed. A reduction in precision, not a guarantee, accepted deliberately.
+**Privacy: bands, not exact minutes.** This file is committed to a public repo. Exact travel times from `home` and `office` to venues whose coordinates are published would trilaterate both. Rank plus a five-minute band gives the pipeline what it consumes — ordering, a midpoint, and an upper bound — while widening the inference considerably. Origins are named `home` / `office` directly (2026-09-04, `decisions.md`: the anonymized `origin_a`/`origin_b` naming was abandoned after the mapping had already surfaced in this document's own prose); the remaining protection is the band, not the label. A reduction in precision, not a guarantee, accepted deliberately.
 
 ### `data/holidays.json` — hand-maintained
 
@@ -2372,14 +2372,14 @@ Deliberately small. No mocking frameworks, no live-network tests.
 - **`backup_strength` three-way** — `strong` only when the requested session fits at the fallback; `salvage` when the floor is cleared but the session does not fit; `none` below the floor, below `PLAN_B_MIN_CONFIDENCE`, or when a nearby fallback is closed by delayed arrival
 - **the core service span short-circuits, and only inside itself** — a session end at 20:00 resolving `robust` with basis `core_span` on a venue whose `return_transport` is **entirely absent**, with `resolve_return_service` never called (assert the call count, not just the outcome); the same venue with a session end at 22:00 resolving `unverified` (basis `no_data`)
 - **schedule-free modes are positive evidence** — an admissible `walk` or `cycle` return resolving `robust` with `AT_LEAST(0)` even when the `transit` entry is missing entirely; and the same venue resolving `unverified` once that mode is inadmissible
-- **the bicycle is a physical object** — `cycle` admissible as a return mode when `bicycle_with_you`, and **inadmissible** when the outbound mode was `transit` from `origin_b`, even though `access.origin_a.cycle` exists
+- **the bicycle is a physical object** — `cycle` admissible as a return mode when `bicycle_with_you`, and **inadmissible** when the outbound mode was `transit` from `office`, even though `access.home.cycle` exists
 - **rain removes `cycle` from the return set**, and a venue whose only schedule-free return was `cycle` falls from `robust` to whatever `transit` gives — never silently staying `robust`
-- **the return leg reads `access[origin_a]`, not the outbound origin** — a trip from `origin_b` whose return mode set comes from `origin_a`; and a venue with **no** `origin_a` entry at all resolving `unverified`, never `closed`
+- **the return leg reads `access[home]`, not the outbound origin** — a trip from `office` whose return mode set comes from `home`; and a venue with **no** `home` entry at all resolving `unverified`, never `closed`
 - **the 04:00 service-day boundary** — a session ending 03:30 Saturday tested against **Friday** night's last departure and resolving `shorter`, not against Saturday night's and resolving `robust`. Anchoring on the calendar date must fail this test
 - **the pre-dawn gap is terminal for a schedule-bound-only set, and only then** — a session ending 05:00 on a `transit`-only admissible set resolving `unverified` (basis `pre_dawn_gap`) **regardless of what `return_transport` contains**, with `resolve_return_service` never called, and never producing a `return_margin_*`, a `binding_limit_*` or a `shorter` tier; and **the same 05:00 session with an admissible `walk` resolving `robust` (basis `schedule_free`)**. A test asserting `unverified` for the walk case is asserting a policy this design does not adopt
 - **the pessimistic edge flips** — the upper bound taking the band's **lower** edge for `last_departure_band` while travel bands keep taking the **upper** edge. A test that passes with one shared edge rule is not testing this
-- **the route prerequisite comes first** — a venue with **no** `access[origin_a]` entry, and one with only `null` entries, resolving `unverified` (basis `no_recorded_route`) for a session ending at **13:00, inside the core span**. This is the ordering defect the core-span shortcut caused; a test placed only outside the span cannot catch it
-- **the core span waives the timetable, not the route** — at 13:00, a venue with an admissible `access[origin_a].transit` entry and **no** `return_transport` at all resolving `robust` (basis `core_span`); the same venue with **no usable `access[origin_a]`** resolving `unverified` (basis `no_recorded_route`) at the same hour. The two files answer different halves of the question and the test must separate them
+- **the route prerequisite comes first** — a venue with **no** `access[home]` entry, and one with only `null` entries, resolving `unverified` (basis `no_recorded_route`) for a session ending at **13:00, inside the core span**. This is the ordering defect the core-span shortcut caused; a test placed only outside the span cannot catch it
+- **the core span waives the timetable, not the route** — at 13:00, a venue with an admissible `access[home].transit` entry and **no** `return_transport` at all resolving `robust` (basis `core_span`); the same venue with **no usable `access[home]`** resolving `unverified` (basis `no_recorded_route`) at the same hour. The two files answer different halves of the question and the test must separate them
 - **band normalisation, before validation** — `23:20-23:25` → `(1400, 1405)`; `23:55-00:05` → `(1435, 1445)`, which a pre-normalisation increasing check would wrongly reject; `00:30-00:35` → `(1470, 1475)`, **not** `(30, 35)`; `03:58-04:02` → `MALFORMED`, since it straddles the service-day boundary and names two nights; and `25:00-25:05` → `MALFORMED`. Every normalised offset lies in `[240, 1680)`
 - **`edge()` takes opposite ends for opposite bounds** — the upper bound taking `lo` and the mid bound taking `floor((lo + hi) / 2)`, with the floored midpoint an integer; and a travel band in the same test still taking its **upper** edge, proving the two rules are not shared
 - **`validate_return_transport` covers every reachable entry** — `default` and every `by_weekday` key, for every destination and mode, across the whole of `data/venues_meta.json`; a malformed band under a `by_weekday` key that no current session would ever select still marks the venue invalid
@@ -2391,7 +2391,7 @@ Deliberately small. No mocking frameworks, no live-network tests.
 - **the failure model is per-venue and never global** — one venue with a malformed band, and: the stage **returns successfully**; the atomic write **still happens**; every other venue is stamped `ok`, generated and ranked normally; and the malformed venue is absent from ranked output with its diagnostic present. A test in which a malformed band withholds the whole generation is asserting the rejected model
 - **the removal is loud, and distinct from `unverified`** — a venue dropped at `STEP 0` appearing in a visible removal notice naming it and its `reason`; an **absent** stamp producing the "never validated" wording instead; and neither being merged into the `unverified` group, since the two have different fixes
 - **`RETURN_CYCLE_LATEST_MINUTES` is resolved against the service date** — a cutoff of 1500 (01:00 next day) admitting a 00:30 session end and excluding a 01:30 one. Comparing the raw offset against an absolute minute must fail the suite
-- **`bicycle_with_you` is threaded, not re-derived** — Plan B computing its return set from **Plan A's** value, so a transit trip from `origin_b` cannot gain a `cycle` return at the fallback; and a `fallbacks[].mode == "cycle"` link being **dropped as unviable** on that same trip
+- **`bicycle_with_you` is threaded, not re-derived** — Plan B computing its return set from **Plan A's** value, so a transit trip from `office` cannot gain a `cycle` return at the fallback; and a `fallbacks[].mode == "cycle"` link being **dropped as unviable** on that same trip
 - **`admissible_return_modes` reads only its parameters** — the two bounds producing different admissible sets when `session_end_mid` and `session_end_upper` straddle the cycle cutoff, which is impossible if the function closes over a single shared `session_end`
 - **`MAX` over admissible modes, not `MIN`** — two schedule-bound modes with different last departures resolving against the later one
 - **`unverified` never unranks, and `UNKNOWN` always does** — a venue with hours `robust` and return `unverified` still appearing in the ranked output (last, in its own group) while a venue with `effective_close == UNKNOWN` does not appear at all. These two must not collapse
@@ -2403,7 +2403,7 @@ Deliberately small. No mocking frameworks, no live-network tests.
 - **the `basis` field carries no exact times and no direction names** — a lint or review check over `venues_meta.json`, since nothing else validates a free-text field
 - **the return metrics are hours-only when `return_tier` is `unverified`**, and are labelled as such rather than presented as a verified session length
 - **`backup_strength` respects the return leg** — a fallback where the requested session fits but the return is `unverified` capping at `salvage`; a fallback whose `salvage` duration is the **return-capped** `usable_minutes`, not the hours-capped one
-- **Plan B uses its own return data** — a fallback resolving against its own `return_transport` and its own `access[origin_a]`, never Plan A's
+- **Plan B uses its own return data** — a fallback resolving against its own `return_transport` and its own `access[home]`, never Plan A's
 - **`holiday_return_policy` is independent of `holiday_policy`** — a venue with `holiday_policy: substitute_sun` and the default `holiday_return_policy: unknown` resolving `unverified` on a holiday, proving the two fields are not read from one another
 - ranking order, the `shorter` split, the `unverified` split, and both "no option" conditions
 - **one entry-point case per row of the ranked-and-unranked taxonomy**, asserting the group each venue lands in — including the `NONE` rows, whose answer is "ranked", so the table's exhaustiveness is mechanically checked rather than merely claimed
@@ -2548,7 +2548,7 @@ Each step reads the previous step's output, so they run in order. `phase0_resolv
 - ~~**Are `RETURN_CORE_FROM_MINUTES = 420` and `RETURN_CORE_UNTIL_MINUTES = 1290` right?**~~ **Basis recorded, 2026-08-30**, with source, checked date, scope and a re-check rule — see "The core service span waives the timetable lookup, never the route". They remain a *maintained assumption* rather than a frozen invariant; the standing task is the **annual re-check**, not the original question. The route prerequisite is separate and unconditional, so the span can never manufacture a way home on its own.
 - **Is `RETURN_TOLERANCE_MINUTES = 10` right?** Provisional, and deliberately tighter than `FEASIBILITY_TOLERANCE_MINUTES` because the consequence of being wrong is a taxi rather than a shorter session.
 - **Should `RETURN_CYCLE_LATEST_MINUTES` be set, and to what?** Currently `null`, meaning cycling home is treated as available at any hour. This is a real-world judgement about riding home late at night, not something the data can answer, and it changes the verdict for the ten venues with a home cycle route.
-- **Is the return destination always `origin_a`?** Assumed yes — sessions end by going home. `return_transport` is keyed by destination so the assumption can be lifted with a UI control rather than a schema change.
+- **Is the return destination always `home`?** Assumed yes — sessions end by going home. `return_transport` is keyed by destination so the assumption can be lifted with a UI control rather than a schema change.
 - **Should the outbound mirror be modelled** — whether transport still runs *to* a venue at a late departure time? Same data shape, other direction. Deliberately out of scope here; flagged for its own assignment.
 - **How many fallback links are actually needed**, and does the hand-maintained set stay maintainable as brands are added?
 - ~~**How many venues in total?**~~ **Answered: 28** — 24 `starbucks`, 3 `coffee_bean`, 1 `baker_and_cook`, final. The consequences are recorded in `decisions.md` — a SerpApi ceiling of 4–8 refreshes a month on the free tier (1–2 calls per venue depending on whether a retry is needed, not a flat count), and 28 venues of hand-maintained meta whose *cross-venue ordinal ranks* are the part that will not scale. Both were open questions; neither is a blocker for Phase 0.

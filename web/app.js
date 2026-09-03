@@ -7,8 +7,8 @@ import { rankVenues } from "./ranking.js";
 const FEASIBILITY_TOLERANCE_MINUTES = 15;
 
 const ORIGINS = [
-  { value: "origin_a", label: "Origin A" },
-  { value: "origin_b", label: "Origin B" },
+  { value: "home", label: "Home" },
+  { value: "office", label: "Office" },
 ];
 const MODES = [
   { value: "transit", label: "Transit" },
@@ -73,7 +73,7 @@ function displayName(venueId) {
 function defaultControls() {
   const now = new Date();
   return {
-    origin: "origin_a",
+    origin: "home",
     mode: "transit",
     raining: false,
     departureDate: todayIso(),
