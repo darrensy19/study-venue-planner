@@ -8,7 +8,7 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 - **ID**: `IMP-010`
 - **Work type**: implementation
-- **State**: `review_requested`
+- **State**: `completed`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, medium
 - **Route triggers**: correctness depends on negative/fail-closed paths — the ranked/unranked taxonomy's hard-filter, unranked-removal and validation-failure rows (`PLAN.md`, "Venues that cannot be ranked" and "The ranked and unranked taxonomy") must each be distinguished from an ordinary ranked outcome, with its own entry-point test; and a shared cross-component invariant — this entry point is the one call site `app.js` and its tests treat as authoritative for ranking order and the Plan-B-before-Plan-A sequencing constraint (`WORKFLOW.md`'s "negative or fail-closed paths" and "shared cross-component invariant" hard triggers)
@@ -19,8 +19,8 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Acceptance criteria**: one pure function, no DOM/I/O, taking the whole snapshot plus control state; ownership order exactly as `PLAN.md` states (control resolution → snapshot validation → travel-band parsing/arrivals → return-status `STEP 0` removal → evaluation → Plan B before `backup_strength` ranks Plan A → grouping/refusals/ordering); the 8-key ranking order and 7-key fallback-selection order exactly as specified, `surplus_mid` only via `surplusSortKey()`; every row of the ranked/unranked taxonomy table implemented with its own entry-point test; both refusal messages present, worded distinctly, never substituted; alternatives grouped by `area`
 - **Required verification**: `node --test tests/js/*.test.js` — 178 passed, 0 failed (176 round-1 + 2 for `IMP-010-R1-F01`); `.venv/bin/pytest tests/python/` — 78 passed, unaffected; `git status`/`git diff` confined to `web/ranking.js`, `tests/js/ranking.test.js`, `HANDOFF.md`, `reviews/LEDGER.md`, `reviews/IMP-010-gate.md`, `reviews/IMP-010.md`
 - **Claude gate result**: `GATE_FAIL` (invocation 1) → corrected → `GATE_PASS` (invocation 2)
-- **Independent review**: `required` — `codex_terra`, medium
+- **Independent review**: round 1 `CHANGES_REQUESTED` — `IMP-010-R1-F01` accepted and corrected in `d45c618`; round 2 `REPO VALIDATION` on that correction returned `APPROVE` — `IMP-010-R1-F01` `resolved`, no new findings
 - **Gate evidence**: `reviews/IMP-010-gate.md`
-- **Review record**: `reviews/IMP-010.md` (round 1: `CHANGES_REQUESTED` on `IMP-010-R1-F01`, corrected)
-- **User decision**: pending
-- **Next action**: Independent re-review by `codex_terra` of the round-2 (correction) slice — see the fenced handoff prompt.
+- **Review record**: `reviews/IMP-010.md`
+- **User decision**: approved — user authorized close after round-2 `APPROVE`
+- **Next action**: None — terminal. A new task requires a new assignment ID.

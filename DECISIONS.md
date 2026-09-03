@@ -2199,3 +2199,47 @@ Round 2 `APPROVE`, finding resolved, no new findings — one non-blocking observ
 on an otherwise-valid status object aren't prohibited by the contract. 78 Python tests total (71 + 7
 new), `node --test` unaffected (142 passing, no `web/` file touched). Full detail in
 `reviews/IMP-009.md` and `reviews/IMP-009-gate.md`.
+
+## 2026-09-03 — IMP-010 closed: whole-dataset ranking pipeline entry point implemented
+
+Implemented Phase 1 implementation-order step 4: `rankVenues()` in `web/ranking.js`, the single
+pure, whole-dataset entry point wiring every already-implemented per-venue primitive
+(`resolveOverallFeasibilityAtArrivals`, `resolveBackupStrength`, `evaluatePlanBFallback`,
+`resolveBusynessBand`, `resolveSeatConfidence`, `validateReturnTransport`) into one ranking pass:
+control resolution (`wet_weather_mode` substitution, `bicycle_with_you`), whole-dataset `preference`
+snapshot validation (`validatePreferenceSnapshot()` — a missing/non-integer value fails that venue
+alone, a value shared by two-or-more venues fails every venue sharing it), travel-band parsing and
+per-venue arrivals, return-status `STEP 0` removal, evaluation, Plan B evaluation for every candidate
+before `backup_strength` ranks Plan A, and final grouping/refusals/ordering — the 8-key ranking order
+and 7-key fallback-selection order exactly as `PLAN.md`'s "The ranking pipeline" and "Choosing among
+several fallbacks" specify. 34 new tests (176 total after implementation), one per row of the
+ranked/unranked taxonomy table plus the ranking/fallback orders, both refusal messages, and area
+grouping.
+
+Three implementation-level choices were flagged for reviewer confirmation rather than pre-approved:
+`rankVenues()`'s return shape (`{planA, groups, alternatives, travelUnknown, removed, refusals}`,
+documented in the function's own JSDoc); key 6 (`surplus_mid`) of the fallback-selection order left
+unimplemented, since `PLAN.md` states it is unreachable between two distinct ranked venues once
+`preference` has decided, with `venue_id` (key 7) alone keeping the order total; and `preference`'s
+"lower number = better" direction, matched to `access[][].rank`'s convention since no real data yet
+distinguishes the two directions. None was contested in review.
+
+Pre-gate invocation 1 `GATE_FAIL` on a real defect — `selectPlanBFallback` evaluated a fallback venue
+with neither the `business_status` nor `return_transport_status` STEP-0 gate the primary-candidate
+path applies (a closed or return-broken venue could be shown as a `"strong"` Plan B) — fixed, plus a
+smaller ownership-order fix (travel-band parsing now runs before the return-status check, matching
+`PLAN.md`'s stated step order). Invocation 2 `GATE_PASS`.
+
+Round 1 (`codex_terra`) `CHANGES_REQUESTED`: `IMP-010-R1-F01`, High — the same gap the pre-gate had
+already fixed for the primary-candidate path was still open for fallback selection.
+`selectPlanBFallback()` read fallback venues straight from the unfiltered `venueById` map, never
+consulting the `invalidPreference` set `rankVenues()` already computes; `compareFallbacks()` falls
+through to `venue_id` whenever either side's `preference` is `undefined`, so an invalid-preference
+fallback could win purely by name (or, for a duplicated preference, by its own raw invalid value)
+despite being an unranked removal everywhere else in the pipeline. Fixed by threading the
+already-computed `invalidPreference` map into `selectPlanBFallback` and excluding any fallback venue
+it names, as the first per-fallback gate — mirroring the main loop's own gate order. Two new
+entry-point tests (178 total), each with a valid competing fallback proving the invalid one cannot be
+selected; both confirmed to fail against the pre-correction code before the fix. Round 2
+(`codex_terra`, scoped to the correction delta) `APPROVE`, finding resolved, no new findings. User
+approved and authorized close. Full detail in `reviews/IMP-010.md` and `reviews/IMP-010-gate.md`.
