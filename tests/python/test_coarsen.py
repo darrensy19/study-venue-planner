@@ -185,6 +185,84 @@ def test_unknown_outcome_aborts_whole_attempt(tmp_path):
         coarsen(tmp_path, venues_json, KNOWN_VENUE_IDS)
 
 
+def test_reversed_raw_timestamps_abort_with_no_output_change(tmp_path):
+    """IMP-011-R1-F01 (Codex review correction): PLAN.md's private raw
+    schema requires rows to be 'append-only and chronological'. A row whose
+    occurred_at is earlier than its immediate predecessor's must fail
+    closed, before any write — never silently accepted and committed in
+    reversed order.
+
+    Both hours the two rows resolve to (9 and 10) get a real histogram
+    entry, so the *only* way this run can fail is the chronology check
+    itself — without that, an earlier draft of this test was itself
+    vacuous, masked by an unrelated missing-histogram error for hour 10
+    exactly like the pre-correction `IMP-011-R1-F01` masking pattern."""
+    day, hour_early = projection_of()
+    _, hour_late = projection_of(offset_hours=1)
+    raw = write_raw(tmp_path, [
+        (occurred_at(offset_hours=1), "v1", "seat"),   # 10:00
+        (occurred_at(), "v1", "no_seat"),               # 09:00 — earlier than its predecessor
+    ])
+    raw_before = raw.read_bytes()
+    venues_json = write_venues_json(tmp_path, {
+        "v1": {
+            day: [{"hour": hour_early, "busyness": 5}, {"hour": hour_late, "busyness": 6}],
+            "last_success_at": "2026-08-20T10:00:00+08:00",
+        },
+    })
+
+    with pytest.raises(CoarsenError):
+        coarsen(tmp_path, venues_json, KNOWN_VENUE_IDS)
+
+    assert not (tmp_path / "seatlog.csv").exists()  # no partial output
+    assert raw.read_bytes() == raw_before  # never rewrites the raw input
+
+
+def test_reversed_raw_timestamps_across_differing_utc_offsets_still_abort(tmp_path):
+    """The chronology check compares the absolute instant, never the printed
+    local clock digits — proven with two rows recorded under different UTC
+    offsets whose digits read as ascending (10:00 then 10:30) but whose
+    absolute instants are genuinely reversed: 2026-08-24T10:00:00+08:00 is
+    2026-08-24T02:00:00Z, while 2026-08-24T10:30:00+09:00 is
+    2026-08-24T01:30:00Z — thirty minutes EARLIER, despite the
+    later-looking digits.
+
+    Row 1 resolves to Asia/Singapore mon/10, row 2 to mon/09:30 -> hour 9;
+    both get a real histogram entry so the only way this run can fail is
+    the chronology check, not an incidental missing-histogram gap."""
+    raw = tmp_path / "seatlog.raw.csv"
+    with open(raw, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(RAW_HEADER)
+        writer.writerow(["2026-08-24T10:00:00+08:00", "v1", "seat"])      # 2026-08-24T02:00:00Z
+        writer.writerow(["2026-08-24T10:30:00+09:00", "v1", "no_seat"])   # 2026-08-24T01:30:00Z — earlier
+    venues_json = write_venues_json(tmp_path, {
+        "v1": {"mon": [{"hour": 9, "busyness": 5}, {"hour": 10, "busyness": 6}], "last_success_at": "2026-08-20T10:00:00+08:00"},
+    })
+
+    with pytest.raises(CoarsenError):
+        coarsen(tmp_path, venues_json, KNOWN_VENUE_IDS)
+    assert not (tmp_path / "seatlog.csv").exists()
+
+
+def test_equal_consecutive_raw_timestamps_are_accepted_not_rejected(tmp_path):
+    """Chronological forbids going backward, not standing still — two
+    entries can genuinely share an absolute instant (a rapid double-tap),
+    and that is not a reversal. Locks the equality-rule decision so a
+    future stricter-than-necessary rewrite doesn't silently start rejecting
+    same-instant rows."""
+    same_instant = occurred_at()
+    write_raw(tmp_path, [
+        (same_instant, "v1", "seat"),
+        (same_instant, "v1", "no_seat"),
+    ])
+    venues_json = default_venues_json(tmp_path)
+
+    result = coarsen(tmp_path, venues_json, KNOWN_VENUE_IDS)
+
+    assert result == 2
+
+
 # --- raw log shorter than committed ------------------------------------------
 
 

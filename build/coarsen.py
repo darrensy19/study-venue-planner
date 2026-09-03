@@ -137,7 +137,14 @@ def parse_raw_rows(path: Path, known_venue_ids):
     """Fully validates the whole raw file — any malformed row aborts the
     whole attempt, never a partial or skipped-row result (`PLAN.md`: "a
     silently dropped visit is a hole in the Phase 3 dataset that nothing
-    later can detect").
+    later can detect"). Schema only — chronology is a suffix-scoped check,
+    see `_validate_suffix_chronological`, since the prefix's original
+    ordering is exactly what `PLAN.md`'s own Group 1 reorder instances (a
+    raw-side reorder wholly inside the processed prefix, or a coordinated
+    reorder mirrored onto the committed side) legitimately no longer
+    reflects — the prefix is checked for *consistency* with the committed
+    record, never re-validated against a production order nothing on disk
+    still attests to.
     """
     rows = []
     with open(path, newline="", encoding="utf-8") as handle:
@@ -169,6 +176,38 @@ def parse_raw_rows(path: Path, known_venue_ids):
             rows.append(RawRow(occurred_at, venue_id, outcome, day_of_week, hour))
 
     return rows
+
+
+def _validate_suffix_chronological(suffix_raw_rows):
+    """`PLAN.md`, "The private raw schema": "Rows are append-only and
+    chronological." Enforced only over the **suffix** — the rows this run
+    is actually about to coarsen for the first time, which is exactly what
+    a fresh, unedited append from the phone looks like. The already-
+    committed prefix is deliberately never re-checked here: `seatlog.csv`
+    drops `occurred_at` entirely, so there is no surviving timestamp to
+    compare a prefix row against, and `PLAN.md`'s own Group 1 taxonomy
+    (a raw-side reorder wholly inside the prefix, or a coordinated reorder
+    mirrored onto the committed side) explicitly treats a reordered prefix
+    as legitimate, checked for projection consistency, not chronology.
+
+    Compares the **absolute instant** (`occurred_at` compared directly,
+    never the derived `Asia/Singapore` local reading, since two rows can
+    read the same local hour while genuinely differing in absolute instant
+    once arbitrary UTC offsets are involved — "the file is written by a
+    phone that can be anywhere"). Equal to its predecessor is accepted: two
+    entries can genuinely share an instant (a rapid double-tap); only a row
+    strictly **earlier than** its predecessor violates append-only
+    chronology.
+    """
+    previous = None
+    for offset, row in enumerate(suffix_raw_rows):
+        if previous is not None and row.occurred_at < previous.occurred_at:
+            raise CoarsenError(
+                f"suffix row {offset}: occurred_at {row.occurred_at.isoformat()!r} is earlier "
+                f"than the preceding row's {previous.occurred_at.isoformat()!r} — the raw log "
+                f"must be chronological (PLAN.md, \"The private raw schema\")"
+            )
+        previous = row
 
 
 def _validate_committed_fields(fields, line_no, path):
@@ -313,6 +352,8 @@ def coarsen(data_dir: Path, venues_json_path: Path, known_venue_ids):
     suffix_raw_rows = raw_rows[processed_count:]
     if len(suffix_raw_rows) == 0:
         return 0
+
+    _validate_suffix_chronological(suffix_raw_rows)
 
     deployed_venues = _load_deployed_venues(venues_json_path)
     if deployed_venues is None:
