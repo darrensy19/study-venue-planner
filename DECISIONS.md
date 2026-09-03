@@ -2380,3 +2380,31 @@ fails generation visibly" contract (step 7, this assignment), but **must be chec
 official gazette before step 8 (live refresh, out of this assignment's scope)** — a genuinely
 maintained calendar is a live-acceptance precondition (`PLAN.md`, "`data/holidays.json` —
 hand-maintained"), and these four dates are exactly where that has not yet been done.
+
+## 2026-09-03 — IMP-013 closed: full refresh orchestration implemented
+
+Implemented Phase 1 implementation-order step 7: `build/refresh.py`'s 8-step pipeline (coarsen ->
+fetch both sources per venue, catching failures independently per source per venue -> merge with
+last-known-good retention -> record per-source freshness -> the mandatory, unconditional
+`validate_return_transport` stage, stamping `return_transport_status` and classifying rather than
+aborting on a per-venue `invalid` -> atomic replace, gated only on the fetched data and the bridge
+succeeding -> regenerate `web/index.html`), `data/holidays.json` (11 SG public holiday entries; the
+4 movable lunar/Islamic dates are unverified estimates, flagged for step 8), and the `Makefile`
+`refresh` target. Two grounding gaps found and corrected before generation was wired — see this
+file's "IMP-013 in progress" entry above: an additive `fetch_place_snapshot()` in
+`scraper/fetchers.py` (one Places call for identity + hours together; `fetch_hours()` unchanged),
+and a real generation-time defect fix in `build/generate.py` (`generate_index_html()` now requires
+the documented `venues.json` wrapper object rather than the bare array it wrongly read before).
+
+188 Python tests passing (27 new: `fetch_place_snapshot` fixtures/negatives in `test_fetchers.py`,
+the wrapper-object negatives in `test_generate.py`, and the full `test_refresh.py` suite covering
+step ordering, last-known-good retention, per-source/per-venue failure isolation, broken-bridge
+pre-replace gating, per-venue-invalid continuation, and `holidays.json` fail-visible generation).
+`node --test` unaffected, 184 passing — no `ranking.js`/`app.js` contract change.
+
+Pre-gate `GATE_PASS` on the first invocation — independently reran both suites and reproduced the
+dry-run against a copy of the real 28-venue dataset (stubbed fetchers, real coarsen/bridge/generate).
+Round 1 (`codex_terra`) `APPROVE`, no findings — independently traced the same 8-step order and
+last-known-good logic against `PLAN.md`, reran both suites, and ran its own isolated dry-run against
+the real registry. User approved and authorized close. Full detail in `reviews/IMP-013.md` and
+`reviews/IMP-013-gate.md`.
