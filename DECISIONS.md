@@ -2479,3 +2479,25 @@ horizontal scroll, matching the desktop browser exactly. The server was torn dow
 This is the reusable method for any future on-device check this project needs — Quick Look is not a
 substitute for Safari, and a local server plus the LAN IP is the fix when AirDrop-and-tap doesn't
 run the JS.
+
+## 2026-09-04 — IMP-014 closed: first live refresh and manual acceptance, Phase 1 complete
+
+Phase 1 implementation-order step 8 — the last of the eight steps — is done: `make refresh` ran
+live against real Google Places + SerpApi credentials for the first time, producing `data/venues.json`
+and `web/index.html` with 28/28 venues `ok` on hours, histogram, and `return_transport_status`, and
+no code change required. Both of `PLAN.md`'s acceptance scenarios were confirmed against the live
+data, and the generated page was read on the actual iPhone in real Safari — see this file's
+"IMP-014 in progress" entry above for the full detail, including the iPhone-check method now
+established for reuse. Round 1 (`codex_terra`) independently reran both test suites and the
+`rankVenues()` scenarios itself and returned `APPROVE`, no findings; full record: `reviews/IMP-014.md`,
+gate record: `reviews/IMP-014-gate.md`. User approved close.
+
+**Phase 1 implementation-order steps 1-8 are all complete — Phase 1 itself is done**, per `PLAN.md`'s
+own "Phase 1 is independently useful" framing. What remains before Phase 2 can start is not part of
+Phase 1's implementation order: the hand-curated `return_transport`/`holiday_return_policy` data
+fill (still 0/28, out-of-protocol, privacy-sensitive) and the deliberately-unscoped outbound-mirror
+architecture.
+
+`reviews/AUDIT-LOG.md` also backfilled a `completed` row for `IMP-013`, which was missed at that
+assignment's own close — found while preparing IMP-014's close-time audit-log entry. Append-only;
+the existing rows were not reordered, only the missing one added.

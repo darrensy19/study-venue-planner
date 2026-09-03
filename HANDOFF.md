@@ -8,7 +8,7 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 - **ID**: `IMP-014`
 - **Work type**: implementation
-- **State**: `review_complete`
+- **State**: `completed`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, medium
 - **Route triggers**: money / external side effects (`WORKFLOW.md` hard trigger) — this is the first refresh ever run against live Google Places + SerpApi credentials rather than fixtures or stubs
@@ -21,5 +21,6 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Claude gate result**: `GATE_PASS` (invocation 1, fresh-context subagent) — independently reran both test suites and the `rankVenues()` scenarios itself; flagged the iPhone-substitution gap, since resolved on real device as above
 - **Gate evidence**: `reviews/IMP-014-gate.md`
 - **Independent review**: round 1 (`codex_terra`) `APPROVE` — no findings, reported 2026-09-04
-- **Review record**: `reviews/IMP-014.md` — **not yet present in this checkout**; the reviewer's written record has not landed in the repo, only the outcome has been relayed
-- **Next action**: `blocked_on_user` in substance though not in field name — awaiting (1) the user's explicit approval to close and (2) `reviews/IMP-014.md` actually landing in the repo before any commit; no primary edits to assignment artifacts beyond this reconciliation until then
+- **Review record**: `reviews/IMP-014.md`
+- **User decision**: approved — user authorized close after round-1 `APPROVE`
+- **Next action**: none — assignment closed; Phase 1 implementation-order steps 1-8 are now all complete. Open a new ID for the `return_transport`/`holiday_return_policy` data fill or the outbound-mirror ARCH before Phase 2 can start
