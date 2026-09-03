@@ -2449,3 +2449,33 @@ would have made `make refresh` exit immediately with "must both be set" on its v
 despite a real key being present in `.env`. Confirmed both `GOOGLE_PLACES_API_KEY` and `SERPAPI_KEY`
 now resolve via `load_dotenv()` against the real `.env` (key presence checked, values never printed
 or logged).
+
+## 2026-09-03 — `IMP-014` in progress: first live refresh, and the iPhone-check method
+
+`make refresh` run live for the first time against real Google Places + SerpApi credentials
+(`WORKFLOW.md`'s money/external-side-effects hard trigger — this assignment routes to Codex
+regardless of gate outcome). Clean result: 28/28 venues `ok` on hours, histogram, and
+`return_transport_status`; 0 removed or malformed. No code change was needed — the only diff is the
+two generated files, `data/venues.json` and `web/index.html`.
+
+Both of `PLAN.md`'s live-session acceptance scenarios were found by probing the real `rankVenues()`
+against this live data directly, then confirmed in a real browser: a 09:00-departure, 5h, transit
+session from Origin B resolves Plan A = Starbucks Chinatown Food Street, `robust`, return basis
+`core_span` (no `return_transport` data needed, as the core-span shortcut promises); a 23:00-departure,
+5h, walk session from Origin B — ending 04:07, and reachable only through venues lacking a
+schedule-free `origin_a` return in the current (still 0/28-filled) `return_transport` data — produces
+the exact second refusal, "No option with a verified way home for a session ending at 04:07."
+
+**The iPhone check needed two attempts.** The first — AirDropping the file and opening it via the
+Files app — lands in Quick Look, which does not reliably execute the page's JavaScript; the `#app`
+container stayed empty, static markup only. This is an iOS `file://`-from-Files-app sandboxing
+limitation, not a defect in the generated page. A first workaround (a Chromium/Playwright emulation
+of the iPhone 15 Pro Max viewport, run on the Mac) confirmed no horizontal scroll and reproduced
+Scenario A, but the assignment's own pre-gate — run fresh-context, independently — correctly flagged
+that Chromium emulation isn't WebKit and doesn't actually close the risk the criterion cares about.
+Serving `web/` from a temporary local HTTP server on the Mac's LAN address and opening that URL in
+real Safari on the actual iPhone gave a genuine on-device result: both scenarios confirmed, no
+horizontal scroll, matching the desktop browser exactly. The server was torn down immediately after.
+This is the reusable method for any future on-device check this project needs — Quick Look is not a
+substitute for Safari, and a local server plus the LAN IP is the fix when AirDrop-and-tap doesn't
+run the JS.
