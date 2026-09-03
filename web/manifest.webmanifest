@@ -1,0 +1,9 @@
+{
+  "name": "Study Venue Planner",
+  "short_name": "Venue Planner",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0969da"
+}

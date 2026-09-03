@@ -1666,6 +1666,8 @@ export function rankVenues(snapshot, controls) {
       area: venue.area,
       tier: overall.tier,
       seatConfidence,
+      baselineSeatability: venue.baseline_seatability,
+      busynessBand: busyness,
       backupStrength: planB ? planB.result.strength : "none",
       travelMinutesMid: travelBand.mid,
       preference: venue.preference,

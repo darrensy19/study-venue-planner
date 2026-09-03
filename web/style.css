@@ -1,0 +1,112 @@
+:root {
+  color-scheme: light dark;
+  --gap: 0.75rem;
+  --radius: 0.5rem;
+  --border: #8888;
+  --robust: #1a7f37;
+  --tight: #9a6700;
+  --shorter: #57606a;
+  --unverified: #cf222e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: var(--gap);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.4;
+  max-width: 32rem;
+  margin-inline: auto;
+}
+
+h1, h2, h3, h4 {
+  margin: 1rem 0 0.5rem;
+}
+
+form.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: var(--gap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+}
+
+form.controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+form.controls input,
+form.controls select {
+  font-size: 1rem;
+  padding: 0.4rem;
+}
+
+form.controls button {
+  font-size: 1rem;
+  padding: 0.6rem;
+  border-radius: var(--radius);
+  border: none;
+  background: #0969da;
+  color: white;
+}
+
+.plan-card {
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  padding: var(--gap);
+  margin-bottom: 1rem;
+}
+
+.plan-card.tier-robust { border-left-color: var(--robust); }
+.plan-card.tier-tight { border-left-color: var(--tight); }
+.plan-card.tier-shorter { border-left-color: var(--shorter); }
+.plan-card.tier-unverified { border-left-color: var(--unverified); }
+
+.plan-card p {
+  margin: 0.3rem 0;
+}
+
+.plan-card .area {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.warning {
+  color: var(--tight);
+  font-weight: 600;
+}
+
+.refusal {
+  padding: var(--gap);
+  border: 1px solid var(--unverified);
+  border-radius: var(--radius);
+  color: var(--unverified);
+  font-weight: 600;
+}
+
+.area-group ul,
+.travel-unknown ul,
+.removed ul {
+  list-style: none;
+  padding: 0;
+}
+
+.area-group li,
+.travel-unknown li,
+.removed li {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.area-group li.tier-unverified {
+  color: var(--unverified);
+}
