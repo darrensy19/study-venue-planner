@@ -6,7 +6,7 @@ assignment. This document is the input to that formalization, not a substitute f
 reviewable artifact, when this is opened as an assignment, is the diff this design forces into
 `PLAN.md` and `CLAUDE.md`, exactly as `ARCH-001` was reviewed against `plan.md`/`CLAUDE.md` directly,
 not against a separate spec file. This doc exists to settle the design before that transcription, per
-the project's own convention. Revised three times after initial approval — see git history for prior
+the project's own convention. Revised four times after initial approval — see git history for prior
 versions:
 
 - **First revision**: resolved two internal inconsistencies (the `MALFORMED` control-flow
@@ -28,6 +28,13 @@ versions:
   `PRESENT`/`MISSING`/`MALFORMED` for that record only — which is what `outbound_admissible`'s step 4
   now consults directly, with no precomputed stamp in between and no "unreachable guard" framing left
   to maintain.
+- **Fourth revision**: two wording/accuracy corrections, no architecture change. `invalid_metadata`
+  no longer shares the unified `"outbound_gap"` user-facing label — a data-quality bug reads
+  differently to the person using the tool than a genuinely unconfirmed journey, so it now gets its
+  own label, `"outbound_data_error"` (both remain hard exclusions). Also corrected "Pipeline
+  integration"'s claim that all four reasons flow through `resolve_outbound_service`: `pre_dawn_gap`
+  is decided at step 3, by clock time alone, before the resolver is ever called — only the three
+  step-4 reasons are scoped by the resolver's entry selection.
 
 **Origin:** `PLAN.md`'s "Getting home: session-end return transport" section, "What this design
 deliberately does not do", flagged this explicitly: *"It does not model the outbound mirror. Whether
@@ -280,9 +287,9 @@ band that fails `normalise_band` is `MALFORMED`.
 **Loud, for maintainers, independent of whether any query ever exercises the broken entry.** This is
 what the mandatory generation-time walk is for: flagging every broken `(venue, origin, mode,
 weekday-or-default)` combination in refresh diagnostics/output, so a bug in a `by_weekday.fri` entry is
-caught even if nobody happens to query a Friday for months. The user-facing `"outbound_gap"` removal
-notice (see "Pipeline integration") is a completely separate, live signal — produced only when a
-specific query's `resolve_outbound_service` call actually resolves to `MALFORMED` for that query's
+caught even if nobody happens to query a Friday for months. The user-facing `"outbound_data_error"`
+removal notice (see "Pipeline integration") is a completely separate, live signal — produced only when
+a specific query's `resolve_outbound_service` call actually resolves to `MALFORMED` for that query's
 exact selected entry.
 
 ## Pipeline integration
@@ -293,26 +300,35 @@ combination failing `outbound_admissible` is excluded from ranking entirely for 
 same category as "mode isn't viable there," not a ranked-but-demoted candidate.
 
 **One evaluation point, one scope: the specific candidate being ranked.** All four internal reasons
-`outbound_admissible` can produce — `pre_dawn_gap`, `missing_data`, `after_last_departure`, and
-`invalid_metadata` — are decided at ranking time, scoped to the exact `(venue, origin, mode,
-service_date, leave_at)` combination the candidate represents, because every one of them (from step 4
-onward) flows through a single call to `resolve_outbound_service` that re-selects the applicable entry
-fresh for that exact `service_date`. **None of them is a venue-wide, pair-wide, or even
-weekday-wide removal**: a broken `outbound_transport.home.transit.by_weekday.fri` entry excludes only
-a *home*-origin, *transit*-mode candidate on a **Friday** service date outside the core span — never a
-Monday query at the same venue/origin/mode (which selects the untouched `default` entry instead), never
-a different origin, never a schedule-free candidate, and never a core-span query, since those paths
-return at steps 1–2 without calling `resolve_outbound_service` at all. This is the correction this
-revision makes, having already gone through two coarser attempts (venue-wide, then per-origin/mode)
-that both still let a malformed record outside a query's actual scope override that query's answer —
-see "Validation stage" for why a precomputed stamp at any granularity keeps reproducing this problem.
+`outbound_admissible` can produce — `pre_dawn_gap`, `missing_data`, `invalid_metadata`, and
+`after_last_departure` — are **query-scoped**: each is decided fresh for the exact `(venue, origin,
+mode, service_date, leave_at)` combination the candidate represents, never reused across a different
+candidate. The three **step-4** reasons — `missing_data`, `invalid_metadata`, `after_last_departure` —
+are additionally scoped by `resolve_outbound_service`'s own entry selection for that exact
+`service_date`: a broken `outbound_transport.home.transit.by_weekday.fri` entry excludes only a
+*home*-origin, *transit*-mode candidate on a **Friday** service date — never a Monday query at the
+same venue/origin/mode, which selects the untouched `default` entry instead. `pre_dawn_gap` is
+different in kind, not just narrower: it is decided at **step 3**, by clock time alone, **before
+`resolve_outbound_service` is ever called** — no entry selection is involved, because no timetable
+data is consulted in that branch at all. And none of the four is reached by a schedule-free candidate
+or a core-span query, since those return at steps 1–2 without touching `outbound_transport` in any
+form. This is the correction this revision makes, having already gone through two coarser attempts
+(venue-wide, then per-origin/mode) that both still let a malformed record outside a query's actual
+scope override that query's answer — see "Validation stage" for why a precomputed stamp at any
+granularity keeps reproducing this problem.
 
-All four reasons share one unified user-facing label, **`"outbound_gap"`**, on the generated page's
-removal notice for the specific query that hits them, mirroring the return leg's "degradation must be
-visible" rule (`PLAN.md:1101-1103`). They are retained individually only for diagnostics. Independently
-of whether any query ever surfaces one, `validate_outbound_transport`'s generation-time walk flags
-every broken `(venue, origin, mode, weekday-or-default)` entry on its own, for maintainers — see
-"Validation stage".
+**Two user-facing labels, not one — a data bug reads differently than an unavailable journey.**
+`pre_dawn_gap`, `missing_data`, and `after_last_departure` share one label, **`"outbound_gap"`**: each
+means *this specific journey isn't confirmed to run at your leave time* — nothing recorded, service
+already ended, or the clock falls in the unmodelled pre-dawn window. `invalid_metadata` gets its own
+distinct label, **`"outbound_data_error"`**: it means *the record itself is broken*, a maintenance bug
+rather than a genuine service gap — the same distinction `CLAUDE.md` insists on between the return
+leg's own `invalid` and `unverified` wording, and for the same reason: the fixes differ, so the
+wording must too. **Both remain hard exclusions** — `invalid_metadata` is not a softer failure at the
+ranking level, only a differently worded one on the removal notice. All four reasons stay individually
+available for diagnostics regardless of which label surfaces. Independently of whether any query ever
+surfaces one, `validate_outbound_transport`'s generation-time walk flags every broken `(venue, origin,
+mode, weekday-or-default)` entry on its own, for maintainers — see "Validation stage".
 
 ## Non-goals
 
