@@ -6,21 +6,21 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: `IMP-009`
+- **ID**: `IMP-010`
 - **Work type**: implementation
-- **State**: `completed`
+- **State**: `review_requested`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, medium
-- **Route triggers**: correctness depends on a negative/fail-closed path — the broken-bridge-vs-malformed-venue distinction (`PLAN.md`, "The return-validator bridge": a nonzero exit, missing Node, non-JSON stdout, or a venue missing its status must be distinguishable from a per-venue `invalid` result, which is not an error) (`WORKFLOW.md`'s "correctness depends on negative or fail-closed paths" hard trigger)
-- **Baseline commit**: `0d5712b`; implementation `112d245`
-- **Artifact under review**: `build/validate_return_transport.mjs` (new), `build/return_validator_bridge.py` (new), `tests/python/test_return_validator_bridge.py` (new)
-- **Objective**: Phase 1 step 3 (`PLAN.md`, "Phase 1 implementation order") — a narrow Node script that imports the already-implemented `validateReturnTransport()` from `web/ranking.js`, reads a `venues_meta.json` path from argv, and writes structured JSON to stdout; plus a Python wrapper that invokes it via `subprocess.run([...])` and distinguishes a per-venue `invalid` result from a broken-bridge failure
-- **Scope exclusions**: `build/refresh.py` orchestration wiring (step 7, not yet built); the `ranking.js` pipeline entry point (step 4); the coarsening stage (step 5); frontend/generator (step 6); no change to `validateReturnTransport()`'s own logic or its existing `tests/js` coverage — settled contract, read-only import
-- **Acceptance criteria**: Node script writes **structured JSON and nothing else** to stdout, reads the metadata path handed to it, and calls `validateReturnTransport()` unmodified; every generated venue receives a status, no default or omission; the bridge never writes `venues_meta.json` or anything else; Python wrapper passes the metadata path as an **argv element**, never `shell=True` or a constructed shell string; a per-venue `invalid` status is a **result** (generation continues); Node missing, a nonzero exit, non-JSON stdout, or a missing per-venue status are each a **broken-bridge failure**, distinguishable from the per-venue case, that a caller can use to stop before the atomic replace (`PLAN.md`, "The return-validator bridge")
-- **Required verification**: `.venv/bin/pytest tests/python/` — new fixture tests covering a real per-venue `invalid` result, each broken-bridge case (Node missing, nonzero exit, non-JSON stdout, a venue omitted from the output), and a round-trip against `data/venues_meta.json`; `node --test tests/js/*.test.js` as a no-regression check (`validateReturnTransport()` itself is unmodified — 142 passing must stay unaffected); `git status`/`git diff` confined to the new bridge script, the Python wrapper, `tests/python/`, `HANDOFF.md`, `reviews/LEDGER.md`
-- **Claude gate result**: `GATE_PASS`
+- **Route triggers**: correctness depends on negative/fail-closed paths — the ranked/unranked taxonomy's hard-filter, unranked-removal and validation-failure rows (`PLAN.md`, "Venues that cannot be ranked" and "The ranked and unranked taxonomy") must each be distinguished from an ordinary ranked outcome, with its own entry-point test; and a shared cross-component invariant — this entry point is the one call site `app.js` and its tests treat as authoritative for ranking order and the Plan-B-before-Plan-A sequencing constraint (`WORKFLOW.md`'s "negative or fail-closed paths" and "shared cross-component invariant" hard triggers)
+- **Baseline commit**: `c4737d9`
+- **Artifact under review**: `web/ranking.js` (new whole-dataset entry point), `tests/js/ranking.test.js` (extended)
+- **Objective**: Phase 1 step 4 (`PLAN.md`, "Phase 1 implementation order") — the single pure, whole-dataset entry-point function in `ranking.js` ("The ranking pipeline" / "One entry point, pure, whole-dataset"), wiring the already-implemented per-venue primitives into control resolution, snapshot validation, travel-band parsing, return-status removal, evaluation, Plan B evaluation, and final grouping/ranking/refusals
+- **Scope exclusions**: `app.js`/frontend and the HTML generator (step 6); the coarsening stage (step 5); refresh orchestration and `Makefile` (step 7); live refresh (step 8); no change to the existing per-venue primitives (`resolveOverallFeasibilityAtArrivals`, `resolveBackupStrength`, `evaluatePlanBFallback`, `resolveBusynessBand`, `resolveSeatConfidence`, `validateReturnTransport`) — settled contracts, read-only imports
+- **Acceptance criteria**: one pure function, no DOM/I/O, taking the whole snapshot plus control state; ownership order exactly as `PLAN.md` states (control resolution → snapshot validation → travel-band parsing/arrivals → return-status `STEP 0` removal → evaluation → Plan B before `backup_strength` ranks Plan A → grouping/refusals/ordering); the 8-key ranking order and 7-key fallback-selection order exactly as specified, `surplus_mid` only via `surplusSortKey()`; every row of the ranked/unranked taxonomy table implemented with its own entry-point test; both refusal messages present, worded distinctly, never substituted; alternatives grouped by `area`
+- **Required verification**: `node --test tests/js/*.test.js` — 176 passed, 0 failed (142 pre-existing + 34 new); `.venv/bin/pytest tests/python/` — 78 passed, unaffected; `git status`/`git diff` confined to `web/ranking.js`, `tests/js/ranking.test.js`, `HANDOFF.md`, `reviews/LEDGER.md`, `reviews/IMP-010-gate.md`
+- **Claude gate result**: `GATE_FAIL` (invocation 1) → corrected → `GATE_PASS` (invocation 2)
 - **Independent review**: `required` — `codex_terra`, medium
-- **Gate evidence**: `reviews/IMP-009-gate.md`
-- **Review record**: `reviews/IMP-009.md` — round 1 `CHANGES_REQUESTED` (`IMP-009-R1-F01`, accepted and corrected), round 2 `APPROVE` (finding `resolved`, no new findings, one non-blocking observation)
-- **User decision**: 2026-09-03 — approved for close.
-- **Next action**: None — terminal. A new task requires a new assignment ID.
+- **Gate evidence**: `reviews/IMP-010-gate.md`
+- **Review record**: `reviews/IMP-010.md` (pending — reviewer writes this)
+- **User decision**: pending
+- **Next action**: Independent review by `codex_terra` — see the fenced handoff prompt.
