@@ -8,7 +8,7 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 - **ID**: `IMP-014`
 - **Work type**: implementation
-- **State**: `review_requested`
+- **State**: `review_complete`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, medium
 - **Route triggers**: money / external side effects (`WORKFLOW.md` hard trigger) — this is the first refresh ever run against live Google Places + SerpApi credentials rather than fixtures or stubs
@@ -20,4 +20,6 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 - **Required verification**: `make refresh` run live — 28/28 venues ok, 0 removed; `.venv/bin/pytest tests/python/ -q` — 188 passed; `node --test tests/js/*.test.js` — 184 passed, both independently rerun by the gate; Scenario A (leave 09:00, 5h, Origin B/Transit) and Scenario B (leave 23:00, 5h, Origin B/Walk) both confirmed twice: in a real desktop browser, and — after the gate flagged that a Chromium-viewport stand-in doesn't exercise real WebKit — on the user's actual iPhone in real Safari (served over a temporary local HTTP server, since Files-app Quick Look does not execute the app's JS): no horizontal scroll, Plan A = Starbucks Chinatown Food Street/`robust`/`core_span` for A, exact refusal "...ending at 04:07" for B. Local server torn down after
 - **Claude gate result**: `GATE_PASS` (invocation 1, fresh-context subagent) — independently reran both test suites and the `rankVenues()` scenarios itself; flagged the iPhone-substitution gap, since resolved on real device as above
 - **Gate evidence**: `reviews/IMP-014-gate.md`
-- **Next action**: awaiting Codex (`codex_terra`) review — money/external-side-effects hard trigger requires it even on `GATE_PASS`; no further primary edits until the review returns
+- **Independent review**: round 1 (`codex_terra`) `APPROVE` — no findings, reported 2026-09-04
+- **Review record**: `reviews/IMP-014.md` — **not yet present in this checkout**; the reviewer's written record has not landed in the repo, only the outcome has been relayed
+- **Next action**: `blocked_on_user` in substance though not in field name — awaiting (1) the user's explicit approval to close and (2) `reviews/IMP-014.md` actually landing in the repo before any commit; no primary edits to assignment artifacts beyond this reconciliation until then
