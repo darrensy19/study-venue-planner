@@ -6,21 +6,21 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: `IMP-010`
+- **ID**: `IMP-011`
 - **Work type**: implementation
-- **State**: `completed`
+- **State**: `draft`
 - **Primary route**: `claude_sonnet` — Sonnet, effort high
 - **Verification route**: `codex_terra` — Terra, medium
-- **Route triggers**: correctness depends on negative/fail-closed paths — the ranked/unranked taxonomy's hard-filter, unranked-removal and validation-failure rows (`PLAN.md`, "Venues that cannot be ranked" and "The ranked and unranked taxonomy") must each be distinguished from an ordinary ranked outcome, with its own entry-point test; and a shared cross-component invariant — this entry point is the one call site `app.js` and its tests treat as authoritative for ranking order and the Plan-B-before-Plan-A sequencing constraint (`WORKFLOW.md`'s "negative or fail-closed paths" and "shared cross-component invariant" hard triggers)
-- **Baseline commit**: `c4737d9`
-- **Artifact under review**: `web/ranking.js` (new whole-dataset entry point, now including the `IMP-010-R1-F01` correction), `tests/js/ranking.test.js` (extended, now 178 tests, up from 176)
-- **Objective**: Phase 1 step 4 (`PLAN.md`, "Phase 1 implementation order") — the single pure, whole-dataset entry-point function in `ranking.js` ("The ranking pipeline" / "One entry point, pure, whole-dataset"), wiring the already-implemented per-venue primitives into control resolution, snapshot validation, travel-band parsing, return-status removal, evaluation, Plan B evaluation, and final grouping/ranking/refusals
-- **Scope exclusions**: `app.js`/frontend and the HTML generator (step 6); the coarsening stage (step 5); refresh orchestration and `Makefile` (step 7); live refresh (step 8); no change to the existing per-venue primitives (`resolveOverallFeasibilityAtArrivals`, `resolveBackupStrength`, `evaluatePlanBFallback`, `resolveBusynessBand`, `resolveSeatConfidence`, `validateReturnTransport`) — settled contracts, read-only imports
-- **Acceptance criteria**: one pure function, no DOM/I/O, taking the whole snapshot plus control state; ownership order exactly as `PLAN.md` states (control resolution → snapshot validation → travel-band parsing/arrivals → return-status `STEP 0` removal → evaluation → Plan B before `backup_strength` ranks Plan A → grouping/refusals/ordering); the 8-key ranking order and 7-key fallback-selection order exactly as specified, `surplus_mid` only via `surplusSortKey()`; every row of the ranked/unranked taxonomy table implemented with its own entry-point test; both refusal messages present, worded distinctly, never substituted; alternatives grouped by `area`
-- **Required verification**: `node --test tests/js/*.test.js` — 178 passed, 0 failed (176 round-1 + 2 for `IMP-010-R1-F01`); `.venv/bin/pytest tests/python/` — 78 passed, unaffected; `git status`/`git diff` confined to `web/ranking.js`, `tests/js/ranking.test.js`, `HANDOFF.md`, `reviews/LEDGER.md`, `reviews/IMP-010-gate.md`, `reviews/IMP-010.md`
-- **Claude gate result**: `GATE_FAIL` (invocation 1) → corrected → `GATE_PASS` (invocation 2)
-- **Independent review**: round 1 `CHANGES_REQUESTED` — `IMP-010-R1-F01` accepted and corrected in `d45c618`; round 2 `REPO VALIDATION` on that correction returned `APPROVE` — `IMP-010-R1-F01` `resolved`, no new findings
-- **Gate evidence**: `reviews/IMP-010-gate.md`
-- **Review record**: `reviews/IMP-010.md`
-- **User decision**: approved — user authorized close after round-2 `APPROVE`
-- **Next action**: None — terminal. A new task requires a new assignment ID.
+- **Route triggers**: correctness depends on negative/fail-closed paths, and on proving tests are not vacuous — `PLAN.md`'s "The coarsening stage" enumerates ~20 required negative-path fixture cases (malformed rows, an unmirrored prefix change, four boundary-condition pairs for the insertion/deletion mechanism) that a passing-but-wrong implementation could satisfy vacuously; also a destructive-data-operation flavor (atomic replace of the committed, privacy-load-bearing `data/seatlog.csv`) (`WORKFLOW.md` hard triggers)
+- **Baseline commit**: `3222ff9`
+- **Artifact under review**: new `build/coarsen.py`, new `tests/python/test_coarsen.py`
+- **Objective**: Phase 1 step 5 (`PLAN.md`'s "Phase 1 implementation order" / "The coarsening stage") — reads a private raw seat-log CSV, derives `processed_count` from the committed `data/seatlog.csv` (no cursor file), re-projects and compares the raw prefix against it, joins each new row against the currently-deployed `data/venues.json` histogram, and atomically replaces `data/seatlog.csv` with the committed prefix plus the new coarsened suffix
+- **Scope exclusions**: `build/refresh.py` orchestration/wiring (step 7, not yet built — `coarsen.py` is called, not itself the orchestrator); the fetchers (already built, `IMP-006`/`IMP-008`); frontend/generator (step 6); live refresh (step 8); no change to `web/ranking.js` or any settled per-venue primitive
+- **Acceptance criteria**: candidate selection exactly as specified (0/1/2+ raw-log locations, `data/seatlog.raw.csv` or non-recursive `data/raw/*.csv`); both raw and committed schemas fully validated, any malformed row aborting the whole attempt with no partial write; `processed_count` derived from the committed file, never a stored cursor; prefix comparison on the 4-column projection only, row-for-row; every one of `PLAN.md`'s ~20 enumerated fixture cases (Group 1/Group 2 instances, both insertion/deletion boundary pairs, the coordinated-edit cases) implemented with its own non-vacuous test; suffix rows stamped from the *pre-fetch* deployed histogram's own `last_success_at`, never this run's fetch; atomic replace via a same-directory temp file, validated before the swap
+- **Required verification**: `.venv/bin/pytest tests/python/ -q` (new count TBD); `node --test tests/js/*.test.js` unaffected (178 passing, no `web/` file touched); `git status`/`git diff` confined to `build/coarsen.py`, `tests/python/test_coarsen.py`, `HANDOFF.md`, `reviews/LEDGER.md`, `reviews/IMP-011-gate.md`
+- **Claude gate result**: pending
+- **Independent review**: `required` — `codex_terra`, medium
+- **Gate evidence**: pending
+- **Review record**: pending
+- **User decision**: pending
+- **Next action**: Implement `build/coarsen.py` test-first against `PLAN.md`'s enumerated fixture list, then invoke the pre-gate.
