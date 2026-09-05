@@ -43,6 +43,8 @@ import {
   validatePreferenceSnapshot,
   rankVenues,
   CLOSING_BUFFER_DEFAULT_MINUTES,
+  CONTROL_CONTRACT,
+  validateControls,
 } from "../../web/ranking.js";
 
 // --- fixture builders ------------------------------------------------------
@@ -1988,7 +1990,7 @@ test("taxonomy: overall_tier unverified is ranked in its own group, but barred f
 test("taxonomy: an access entry of explicit null is unranked in its own travel-time-unknown group", () => {
   const venues = [fullVenue({ id: "v1", access: { home: { walk: null } } })];
   const r = rankVenues({ venues, holidays: {} }, BASE_CONTROLS);
-  assert.deepEqual(r.travelUnknown, [{ venueId: "v1" }]);
+  assert.deepEqual(r.travelUnknown, [{ venueId: "v1", name: "v1" }]);
   assert.equal(findCandidate(r, "v1"), undefined);
   assert.equal(r.removed.find((x) => x.venueId === "v1"), undefined);
 });
@@ -2065,14 +2067,19 @@ test("taxonomy: an upper-bound NONE is ranked, failing robust while the midpoint
     id: "v1",
     validFrom: "2026-08-29",
     validThrough: "2026-09-04",
-    byDate: { "2026-08-31": known([{ open: 0, close: 925 }]) }, // open only through 15:25
-    access: { home: { walk: { band: "10-30m", rank: 1 } } }, // mid=20, upper=30
+    byDate: { "2026-08-31": known([{ open: 0, close: 1270 }]) }, // open only through 21:10
+    access: { home: { walk: { band: "0-380m", rank: 1 } } }, // mid=190, upper=380
   });
   const controls = {
     ...BASE_CONTROLS,
     departureDate: "2026-08-31",
-    leaveAtMinutes: 900, // mid arrival 920 (inside), upper arrival 930 (NONE, >= 925)
-    durationMinutes: 1,
+    // mid arrival 900+190=1090 (inside, close 1270), upper arrival 900+380=1280
+    // (NONE, >= 1270). The 190-minute mid/upper gap (not a realistic travel
+    // band, but the only way to place a NONE upper bound within a
+    // 180-minute-minimum session) is what lets requiredEndMid (1090+180=1270)
+    // land exactly on the close while requiredEndUpper still overshoots it.
+    leaveAtMinutes: 900,
+    durationMinutes: 180,
     toleranceMinutes: 15,
   };
   const r = rankVenues({ venues: [venue], holidays: {} }, controls);
@@ -2139,17 +2146,25 @@ test("taxonomy: a non-OPERATIONAL venue is an unranked removal in its own notice
 // --- rankVenues: the 8-key ranking order ------------------------------------
 
 test("ranking order: overall_tier decides first — robust beats tight regardless of every later key", () => {
-  const robust = fullVenue({ id: "robust", preference: 99, baseline: "poor" });
+  // baseline "mixed" (not "poor"): worse confidence than tight's "dependable"
+  // (so tier, not confidence, is what decides), but still at the Plan A
+  // eligibility floor — "poor" would now be correctly barred from planA by
+  // that floor, which is a different behaviour this test isn't about.
+  const robust = fullVenue({ id: "robust", preference: 99, baseline: "mixed" });
   const tight = fullVenue({
     id: "tight",
     preference: 1,
     baseline: "dependable",
     validFrom: "2026-08-29",
     validThrough: "2026-09-04",
-    byDate: { "2026-08-31": known([{ open: 0, close: 925 }]) },
-    access: { home: { walk: { band: "10-30m", rank: 1 } } }, // mid=20, upper=30 -> upper NONE at close 925
+    byDate: { "2026-08-31": known([{ open: 0, close: 1270 }]) },
+    access: { home: { walk: { band: "0-380m", rank: 1 } } }, // mid=190, upper=380 -> upper NONE at close 1270
   });
-  const controls = { ...BASE_CONTROLS, departureDate: "2026-08-31", leaveAtMinutes: 900, durationMinutes: 1 };
+  // Same construction as "an upper-bound NONE is ranked..." above: the wide
+  // travel band is what places a NONE upper bound within a 180-minute-minimum
+  // session (mid arrival 1090, requiredEndMid 1270 == close; upper arrival
+  // 1280 > close).
+  const controls = { ...BASE_CONTROLS, departureDate: "2026-08-31", leaveAtMinutes: 900, durationMinutes: 180 };
   // robust venue evaluated on the same date needs its own always-open regular hours, unaffected by tight's byDate override (different venue objects).
   const r = rankVenues({ venues: [tight, robust], holidays: {} }, controls);
   assert.equal(r.planA.venueId, "robust");
@@ -2323,16 +2338,17 @@ test("fallback selection: a fallback venue with a preference duplicated against 
   assert.equal(c.planB.venueId, "unique-b");
 });
 
-// --- rankVenues: refusals ----------------------------------------------------
+// --- rankVenues: resultState --------------------------------------------------
 
-test("refusals: no candidate reaching mixed confidence yields noLowRiskOption, distinct from the return refusal", () => {
+test("resultState: a ranked candidate below the mixed confidence floor yields no_low_risk_option, not plan_a", () => {
   const venue = fullVenue({ id: "v1", baseline: "poor" });
   const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
-  assert.equal(r.refusals.noLowRiskOption, true);
-  assert.equal(r.refusals.noVerifiedReturn, null);
+  assert.equal(r.groups.ranked.length, 1); // fully robust — ranked, just not confident enough
+  assert.equal(r.planA, null);
+  assert.equal(r.resultState, "no_low_risk_option");
 });
 
-test("refusals: every qualifying candidate being unverified yields noVerifiedReturn with the session end time", () => {
+test("resultState: every qualifying candidate being unverified yields no_verified_return, never session_does_not_fit", () => {
   const venue = fullVenue({
     id: "v1",
     baseline: "dependable",
@@ -2340,8 +2356,199 @@ test("refusals: every qualifying candidate being unverified yields noVerifiedRet
   });
   const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200 }; // ends 23:07, no return data -> unverified
   const r = rankVenues({ venues: [venue], holidays: {} }, controls);
-  assert.equal(r.refusals.noLowRiskOption, false); // confidence is fine — this is specifically the return refusal
-  assert.equal(r.refusals.noVerifiedReturn, "23:07");
+  assert.equal(r.groups.ranked.length, 0);
+  assert.equal(r.groups.shorter.length, 0);
+  assert.equal(r.groups.unverified.length, 1);
+  assert.equal(r.planA, null);
+  assert.equal(r.resultState, "no_verified_return");
+});
+
+test("Plan A eligibility: a shorter-tier candidate is never Plan A, however good its confidence — also resultState: session_does_not_fit", () => {
+  const venue = fullVenue({
+    id: "v1",
+    baseline: "dependable",
+    validFrom: "2026-08-29",
+    validThrough: "2026-09-04",
+    byDate: { "2026-08-31": closed() },
+  });
+  const r = rankVenues({ venues: [venue], holidays: {} }, { ...BASE_CONTROLS, departureDate: "2026-08-31" });
+  assert.equal(r.groups.shorter.length, 1);
+  assert.equal(r.groups.ranked.length, 0);
+  assert.equal(r.planA, null);
+  assert.equal(r.resultState, "session_does_not_fit");
+});
+
+test("resultState: nothing_evaluable carries all four diagnostics simultaneously in a mixed-cause fixture", () => {
+  const hardFiltered = fullVenue({ id: "hard-filtered", preference: 1, access: { home: {} } }); // no "walk" key at all -> hard-filtered
+  const travelUnknownVenue = fullVenue({ id: "unknown-travel", preference: 2, access: { home: { walk: null } } });
+  const removedVenue = fullVenue({ id: "removed-venue", preference: 3, businessStatus: "CLOSED_PERMANENTLY" });
+  const r = rankVenues({ venues: [hardFiltered, travelUnknownVenue, removedVenue], holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.resultState, "nothing_evaluable");
+  assert.equal(r.snapshotEmpty, false);
+  assert.equal(r.hardFilteredCount, 1);
+  assert.equal(r.travelUnknown.length, 1);
+  assert.equal(r.travelUnknown[0].venueId, "unknown-travel");
+  assert.equal(r.removed.length, 1);
+  assert.equal(r.removed[0].venueId, "removed-venue");
+});
+
+test("resultState: a genuinely empty snapshot sets snapshotEmpty, with no other diagnostic fabricated", () => {
+  const r = rankVenues({ venues: [], holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.resultState, "nothing_evaluable");
+  assert.equal(r.snapshotEmpty, true);
+  assert.equal(r.hardFilteredCount, 0);
+  assert.deepEqual(r.travelUnknown, []);
+  assert.deepEqual(r.removed, []);
+});
+
+// --- CONTROL_CONTRACT and validateControls -----------------------------------
+
+test("CONTROL_CONTRACT: exports the documented origins, modes, duration and leaveAt bounds", () => {
+  assert.deepEqual(CONTROL_CONTRACT.origins, ["home", "office"]);
+  assert.deepEqual(CONTROL_CONTRACT.modes, ["transit", "walk", "cycle"]);
+  assert.deepEqual(CONTROL_CONTRACT.duration, { min: 180, max: 360, step: 15 });
+  assert.deepEqual(CONTROL_CONTRACT.leaveAt, { min: 0, max: 1439 });
+});
+
+test("CONTROL_CONTRACT: deeply frozen — mutation attempts throw, and rankVenues() behaves identically afterward", () => {
+  assert.throws(() => { CONTROL_CONTRACT.origins.push("mars"); }, TypeError); // supported-value array
+  assert.throws(() => { CONTROL_CONTRACT.duration.min = 0; }, TypeError); // nested bounds object
+  assert.throws(() => { CONTROL_CONTRACT.newField = "x"; }, TypeError); // top-level object
+
+  // rankVenues() must still validate against the ORIGINAL bounds — a
+  // durationMinutes of 1 stays invalid_request, proving the failed mutation
+  // attempts above left no trace for validateControls to read.
+  const r = rankVenues({ venues: [], holidays: {} }, { ...BASE_CONTROLS, durationMinutes: 1 });
+  assert.equal(r.resultState, "invalid_request");
+});
+
+test("validateControls: rejects an unsupported origin, mode, and out-of-range leaveAtMinutes/durationMinutes, each naming the violated control", () => {
+  const violations = validateControls({ origin: "mars", mode: "teleport", departureDate: "2024-01-01", leaveAtMinutes: 5000, durationMinutes: 1 });
+  assert.ok(violations);
+  assert.deepEqual(new Set(violations.map((v) => v.control)), new Set(["origin", "mode", "leaveAtMinutes", "durationMinutes"]));
+});
+
+test("validateControls: rejects a non-existent calendar date", () => {
+  const violations = validateControls({ ...BASE_CONTROLS, departureDate: "2024-02-30" });
+  assert.ok(violations);
+  assert.ok(violations.some((v) => v.control === "departureDate"));
+});
+
+test("validateControls: accepts every integer duration in range, on-step or not — durationMinutes 181 is valid", () => {
+  assert.equal(validateControls({ ...BASE_CONTROLS, durationMinutes: 181 }), null);
+});
+
+test("rankVenues: mode 'teleport' yields invalid_request, while a legitimately empty office/cycle population yields nothing_evaluable", () => {
+  const venue = fullVenue({ id: "v1" }); // default access is home/walk only
+  const invalid = rankVenues({ venues: [venue], holidays: {} }, { ...BASE_CONTROLS, mode: "teleport" });
+  assert.equal(invalid.resultState, "invalid_request");
+  assert.ok(invalid.violations.some((v) => v.control === "mode"));
+
+  const empty = rankVenues({ venues: [venue], holidays: {} }, { ...BASE_CONTROLS, origin: "office", mode: "cycle" });
+  assert.equal(empty.resultState, "nothing_evaluable");
+  assert.equal(empty.hardFilteredCount, 1);
+});
+
+// --- Tolerance ownership ------------------------------------------------------
+
+test("tolerance ownership: omitting toleranceMinutes produces the same tier as an explicit 15", () => {
+  const venue = fullVenue({
+    id: "v1",
+    validFrom: "2026-08-29",
+    validThrough: "2026-09-04",
+    byDate: { "2026-08-31": known([{ open: 0, close: 1270 }]) },
+    access: { home: { walk: { band: "0-380m", rank: 1 } } },
+  });
+  const base = { ...BASE_CONTROLS, departureDate: "2026-08-31", leaveAtMinutes: 900, durationMinutes: 180 };
+  const explicit = rankVenues({ venues: [venue], holidays: {} }, { ...base, toleranceMinutes: 15 });
+  const omitted = { ...base };
+  delete omitted.toleranceMinutes;
+  const defaulted = rankVenues({ venues: [venue], holidays: {} }, omitted);
+  assert.equal(findCandidate(defaulted, "v1").tier, findCandidate(explicit, "v1").tier);
+  assert.equal(findCandidate(defaulted, "v1").tier, "tight");
+});
+
+test("tolerance ownership: an explicit override still takes effect", () => {
+  const venue = fullVenue({
+    id: "v1",
+    validFrom: "2026-08-29",
+    validThrough: "2026-09-04",
+    // 5 minutes short of requiredEndMid (1270): a known shortfall of 5 is
+    // "tight" under the default 15-minute tolerance, "shorter" under 0.
+    byDate: { "2026-08-31": known([{ open: 0, close: 1265 }]) },
+    access: { home: { walk: { band: "0-380m", rank: 1 } } },
+  });
+  const base = { ...BASE_CONTROLS, departureDate: "2026-08-31", leaveAtMinutes: 900, durationMinutes: 180 };
+  const withDefault = rankVenues({ venues: [venue], holidays: {} }, base);
+  const withZeroTolerance = rankVenues({ venues: [venue], holidays: {} }, { ...base, toleranceMinutes: 0 });
+  assert.equal(findCandidate(withDefault, "v1").tier, "tight");
+  assert.equal(findCandidate(withZeroTolerance, "v1").tier, "shorter");
+});
+
+// --- Failed-source diagnosis --------------------------------------------------
+
+test("resolveHours: totality over 'hours' absent entirely — returns failed, never throws", () => {
+  const venue = { id: "v1" }; // no `hours` key at all
+  const result = resolveHours(venue, {}, "2024-01-01");
+  assert.deepEqual(result, { state: "failed", periods: [], authority: "failed" });
+});
+
+test("resolveHours: totality over 'hours' present but lacking regular_hours — returns failed, never throws", () => {
+  // Outside its own (future) current-hours window and not a holiday, so this
+  // reaches the regular_hours branch — which does not exist on this shape.
+  const venue = { id: "v1", hours: { current_hours_valid_from: "2099-01-01", current_hours_valid_through: "2099-01-07" } };
+  const result = resolveHours(venue, {}, "2024-01-01");
+  assert.deepEqual(result, { state: "failed", periods: [], authority: "failed" });
+});
+
+// round-1 review finding IMP-019-R1-F02: the missing-regular_hours check must
+// fire even when the target date falls INSIDE the object's own (however
+// bogus) current-hours window — resolveHours must not dereference
+// current_hours_by_date first and throw a raw TypeError on this shape.
+test("resolveHours: totality over 'hours' lacking regular_hours holds even when the target date falls inside its own current-hours window", () => {
+  const venue = {
+    id: "v1",
+    hours: {
+      current_hours_valid_from: "2026-09-01",
+      current_hours_valid_through: "2026-09-07",
+      current_hours_by_date: { "2026-09-01": { state: "known", periods: [{ open: 0, close: 1000 }] } },
+      // no regular_hours at all
+    },
+  };
+  const result = resolveHours(venue, {}, "2026-09-01"); // inside the window, and current_hours_by_date even has a real entry
+  assert.deepEqual(result, { state: "failed", periods: [], authority: "failed" });
+});
+
+// The pre-existing, still-loud case this fix must not relax: a structurally
+// complete current-hours source (regular_hours present) whose in-window
+// current_hours_by_date is simply missing this one date's entry.
+test("resolveHours: a structurally complete current-hours source missing one in-window date's entry still throws", () => {
+  const venue = makeVenue({
+    validFrom: "2026-09-01",
+    validThrough: "2026-09-07",
+    byDate: {}, // regular_hours (from makeVenue's default fill) is present; this date's entry is not
+  });
+  assert.throws(() => resolveHours(venue, {}, "2026-09-01"), /malformed data/);
+});
+
+test("rankVenues: a venue with no hours data at all is removed as hours_source_failed, checked before business_status", () => {
+  const venue = fullVenue({ id: "v1", businessStatus: "CLOSED_PERMANENTLY" });
+  delete venue.hours; // a hours source that failed with no last-known-good at all
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed);
+  assert.equal(removed.kind, "hours_source_failed"); // not not_operational, despite the bad business_status
+});
+
+test("rankVenues: removed entries name the venue, falling back to its id when no name field exists", () => {
+  const named = fullVenue({ id: "v1", businessStatus: "CLOSED_PERMANENTLY" });
+  named.name = "Test Venue Name";
+  const r = rankVenues({ venues: [named], holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.removed.find((x) => x.venueId === "v1").name, "Test Venue Name");
+
+  const unnamed = fullVenue({ id: "v2", businessStatus: "CLOSED_PERMANENTLY" }); // fullVenue sets no .name
+  const r2 = rankVenues({ venues: [unnamed], holidays: {} }, BASE_CONTROLS);
+  assert.equal(r2.removed.find((x) => x.venueId === "v2").name, "v2");
 });
 
 // --- rankVenues: area grouping -----------------------------------------------
@@ -2446,13 +2653,12 @@ test("rankVenues candidate: an unverified return over a finite-hours venue corre
   const venue = fullVenue({
     id: "v1",
     access: { home: { transit: { band: "5-10m", rank: 1 } } }, // schedule-bound, no return_transport data at all
-    regular: { mon: known([{ open: 480, close: 1320 }]) }, // 08:00-22:00, a genuine same-day close
+    regular: { mon: known([{ open: 480, close: 1400 }]) }, // 08:00-23:20, a genuine same-day close
   });
-  // leaveAt 21:00 + ~7m travel + 35m duration -> arrives 21:07, ends 21:42,
+  // leaveAt 20:00 + ~7m travel + 180m duration -> arrives 20:07, ends 23:07,
   // past the core span (21:30) so the return leg genuinely goes unverified;
-  // still well inside the 08:00-22:00 window so the hours side is a real
-  // finite close, not COVERED.
-  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1260, durationMinutes: 35 };
+  // close at 23:20 keeps the hours side a real finite close, not COVERED.
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200, durationMinutes: 180 };
   const r = rankVenues({ venues: [venue], holidays: {} }, controls);
   const c = findCandidate(r, "v1");
   assert.equal(c.hoursTier, "robust");

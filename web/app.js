@@ -1,20 +1,17 @@
-import { rankVenues } from "./ranking.js";
+import { rankVenues, CONTROL_CONTRACT } from "./ranking.js";
 
-// PLAN.md "Three feasibility tiers" — provisional 15 minutes. ranking.js's
-// hours-side toleranceMinutes has no internal default (unlike the
-// return-side tolerance and the Plan B thresholds, which do); the caller
-// must supply this one explicitly.
-const FEASIBILITY_TOLERANCE_MINUTES = 15;
+// The hours-side feasibility tolerance is owned by ranking.js, not here —
+// rankVenues() defaults toleranceMinutes to its own FEASIBILITY_TOLERANCE_MINUTES
+// when a controls object omits it (PLAN.md "tolerance ownership").
 
-const ORIGINS = [
-  { value: "home", label: "Home" },
-  { value: "office", label: "Office" },
-];
-const MODES = [
-  { value: "transit", label: "Transit" },
-  { value: "walk", label: "Walk" },
-  { value: "cycle", label: "Cycle" },
-];
+// Value tokens and numeric bounds come from CONTROL_CONTRACT — the single
+// source shared with rankVenues()'s own validation (PLAN.md "One
+// ranking-owned control contract is the single source for both the form and
+// the validator"). Only human-readable labels are renderer-owned.
+const ORIGIN_LABELS = { home: "Home", office: "Office" };
+const MODE_LABELS = { transit: "Transit", walk: "Walk", cycle: "Cycle" };
+const ORIGINS = CONTROL_CONTRACT.origins.map((value) => ({ value, label: ORIGIN_LABELS[value] ?? value }));
+const MODES = CONTROL_CONTRACT.modes.map((value) => ({ value, label: MODE_LABELS[value] ?? value }));
 
 // --- One state object. Never read state back out of the DOM. ---------------
 
@@ -79,7 +76,6 @@ function defaultControls() {
     departureDate: todayIso(),
     leaveAtMinutes: now.getHours() * 60 + now.getMinutes(),
     durationMinutes: 240,
-    toleranceMinutes: FEASIBILITY_TOLERANCE_MINUTES,
   };
 }
 
@@ -92,7 +88,6 @@ function readControlsFromForm(form) {
     departureDate: data.get("departureDate"),
     leaveAtMinutes: clockToMinutes(data.get("leaveAt")),
     durationMinutes: Number(data.get("durationMinutes")),
-    toleranceMinutes: FEASIBILITY_TOLERANCE_MINUTES,
   };
 }
 
@@ -257,8 +252,9 @@ function renderControls(controls) {
     type: "number",
     name: "durationMinutes",
     value: String(controls.durationMinutes),
-    min: "60",
-    step: "15",
+    min: String(CONTROL_CONTRACT.duration.min),
+    max: String(CONTROL_CONTRACT.duration.max),
+    step: String(CONTROL_CONTRACT.duration.step),
     required: "required",
   });
 
@@ -307,16 +303,19 @@ export function render(state) {
   const result = state.result;
   if (!result) return;
 
-  if (result.refusals.noLowRiskOption) {
-    root.appendChild(el("p", { class: "refusal", text: "No low-risk option found for the requested session." }));
-  }
-  if (result.refusals.noVerifiedReturn) {
-    root.appendChild(
-      el("p", {
-        class: "refusal",
-        text: `No option with a verified way home for a session ending at ${result.refusals.noVerifiedReturn}.`,
-      })
-    );
+  // Stopgap wording keyed on resultState, replacing the old refusals.*
+  // booleans (PLAN.md's "Result states"). Final copy, vocabulary and
+  // hierarchy are slice 2/4's job — this only keeps rendering from crashing
+  // against ranking.js's new returned shape; "plan_a" shows no refusal.
+  const REFUSAL_TEXT = {
+    invalid_request: "The request is outside the supported range.",
+    no_low_risk_option: "No low-risk option found for the requested session.",
+    session_does_not_fit: "Every venue closes too soon, or needs an earlier departure, for the requested session.",
+    no_verified_return: "No option with a verified way home for the requested session.",
+    nothing_evaluable: "Nothing could be assessed for this request.",
+  };
+  if (REFUSAL_TEXT[result.resultState]) {
+    root.appendChild(el("p", { class: "refusal", text: REFUSAL_TEXT[result.resultState] }));
   }
 
   if (result.planA) {

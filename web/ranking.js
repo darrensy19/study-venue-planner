@@ -39,6 +39,12 @@ const SEAT_CHECK_BUFFER_MINUTES = 10;
 const PLAN_B_MIN_SESSION_MINUTES = 90;
 const PLAN_B_MIN_CONFIDENCE = "mixed";
 
+// Hours-side tight-tier tolerance (plan.md's "Three feasibility tiers").
+// Owned here, not by app.js — rankVenues() defaults to this when a caller
+// omits toleranceMinutes, so the placement of this constant (not merely its
+// value) is itself part of the contract (plan.md's "tolerance ownership").
+const FEASIBILITY_TOLERANCE_MINUTES = 15;
+
 // --- Calendar-date arithmetic -----------------------------------------
 
 function parseDate(dateStr) {
@@ -77,6 +83,76 @@ export function absMinutes(dateStr, offsetMinutes) {
 
 export function dateFromAbs(abs) {
   return formatDate(Math.floor(abs / MINUTES_PER_DAY));
+}
+
+/** A well-formed "YYYY-MM-DD" string naming a real calendar date. The
+ * dayNumber -> formatDate round trip rejects both bad formatting and a
+ * non-existent date (e.g. "2024-02-30") in one check, since Date.UTC()
+ * silently rolls invalid month/day combinations into a different date. */
+function isWellFormedDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  return formatDate(dayNumber(value)) === value;
+}
+
+// --- Control contract: the single source for both the request-side
+// validator and the (future) frontend form — plan.md's "One ranking-owned
+// control contract is the single source for both the form and the
+// validator". Deeply frozen at module load so a bug elsewhere that mutated
+// the export earlier cannot silently change rankVenues()'s own validation
+// behaviour. `duration.step` is a UI-only increment, read by the form, never
+// by validation — every integer in [min, max] is accepted regardless of step. */
+function deepFreeze(value) {
+  Object.freeze(value);
+  if (Array.isArray(value)) {
+    for (const item of value) if (item !== null && typeof item === "object") deepFreeze(item);
+  } else if (value !== null && typeof value === "object") {
+    for (const key of Object.keys(value)) if (value[key] !== null && typeof value[key] === "object") deepFreeze(value[key]);
+  }
+  return value;
+}
+
+export const CONTROL_CONTRACT = deepFreeze({
+  origins: ["home", "office"],
+  modes: ["transit", "walk", "cycle"],
+  duration: { min: 180, max: 360, step: 15 },
+  leaveAt: { min: 0, max: 1439 },
+});
+
+/**
+ * validateControls(controls) -> null | violation[]
+ *
+ * Validates the whole user-facing control contract, before any population
+ * state is computed (plan.md's "Invalid requests"). This is not general
+ * schema validation and does not redesign snapshot validation (preference's
+ * strict total order, handled separately by validatePreferenceSnapshot) —
+ * control validation concerns the request, snapshot validation concerns the
+ * data. Each violation names which control, what was supplied, and the
+ * permitted range or set, so a caller never has to independently know the
+ * supported origins or the duration bounds.
+ */
+export function validateControls(controls) {
+  const { origin, mode, departureDate, leaveAtMinutes, durationMinutes } = controls;
+  const violations = [];
+
+  if (!CONTROL_CONTRACT.origins.includes(origin)) {
+    violations.push({ control: "origin", supplied: origin, permitted: CONTROL_CONTRACT.origins });
+  }
+  if (!CONTROL_CONTRACT.modes.includes(mode)) {
+    violations.push({ control: "mode", supplied: mode, permitted: CONTROL_CONTRACT.modes });
+  }
+  if (!isWellFormedDate(departureDate)) {
+    violations.push({ control: "departureDate", supplied: departureDate, permitted: "a well-formed YYYY-MM-DD calendar date" });
+  }
+  const { min: leaveMin, max: leaveMax } = CONTROL_CONTRACT.leaveAt;
+  if (!Number.isInteger(leaveAtMinutes) || leaveAtMinutes < leaveMin || leaveAtMinutes > leaveMax) {
+    violations.push({ control: "leaveAtMinutes", supplied: leaveAtMinutes, permitted: { min: leaveMin, max: leaveMax } });
+  }
+  const { min: durMin, max: durMax } = CONTROL_CONTRACT.duration;
+  if (!Number.isInteger(durationMinutes) || durationMinutes < durMin || durationMinutes > durMax) {
+    violations.push({ control: "durationMinutes", supplied: durationMinutes, permitted: { min: durMin, max: durMax } });
+  }
+
+  return violations.length > 0 ? violations : null;
 }
 
 /** period_end_abs(d, p) = UNBOUNDED if p.always_open, else abs(d, p.close).
@@ -1007,15 +1083,40 @@ export function evaluatePlanBFallback(fallbackVenue, holidays, params) {
  *
  * authority is "current" (materialised current_hours_by_date entry — complete
  * and authoritative for that date), "holiday_unknown" (a known holiday beyond
- * the current-hours window — a positive assertion of ignorance), or "regular"
+ * the current-hours window — a positive assertion of ignorance), "regular"
  * (the repeating weekly pattern, which is a generalisation that may not hold
- * on any one specific date).
+ * on any one specific date), or "failed" (the hours source itself was never
+ * obtained — see below).
  *
  * Every date goes through this function, including a previous-day lookback —
  * never through regular_hours directly.
+ *
+ * Total over the two structurally-malformed shapes a failed-with-no-last-
+ * known-good hours source can hand it — `hours` absent entirely, and `hours`
+ * present but lacking `regular_hours` outright — returning a tagged
+ * `state: "failed"` rather than dereferencing (plan.md's "A failed hours
+ * source is data to diagnose, not an exception to catch"). This is distinct
+ * from, and does not relax, the two data-integrity throws below: a
+ * `current_hours_by_date` entry missing for a date inside an otherwise-
+ * present window, or a `regular_hours` object missing a specific weekday key
+ * it should always carry, both remain loud generation-bug failures.
  */
 export function resolveHours(venue, holidays, targetDate) {
   const hours = venue.hours;
+  // Both totality checks run unconditionally, before either the current-hours
+  // window or the holiday branch is even consulted (round-1 review finding
+  // IMP-019-R1-F02): `regular_hours` is the permanent, date-independent
+  // fallback structure every well-formed venue carries, so its absence is a
+  // structural failure of the whole hours source regardless of which date is
+  // being asked about or whether that date happens to fall inside a
+  // current-hours window. Checking it only in the non-window branches meant a
+  // malformed object whose target date happened to fall inside its own
+  // (possibly bogus) current_hours_valid_from/through window dereferenced
+  // `current_hours_by_date` and threw a raw TypeError instead of returning
+  // the required failed tag.
+  if (!hours || !hours.regular_hours) {
+    return { state: "failed", periods: [], authority: "failed" };
+  }
   if (
     targetDate >= hours.current_hours_valid_from &&
     targetDate <= hours.current_hours_valid_through
@@ -1111,7 +1212,13 @@ export function findActivePeriod(venue, holidays, arrivalAbs) {
     };
   }
 
-  const anyUnknown = candidates.some((c) => c.hours.state === "unknown");
+  // "failed" (resolveHours's own totality tag for a hours source with no
+  // last-known-good) fails safe as unknown here too, never silently closed —
+  // this branch is not reached by rankVenues() itself, which removes a
+  // failed-source venue before hours resolution runs at all, but resolveHours
+  // is a public, directly-testable function and must not mislead a caller
+  // that reaches this path some other way.
+  const anyUnknown = candidates.some((c) => c.hours.state === "unknown" || c.hours.state === "failed");
   return anyUnknown ? { result: "unknown" } : { result: "closed" };
 }
 
@@ -1170,7 +1277,7 @@ export function effectiveClose(venue, holidays, start, requiredEndAbs) {
       if (requiredEndAbs <= boundaryAbs) return { type: "COVERED" };
 
       const next = resolveHours(venue, holidays, addDays(date, 1));
-      if (next.state === "unknown") return { type: "UNKNOWN" };
+      if (next.state === "unknown" || next.state === "failed") return { type: "UNKNOWN" };
 
       const join =
         next.state === "known" ? next.periods.find((p) => p.open === 0) : undefined;
@@ -1440,13 +1547,6 @@ export function validatePreferenceSnapshot(venues) {
   return invalid;
 }
 
-function formatClockTime(abs) {
-  const minutes = clockMinutesOfDay(abs);
-  const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
-  const mm = String(minutes % 60).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-
 // The 8-key ranking order (plan.md, "The ranking pipeline") and the
 // fallback-selection order's shared tiers (plan.md, "Choosing among several
 // fallbacks") both rank the same four/five values; kept as one set of tables
@@ -1584,10 +1684,17 @@ function selectPlanBFallback(venue, holidays, params, venueById, invalidPreferen
  * cycleLatestMinutes, seatCheckBufferMinutes, minSessionMinutes,
  * minConfidence }` — the session request plus provisional-constant
  * overrides, threaded straight through to the underlying functions exactly
- * as they already accept them.
+ * as they already accept them. `toleranceMinutes` defaults to
+ * `FEASIBILITY_TOLERANCE_MINUTES` when omitted — see "tolerance ownership"
+ * in plan.md; the caller (app.js) does not declare or supply this value.
+ *
+ * Control validation (plan.md's "Invalid requests") runs first, before any
+ * population state is computed — see the `resultState` table below.
  *
  * Ownership order, exactly per plan.md's "One entry point, pure,
  * whole-dataset":
+ *   0. control validation — the whole user-facing control contract, against
+ *      `CONTROL_CONTRACT`
  *   1. control resolution — per venue, wet_weather_mode substitution and
  *      bicycle_with_you (whether THIS venue's resolved outbound mode is
  *      "cycle")
@@ -1599,12 +1706,31 @@ function selectPlanBFallback(venue, holidays, params, venueById, invalidPreferen
  *      seat_confidence
  *   6. Plan B evaluation for every candidate, before backup_strength ranks
  *      Plan A
- *   7. grouping, refusals and final ordering
+ *   7. grouping, resultState and final ordering
  *
- * Returns `{ planA, groups, alternatives, travelUnknown, removed, refusals }`:
- *   - `planA` — the single best candidate (never `unverified` — plan.md: "a
- *     venue whose overall_tier is unverified can never be Plan A"), or
- *     `null` if nothing at all is ranked.
+ * Returns `{ resultState, violations, planA, groups, alternatives,
+ * travelUnknown, removed, snapshotEmpty, hardFilteredCount }`:
+ *   - `resultState` — exactly one of `invalid_request` / `plan_a` /
+ *     `no_low_risk_option` / `session_does_not_fit` / `no_verified_return` /
+ *     `nothing_evaluable` (plan.md's "Result states: one discriminated
+ *     outcome, not independent refusal flags" — this replaces the earlier
+ *     `refusals` shape). Total and disjoint by construction:
+ *       0. `invalid_request`      — the request violates `CONTROL_CONTRACT`
+ *       1. `plan_a`               — `planA` is non-null
+ *       1b. `no_low_risk_option`  — `ranked` non-empty, none clears the
+ *                                    Plan A floor
+ *       2. `session_does_not_fit` — `ranked` empty, `shorter` non-empty
+ *       3. `no_verified_return`   — `ranked` and `shorter` empty, `unverified`
+ *                                    non-empty
+ *       4. `nothing_evaluable`    — all three groups empty
+ *   - `violations` — non-null only when `resultState === "invalid_request"`:
+ *     an array of `{ control, supplied, permitted }`, one per violated
+ *     control (see `validateControls`).
+ *   - `planA` — the single best candidate clearing the Plan A eligibility
+ *     floor (`overall_tier ∈ {robust, tight}` AND `seat_confidence ≥
+ *     mixed` — plan.md's "Plan A eligibility"), the first such candidate in
+ *     the already-sorted `ranked` population (filtered, never re-sorted), or
+ *     `null` if none clears it.
  *   - `groups` — `{ ranked, shorter, unverified }`, each an array of
  *     candidates in full ranking order (plan.md's "ranked and unranked
  *     taxonomy": `ranked` covers `robust`/`tight`; `shorter` and `unverified`
@@ -1613,23 +1739,39 @@ function selectPlanBFallback(venue, holidays, params, venueById, invalidPreferen
  *     order preserved within each group (plan.md: "Alternatives are grouped
  *     by area").
  *   - `travelUnknown` — venues with an explicit-`null` access entry: `[{
- *     venueId }]`.
+ *     venueId, name }]`.
  *   - `removed` — every unranked-removal row of the taxonomy table, each
- *     `{ venueId, reason, kind }`. Access-key-missing venues (hard-filtered)
- *     are absent even from here — plan.md: "not a candidate at all".
- *   - `refusals` — `{ noLowRiskOption, noVerifiedReturn }`. `noLowRiskOption`
- *     is true when no candidate reaches at least `mixed` seat_confidence.
- *     `noVerifiedReturn` is the requested session's end time (`"HH:MM"`,
- *     from the best `unverified` candidate) when `ranked` and `shorter` are
- *     both empty but a qualifying `unverified` candidate exists, else `null`
- *     — plan.md's second refusal, for the return leg specifically.
+ *     `{ venueId, name, reason, kind }`. Access-key-missing venues
+ *     (hard-filtered) are absent even from here — plan.md: "not a candidate
+ *     at all" — and are counted in `hardFilteredCount` instead.
+ *   - `snapshotEmpty` — `true` when the snapshot itself contained zero
+ *     venues (one of `nothing_evaluable`'s four diagnostics).
+ *   - `hardFilteredCount` — an aggregate count only, never a per-venue
+ *     listing, of venues rejected before candidacy for a missing
+ *     `access[origin][mode]` entry (another of `nothing_evaluable`'s
+ *     diagnostics).
  */
 export function rankVenues(snapshot, controls) {
   const { venues, holidays } = snapshot;
+  const violations = validateControls(controls);
+  if (violations) {
+    return {
+      resultState: "invalid_request",
+      violations,
+      planA: null,
+      groups: { ranked: [], shorter: [], unverified: [] },
+      alternatives: {},
+      travelUnknown: [],
+      removed: [],
+      snapshotEmpty: venues.length === 0,
+      hardFilteredCount: 0,
+    };
+  }
+
   const {
     origin, mode, raining,
     departureDate, leaveAtMinutes, durationMinutes,
-    toleranceMinutes, returnToleranceMinutes, cycleLatestMinutes,
+    toleranceMinutes = FEASIBILITY_TOLERANCE_MINUTES, returnToleranceMinutes, cycleLatestMinutes,
     seatCheckBufferMinutes, minSessionMinutes, minConfidence,
   } = controls;
 
@@ -1640,31 +1782,45 @@ export function rankVenues(snapshot, controls) {
   const removed = [];
   const travelUnknown = [];
   const candidates = [];
+  let hardFilteredCount = 0;
 
   for (const venue of venues) {
+    const name = venue.name ?? venue.id;
+
     if (invalidPreference.has(venue.id)) {
-      removed.push({ venueId: venue.id, reason: invalidPreference.get(venue.id), kind: "preference_invalid" });
+      removed.push({ venueId: venue.id, name, reason: invalidPreference.get(venue.id), kind: "preference_invalid" });
+      continue;
+    }
+    // Failed-source diagnosis runs before business_status: a missing
+    // business_status here is a consequence of the failed fetch, not
+    // independent evidence the venue has closed down (plan.md's "Evidence
+    // freshness and a first-ever failed source"). Distinct from
+    // `hours_unknown` (data present but indeterminate for this arrival) —
+    // this means no hours data was ever obtained at all.
+    if (!venue.hours || !venue.hours.regular_hours) {
+      removed.push({ venueId: venue.id, name, reason: "hours data was never obtained for this venue", kind: "hours_source_failed" });
       continue;
     }
     if (venue.business_status !== "OPERATIONAL") {
-      removed.push({ venueId: venue.id, reason: `business_status is ${venue.business_status}`, kind: "not_operational" });
+      removed.push({ venueId: venue.id, name, reason: `business_status is ${venue.business_status}`, kind: "not_operational" });
       continue;
     }
 
     const resolvedMode = resolveOutboundMode(venue, origin, mode, raining);
     const destAccess = venue.access?.[origin] ?? {};
     if (!Object.prototype.hasOwnProperty.call(destAccess, resolvedMode)) {
+      hardFilteredCount += 1;
       continue; // hard-filtered: not a candidate at all, not even the travel-unknown group
     }
     const accessEntry = destAccess[resolvedMode];
     if (accessEntry == null) {
-      travelUnknown.push({ venueId: venue.id });
+      travelUnknown.push({ venueId: venue.id, name });
       continue;
     }
 
     const travelBand = normaliseTravelBand(accessEntry.band);
     if (travelBand.kind !== "present") {
-      removed.push({ venueId: venue.id, reason: `access band: ${travelBand.reason ?? "not measured"}`, kind: "access_band_invalid" });
+      removed.push({ venueId: venue.id, name, reason: `access band: ${travelBand.reason ?? "not measured"}`, kind: "access_band_invalid" });
       continue;
     }
 
@@ -1672,6 +1828,7 @@ export function rankVenues(snapshot, controls) {
     if (!returnStatus || returnStatus.state !== "ok") {
       removed.push({
         venueId: venue.id,
+        name,
         reason: returnStatus ? `return_transport_status is ${returnStatus.state}` : "return_transport_status is absent — never validated",
         kind: "return_data_broken",
       });
@@ -1687,11 +1844,11 @@ export function rankVenues(snapshot, controls) {
     });
 
     if (overall.tier === "invalid") {
-      removed.push({ venueId: venue.id, reason: overall.reason, kind: "contradictory_hours" });
+      removed.push({ venueId: venue.id, name, reason: overall.reason, kind: "contradictory_hours" });
       continue;
     }
     if (overall.tier === "hours-unknown") {
-      removed.push({ venueId: venue.id, reason: "hours could not be resolved for this arrival", kind: "hours_unknown" });
+      removed.push({ venueId: venue.id, name, reason: "hours could not be resolved for this arrival", kind: "hours_unknown" });
       continue;
     }
 
@@ -1745,7 +1902,15 @@ export function rankVenues(snapshot, controls) {
     unverified: candidates.filter((c) => c.tier === "unverified"),
   };
 
-  const planA = groups.ranked[0] ?? groups.shorter[0] ?? null;
+  // Plan A eligibility (plan.md's "Plan A eligibility"): overall_tier ∈
+  // {robust, tight} — already guaranteed by `groups.ranked` — AND
+  // seat_confidence >= mixed. The first candidate in the existing sorted
+  // order clearing this floor, filtered, never re-sorted: tier already
+  // outranks confidence in `compareCandidates`, so a robust/poor candidate
+  // can legitimately sort ahead of a tight/dependable one, and planA is not
+  // necessarily groups.ranked[0]. `shorter` is never eligible, regardless of
+  // confidence — a candidate with zero usable minutes must never reach Plan A.
+  const planA = groups.ranked.find((c) => meetsConfidenceFloor(c.seatConfidence.confidence, "mixed")) ?? null;
 
   const alternatives = {};
   for (const c of candidates) {
@@ -1753,20 +1918,32 @@ export function rankVenues(snapshot, controls) {
     (alternatives[c.area] ??= []).push(c);
   }
 
-  const qualifying = candidates.filter((c) => meetsConfidenceFloor(c.seatConfidence.confidence, "mixed"));
-  const noLowRiskOption = qualifying.length === 0;
-
-  let noVerifiedReturn = null;
-  if (groups.ranked.length === 0 && groups.shorter.length === 0 && groups.unverified.length > 0) {
-    noVerifiedReturn = formatClockTime(groups.unverified[0].sessionEndMidAbs);
+  // resultState (plan.md's "Result states: one discriminated outcome, not
+  // independent refusal flags") — total and disjoint by construction: exactly
+  // one branch fires, since groups.ranked/shorter/unverified partition every
+  // candidate and planA is a filter over groups.ranked alone.
+  let resultState;
+  if (planA) {
+    resultState = "plan_a";
+  } else if (groups.ranked.length > 0) {
+    resultState = "no_low_risk_option";
+  } else if (groups.shorter.length > 0) {
+    resultState = "session_does_not_fit";
+  } else if (groups.unverified.length > 0) {
+    resultState = "no_verified_return";
+  } else {
+    resultState = "nothing_evaluable";
   }
 
   return {
+    resultState,
+    violations: null,
     planA,
     groups,
     alternatives,
     travelUnknown,
     removed,
-    refusals: { noLowRiskOption, noVerifiedReturn },
+    snapshotEmpty: venues.length === 0,
+    hardFilteredCount,
   };
 }

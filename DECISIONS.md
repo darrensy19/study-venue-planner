@@ -2820,3 +2820,41 @@ commit.
 **Next**: Slice 1a — the result-state machine, Plan A eligibility, control-contract export and
 validation, tolerance ownership, and failed-source diagnosis in `web/ranking.js` (`PLAN.md`'s slice
 order). Public-shape migration step 1 of 2.
+
+## 2026-09-06 — IMP-019 closed: Slice 1a, public-shape migration step 1 of 2
+
+`web/ranking.js` gained: a deeply-frozen `CONTROL_CONTRACT` export (origins, modes, duration bounds
+`[180,360]`, leave-at range) as the single source for `rankVenues()`'s own request validation, run
+before any population state is computed; the six-state discriminated `resultState` replacing the old
+`refusals` booleans; the Plan A eligibility floor (`overall_tier ∈ {robust,tight}` AND
+`seat_confidence ≥ mixed`, filtered from the existing sorted order, never re-sorted — closing the gap
+`ARCH-004` found, where a `shorter`/`unverified`/low-confidence candidate could reach Plan A); tolerance
+ownership (`FEASIBILITY_TOLERANCE_MINUTES` now lives in `ranking.js`, defaulted, with no declaration
+left in `app.js`); and failed-source diagnosis (`resolveHours()` made total over both documented
+malformed hours shapes, checked before the `business_status` gate). Every `removed`/`travelUnknown`
+entry now carries a `name`. `app.js`'s `render()` reads `resultState` instead of the removed `refusals`
+field as a minimal crash-avoidance stopgap — real wording/vocabulary/hierarchy stays slice 2's job.
+
+**Route**: `claude_sonnet` primary, `codex_terra` verification — two hard triggers fired (public
+interface/compatibility-contract change to `ranking.js`'s returned shape; correctness depending on
+fail-closed/negative paths). Gate passed invocation 1 (`reviews/IMP-019-gate.md`). Round 1 found two
+real defects: `app.js` still duplicated origin/mode/duration literals instead of consuming
+`CONTROL_CONTRACT` (rendering a 60-minute floor the new validator would reject); `resolveHours()`
+dereferenced `current_hours_by_date` before its missing-`regular_hours` guard, throwing a raw
+`TypeError` instead of the documented failed tag when a malformed object's target date fell inside its
+own current-hours window. Both independently re-verified before correcting, both fixed, both new
+regression tests confirmed non-vacuous. Round 2 verified the corrections and recommended `APPROVE`.
+
+**Process note**: round 2's review record section was initially appended before the primary's
+round-1 response due to a benign cross-session read/write race (the reviewer read the file before the
+primary's append had landed), which `finding_state.py` correctly refused to parse rather than guess at.
+Corrected via a user-authorized, content-preserving reorder — verified byte-for-byte via a character-
+multiset comparison before/after — not a rewrite of either party's content.
+
+**Known gap, out of scope**: `resolved_name` venue-source-registry fallback naming (for a venue with
+no Places identity at all) needs a Python-side `build/generate.py` merge change not made here; `name`
+currently falls back to `venue.id` in that case.
+
+**Next**: Slice 1b — the presentation shape (achievable end, binding limit, latest-leave state,
+candidate freshness/`hoursStatus`/`histogramStatus`, candidate/Plan B naming, `metricsBasis`, Plan B
+transfer, `bestAlternative`) in `web/ranking.js`. Public-shape migration step 2 of 2.

@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { StubDocument, StubFormData } from "./dom-stub.js";
-import { rankVenues } from "../../web/ranking.js";
+import { rankVenues, CONTROL_CONTRACT } from "../../web/ranking.js";
 
 // --- fixture builders (mirrors tests/js/ranking.test.js's own private
 // helpers — not shared across test files, consistent with the existing
@@ -89,6 +91,39 @@ test("render() produces a controls form and a Plan A card for an always-open ven
   assert.match(planACard.textContent, /Plan A: Test Venue/);
 });
 
+// round-1 review finding IMP-019-R1-F01: the rendered form must build its
+// origin/mode options and duration bounds from ranking.js's CONTROL_CONTRACT,
+// never from locally re-declared literals. This is diagnostic on its own —
+// before the fix, the form rendered a duration min of 60 while
+// CONTROL_CONTRACT.duration.min is 180, so this test would have failed
+// against the old, duplicated-literal code, not merely against a
+// hypothetically-drifted contract.
+test("renderControls builds origin/mode options and duration bounds from CONTROL_CONTRACT, not local literals", () => {
+  const stubDoc = new StubDocument();
+  const root = stubDoc.createElement("div");
+  stubDoc.registerById("app", root);
+  globalThis.document = stubDoc;
+
+  appModule.state.venues = [makeVenue()];
+  appModule.state.controls = { ...CONTROLS };
+  appModule.state.result = rankVenues({ venues: appModule.state.venues, holidays: {} }, appModule.state.controls);
+  appModule.render(appModule.state);
+
+  const form = root.children[0];
+  assert.equal(form.tagName, "FORM");
+
+  const originSelect = form.findByName("origin");
+  assert.deepEqual(originSelect.children.map((opt) => opt.getAttribute("value")), CONTROL_CONTRACT.origins);
+
+  const modeSelect = form.findByName("mode");
+  assert.deepEqual(modeSelect.children.map((opt) => opt.getAttribute("value")), CONTROL_CONTRACT.modes);
+
+  const durationField = form.findByName("durationMinutes");
+  assert.equal(durationField.getAttribute("min"), String(CONTROL_CONTRACT.duration.min));
+  assert.equal(durationField.getAttribute("max"), String(CONTROL_CONTRACT.duration.max));
+  assert.equal(durationField.getAttribute("step"), String(CONTROL_CONTRACT.duration.step));
+});
+
 // --- event-driven rendering: submitting the controls form recomputes and
 // re-renders, through app.js's real handler — only the DOM and FormData are
 // faked. -----------------------------------------------------------------
@@ -116,4 +151,17 @@ test("submitting the controls form recomputes state and re-renders with the new 
 
   assert.equal(appModule.state.controls.durationMinutes, 90);
   assert.notEqual(root.children[0], originalForm, "expected the form to be re-rendered as a new node");
+});
+
+// --- tolerance ownership (PLAN.md/CLAUDE.md "tolerance ownership") ----------
+// Asserted against the source itself, per CLAUDE.md's "Review-response
+// coverage": placement is the contract here, not behaviour — ranking.js owns
+// FEASIBILITY_TOLERANCE_MINUTES and its default; app.js must not redeclare it.
+
+test("web/app.js declares no FEASIBILITY_TOLERANCE_MINUTES of its own", () => {
+  const appSource = readFileSync(fileURLToPath(new URL("../../web/app.js", import.meta.url)), "utf8");
+  // A prose mention (e.g. explaining that ranking.js owns it) is fine; a
+  // declaration or an assigned field of that exact name is what must be gone.
+  assert.doesNotMatch(appSource, /\b(?:const|let|var)\s+FEASIBILITY_TOLERANCE_MINUTES\b/);
+  assert.doesNotMatch(appSource, /\bFEASIBILITY_TOLERANCE_MINUTES\s*:/);
 });
