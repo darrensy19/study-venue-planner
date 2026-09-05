@@ -36,3 +36,4 @@ event history the sampling audit reads instead.
 | `IMP-015` | 2026-09-06 | implementation | Transcribe the approved ARCH-004 revision-5 design into PLAN.md/CLAUDE.md |
 | `IMP-016` | 2026-09-06 | implementation | BL-003: reconcile the frontend design's §5 data contract against the ARCH-004 revision-5 pipeline shape |
 | `IMP-017` | 2026-09-06 | implementation | Slice 0: `make generate` — offline regeneration of web/index.html, zero API calls |
+| `IMP-018` | 2026-09-06 | implementation | Slice 0b: dependency-free DOM stub in tests/js/, make web/app.js importable |

@@ -18,7 +18,7 @@ const MODES = [
 
 // --- One state object. Never read state back out of the DOM. ---------------
 
-const state = {
+export const state = {
   venues: [],
   holidays: {},
   seatlog: [],
@@ -299,7 +299,7 @@ function renderControls(controls) {
 
 // --- render(state): app.js renders; it decides nothing. ---------------------
 
-function render(state) {
+export function render(state) {
   const root = document.getElementById("app");
   root.replaceChildren();
   root.appendChild(renderControls(state.controls));
@@ -358,8 +358,13 @@ function init() {
   render(state);
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
-} else {
-  init();
+// Guarded so the module is importable with no `document` at all (tests/js/
+// under Node has none unless a test supplies one) — in a real page, `document`
+// always exists and this behaves exactly as before.
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 }

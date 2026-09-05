@@ -6,20 +6,20 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: `IMP-017`
+- **ID**: `IMP-018`
 - **Work type**: implementation
 - **State**: `completed`
-- **Primary route**: `claude_sonnet` — Sonnet, effort high — single-module implementation against a settled contract
+- **Primary route**: `claude_sonnet` — Sonnet, effort high — single-module test-infrastructure change against a settled contract
 - **Verification route**: `claude_only`
-- **Route triggers**: none fired — a thin CLI wrapper around `generate_index_html()`, already built and tested under `IMP-012`; no architecture, schema, auth, public-contract or concurrency/idempotency question is newly decided here
-- **Baseline commit**: `6e68b27`
-- **Artifact under review**: `build/generate.py` (new `main()` + `__main__` guard), `Makefile` (new `generate` target), `tests/python/test_generate.py` (new tests) — the diff to these three files
-- **Objective**: Slice 0 (`PLAN.md`, "Phase 1 review-response slice order") — `make generate`, a no-network target regenerating `web/index.html` from whatever `data/venues.json` already holds on disk
-- **Scope exclusions**: no change to `generate_index_html()`, `render_page()`, or any already-tested function in `build/generate.py`; no change to `build/refresh.py`'s publish ordering (that's slice 5, separately scoped)
-- **Acceptance criteria**: `make generate` runs with zero network calls and regenerates a valid `web/index.html` from on-disk data; a `GenerationError` (e.g. missing `holidays.json`) yields a clean nonzero exit and stderr message, never a traceback, and writes nothing; `tests/python/` covers both paths via `tmp_path` fixtures, no real repo files touched by the tests themselves
-- **Required verification**: run `.venv/bin/pytest tests/python/ -q` and `node --test tests/js/*.test.js` (no regressions); run `make generate` against the real repo and confirm it succeeds with no network access and reproduces `web/index.html` byte-identical to its last committed generation (proving determinism); confirm the new tests use `tmp_path`, never real `data/`/`web/` paths
-- **Claude gate result**: `GATE_PASS` (invocation 1) — `reviews/IMP-017-gate.md`. Gate independently ran `pytest` (190 passed), `node --test` (184 passed), and `make generate` against real data with a deliberately unreachable proxy to force any real network attempt to fail loudly — exited 0, `web/index.html` byte-identical to committed
+- **Route triggers**: none fired — rechecked against the concrete diff: the bootstrap guard is a no-op in any real browser (`document` always exists there); the two new exports (`state`, `render`) add no new top-level names; no architecture, schema, auth, public-contract, or negative/fail-closed-path decision is newly made here
+- **Baseline commit**: `fe5dcbd`
+- **Artifact under review**: `web/app.js` (bootstrap guard + `export` on `state`/`render`), `tests/js/dom-stub.js` (new), `tests/js/app.test.js` (new) — the diff to these three files
+- **Objective**: Slice 0b (`PLAN.md`, "Phase 1 review-response slice order") — a dependency-free DOM stub test harness in `tests/js/`, and making `web/app.js` importable by guarding its module-scope `document.readyState`/`init()` bootstrap
+- **Scope exclusions**: no `ranking.js` changes (slices 1a/1b/3); no rendering or vocabulary changes to `app.js` beyond the bootstrap guard; no `jsdom`/Playwright/any dependency added; not fixing `readControlsFromForm()`'s pre-existing missing-fields gap (`DECISIONS.md`, 2026-09-06 `CURRENT STATE` note — deferred to slice 1a)
+- **Acceptance criteria**: `web/app.js` imports cleanly via plain ES module import with no `document` global defined, with no behavior change in a real browser; `tests/js/*.test.js` all pass under `node --test`; the DOM stub tests exercise real `app.js` code (`render()`, the controls-form submit handler) rather than only the stub itself; `make generate` still regenerates deterministically with zero network calls
+- **Required verification**: run `.venv/bin/pytest tests/python/ -q` and `node --test tests/js/*.test.js` (no regressions); run `make generate` against the real repo with network blocked and confirm zero-network success, twice, for determinism; confirm the new tests fail when the bootstrap guard is reverted (non-vacuity)
+- **Claude gate result**: `GATE_PASS` (invocation 1) — `reviews/IMP-018-gate.md`. Gate independently reran `pytest` (190 passed), `node --test` (187 passed), reverted the bootstrap guard to confirm the new tests actually fail without it (non-vacuity), regenerated `web/index.html` twice with network blocked (byte-identical), and reviewed the DOM stub for dependency-freedom and scope
 - **Independent review**: `not_required` — `claude_only` route, no hard trigger fired
 - **Review record**: none — `claude_only` route has no Codex review record
-- **User decision**: approved — close and commit, per the standing "follow protocol, commit, proceed" instruction for this session (2026-09-06)
-- **Next action**: none — assignment closed. Next in `PLAN.md`'s slice order: Slice 0b (dependency-free DOM stub; make `app.js` importable). Open a new ID when ready to proceed
+- **User decision**: approved — close and commit (2026-09-06)
+- **Next action**: none — assignment closed. Next in `PLAN.md`'s slice order: Slice 1a (result-state machine, Plan A eligibility, control-contract export + validation, tolerance ownership, failed-source diagnosis in `web/ranking.js`). Open a new ID when ready to proceed

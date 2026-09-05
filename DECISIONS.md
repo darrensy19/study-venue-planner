@@ -2793,3 +2793,30 @@ against an already-settled contract (the function being wrapped was already buil
 report. User approved close and commit under the standing session instruction.
 
 **Next**: Slice 0b — a dependency-free DOM stub in `tests/js/`, and making `app.js` importable.
+
+## 2026-09-06 — IMP-018 closed: Slice 0b, dependency-free DOM stub + app.js made importable
+
+`web/app.js`'s bottom-of-file bootstrap threw `ReferenceError: document is not defined` on plain
+Node import, since it read `document.readyState` unconditionally — the exact defect blocking every
+later presentation slice's tests. `IMP-018` guarded it with `if (typeof document !== "undefined")`
+(a no-op in any real browser, where `document` always exists) and exported `state`/`render` so a
+test can drive real rendering without needing the module's own import-time side effects. New
+`tests/js/dom-stub.js` provides a minimal, dependency-free `document`/`FormData` stand-in (no
+`jsdom`, no `package.json` dependency), and `tests/js/app.test.js` adds three tests: the import
+itself succeeds with no `document` global; `render()` produces a real Plan A card off an
+always-open-venue fixture; and dispatching the controls form's `submit` event drives the actual
+unmodified `readControlsFromForm → FormData.get → rankVenues → render` path end to end, proving the
+harness exercises production code rather than only the stub. Non-vacuity was independently checked
+both by the primary and the gate: reverting the guard makes all three new tests fail.
+
+**Route**: `claude_sonnet` primary, `claude_only` verification — rechecked against the concrete diff
+(not assumed from the prior three closes' precedent, per this session's own flagged caution): the
+guard is inert in production and the two new exports add no new top-level names, so no architecture,
+schema, auth, public-contract, or negative-path decision is newly made. Gate passed on invocation 1
+(`reviews/IMP-018-gate.md`), which independently reran both test suites, reverted and restored the
+guard itself, and regenerated `web/index.html` twice with network blocked. User approved close and
+commit.
+
+**Next**: Slice 1a — the result-state machine, Plan A eligibility, control-contract export and
+validation, tolerance ownership, and failed-source diagnosis in `web/ranking.js` (`PLAN.md`'s slice
+order). Public-shape migration step 1 of 2.
