@@ -146,31 +146,41 @@ A **footer** carries the last session and two actions (*Same again*,
 
 ## 5. Data fields
 
-All of these already exist on the candidate object `rankVenues()` returns, or
-in `venues.json`. The screen reads them; it derives nothing.
+**Reconciled 2026-09-06 (`IMP-016`, `BL-003`) against `ARCH-004` revision 5's migrated shape**,
+transcribed into `PLAN.md`'s "The returned presentation shape" and "Result states" sections by
+`IMP-015`. All of these exist on the candidate object `rankVenues()` returns, or in `venues.json`.
+The screen reads them; it derives nothing. **Field names below are the pipeline's own camelCase
+names** — corrected from this document's original snake-case prose forms, which predated the
+migration and never matched the real shape exactly.
 
 | Group | Fields |
 | --- | --- |
-| Identity | `venue_id`, `area`, resolved close time for the arrival date |
-| Duration | `usable_minutes_mid`, the requested duration, `metrics_basis` (`hours_only` suppresses the achievable figure and shows a ceiling instead) |
-| Timing | `leave_at`, `travel_minutes_mid`, `session_end_mid_abs`, `latest_leave_at`, `binding_constraint`, the travel band string |
-| Seat | `seat_confidence.confidence`, `baseline_seatability`, `busyness_band.band` |
-| Home | `return_tier`, `return_basis`, `return_modes` |
-| Fallback | `plan_b.venue_id`, `.mode`, `.travel_band`, `.usable_minutes_mid`, `.overall_tier`, `backup_strength`, the seat-check buffer |
-| Freshness | `hours.status` + `hours.last_success_at`, and `histogram.status` + `histogram.last_success_at`, read **independently** — two fields, two warnings, never merged |
-| Refusals | `refusals.no_low_risk_option`, `refusals.no_verified_return`, `removed[]` with reasons, `travel_unknown[]` |
-| Rank | `preference`, `hours_tier`, `overall_tier` (disclosure only) |
+| Identity | `venueId`, `displayName` / `disambiguatedLabel` (per context — see `PLAN.md`'s naming rule), `area` |
+| Duration | `usableMinutesMid`, the requested duration, `metricsBasis` (`"hours_only"` suppresses the achievable figure and shows a ceiling instead) |
+| Timing | `leaveAt`, `travelMinutesMid`, `achievableSessionEndMid`, `latestLeaveAt` + `latestLeaveAtState`, `bindingLimitMid` + `bindingConstraint`, the travel band string |
+| Seat | `seatConfidence`, `baselineSeatability`, `busynessBand` (band + reason) |
+| Home | `returnTier`, `returnBasis`, `returnModes` |
+| Fallback | `planB.venueId`, `.mode`, `.travelMinutesMid`, `.usableMinutesMid`, `.overallTier`, `backupStrength`, the seat-check buffer |
+| Freshness | `hoursStatus` + hours' `last_success_at`, and `histogramStatus` + histogram's `last_success_at`, read **independently** — two fields, two warnings, never merged |
+| Result / refusal | `resultState` (replaces `refusals.*` — see below), `bestAlternative` under `session_does_not_fit`, `removed[]` with reasons, `travelUnknown[]`, `snapshotEmpty` / `hardFilteredCount` under `nothing_evaluable` |
+| Rank | `preference`, `hoursTier`, `overallTier` (disclosure only) |
+
+**`refusals.no_low_risk_option` / `refusals.no_verified_return` no longer exist.** The migrated
+shape carries one discriminated `resultState` instead (`plan_a` / `no_low_risk_option` /
+`session_does_not_fit` / `no_verified_return` / `nothing_evaluable` / `invalid_request`) — the
+screen reads which state it is, never two independent booleans. `no_low_risk_option` and
+`no_verified_return` survive as **values** `resultState` can take, not as fields of their own.
 
 ### Assumed — needs confirming before build
 
 | | |
 | --- | --- |
-| **Resolved closing label** | "closes 10pm" needs the resolved close for the arrival date exposed on the candidate. If it is only reachable via `latest_leave_at` plus the binding constraint, the subtitle must drop it rather than infer it. |
-| **Warning age in days** | "28 days old" is computed from `last_success_at` against the generation date. There is deliberately no global `generated_at`, so **`build/refresh.py` must stamp a per-source age at build time.** |
-| **Fallback walk minutes** | "8 min walk" uses the midpoint of `fallbacks[].travel_band`. Confirm a midpoint is acceptable for display where feasibility uses the pessimistic edge. |
-| **Recovery-action outcomes** | Each refusal button's label quotes a result. That requires re-running the pipeline for the alternative inputs at generation time, or client-side on press. Cheap either way — but it is new work. |
-| **Seat-log aggregation** | Per venue, visit outcomes from the seat log — `venue_id`, timestamp, got-a-seat boolean — aggregated into a count and a total. The Apple Shortcut already writes the rows; nothing reads them. |
-| **Seat-log write path** | Production has no backend: either keep the Shortcut and make the button a deep link, or write to `localStorage` and export. |
+| **Resolved closing label** | **Unresolved — the assumption does not hold.** `ARCH-004`'s returned-shape audit (`PLAN.md`, "The returned presentation shape") does not add a raw venue closing time to the candidate — only `bindingLimitMid` (the leave-by instant) and `latestLeaveAt`/`latestLeaveAtState` are exposed. Per this item's own fallback rule, **the "closes 10pm" subtitle must be dropped**, not inferred from `bindingLimitMid` plus `bindingConstraint`: that pairing states *when to leave*, not *when the venue itself closes*, and presenting one as the other would misstate which constraint is binding. |
+| **Warning age in days** | Still open — tracked as `BL-008` (staleness threshold, P3). `build/refresh.py` stamping a per-source age at build time has not been scheduled. |
+| **Fallback walk minutes** | **Resolved.** `ARCH-004`'s Decision 19 / §10 adds `planB.travelMinutesMid` to the returned shape specifically so the renderer never re-parses `fallbacks[].travel_band` itself — re-parsing it in the renderer would be a business rule living in the wrong layer. Use `planB.travelMinutesMid` directly; the midpoint-vs-pessimistic-edge question this item raised is moot, since the field now arrives pre-computed. |
+| **Recovery-action outcomes** | Still open — not addressed by `ARCH-004` and not yet in `BACKLOG.md`. Re-running the pipeline for a refusal button's alternative inputs (at generation time or on press) remains new work with no assignment scoped. |
+| **Seat-log aggregation** | Still open — tracked as `BL-007` (seat-log aggregation, P2). |
+| **Seat-log write path** | Still open — not yet its own `BACKLOG.md` item; closely related to `BL-007` but distinct (this is where the log write lands, not how it's aggregated for display). |
 
 ---
 

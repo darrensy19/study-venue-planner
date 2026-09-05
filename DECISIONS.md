@@ -2746,3 +2746,26 @@ next `IMP` number when it is actually opened — the design's `IMP-015` label fo
 
 **Next**: `BL-003` (reconcile the frontend design's §5 data contract against this transcription's
 changed pipeline shape) is next in `BACKLOG.md`'s own stated order, ahead of the `§13` slice order.
+
+## 2026-09-06 — IMP-016 closed: BL-003 reconciled, frontend design's §5 now matches the migrated shape
+
+`docs/superpowers/specs/2026-09-05-study-plan-frontend-design.md` §5 predated `ARCH-004`'s migration
+and named fields under the old shape (`refusals.no_low_risk_option` / `refusals.no_verified_return`,
+snake_case names). `IMP-016` rewrote the field table against `PLAN.md`'s post-`IMP-015` sections and
+resolved or dispositioned each of §5's six "Assumed — needs confirming" items:
+
+- **Resolved closing label** — unresolved as stated; no raw venue-close field exists in the migrated
+  shape, so the "closes 10pm" subtitle is dropped rather than inferred from `bindingLimitMid`.
+- **Fallback walk minutes** — resolved: use `planB.travelMinutesMid` directly (Decision 19/§10),
+  which moots the original midpoint-vs-pessimistic-edge question.
+- **Warning age in days**, **Seat-log aggregation** — already tracked as `BL-008` and `BL-007`.
+- **Recovery-action outcomes**, **Seat-log write path** — genuinely new gaps, confirmed absent from
+  `BACKLOG.md` by the pre-gate; flagged in the design doc as still open rather than backlogged here,
+  since backlog admission is a `/close`-time decision outside this assignment's scope.
+
+**Route**: `claude_sonnet` primary, `claude_only` verification — same reasoning as `IMP-015`: this
+reconciles one already-approved shape against another document, no new architecture decision, no
+code. Gate passed on invocation 1 (`reviews/IMP-016-gate.md`). User approved close and commit under
+the standing "follow protocol, commit, proceed" instruction for this session.
+
+**Next**: `PLAN.md`'s slice order, starting with slice 0 (`make generate`).
