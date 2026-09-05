@@ -14,6 +14,7 @@ from build.generate import (
     build_module_script,
     check_no_top_level_collisions,
     generate_index_html,
+    main,
     merge_venues,
     render_page,
     strip_app_import,
@@ -476,3 +477,57 @@ def test_generate_index_html_against_the_real_project_files(tmp_path):
     )
 
     validate_generated_artifact(output_path.read_text())
+
+
+# --- main() (`make generate`'s CLI entry point) -----------------------------
+
+
+def _write_generate_fixture_tree(tmp_path):
+    """Lay out a `data/` + `web/` tree matching the real repo's layout, so
+    `main(data_dir=..., web_dir=...)` can be exercised exactly as `make
+    generate` invokes it against the real one — just pointed at a temp dir."""
+    import json
+
+    data_dir = tmp_path / "data"
+    web_dir = tmp_path / "web"
+    data_dir.mkdir()
+    web_dir.mkdir()
+
+    _write(data_dir, "venues.json", json.dumps({
+        "hours_timezone": "Asia/Singapore",
+        "histogram_timezone": "Asia/Singapore",
+        "venues": [
+            {"id": "a", "business_status": "OPERATIONAL", "return_transport_status": {"state": "ok"}},
+        ],
+    }))
+    _write(data_dir, "venues_meta.json", json.dumps({"a": _meta()}))
+    _write(data_dir, "holidays.json", json.dumps({}))
+    _write(web_dir, "index.template.html", (FIXTURES / "template.html").read_text())
+    _write(web_dir, "ranking.js", RANKING_STUB)
+    _write(web_dir, "app.js", APP_STUB)
+    _write(web_dir, "style.css", STYLE_STUB)
+    return data_dir, web_dir
+
+
+def test_main_regenerates_index_html_from_on_disk_data(tmp_path):
+    data_dir, web_dir = _write_generate_fixture_tree(tmp_path)
+
+    exit_code = main(data_dir=data_dir, web_dir=web_dir)
+
+    assert exit_code == 0
+    output_path = web_dir / "index.html"
+    assert output_path.exists()
+    validate_generated_artifact(output_path.read_text())
+
+
+def test_main_returns_nonzero_and_reports_to_stderr_on_generation_error(tmp_path, capsys):
+    data_dir, web_dir = _write_generate_fixture_tree(tmp_path)
+    (data_dir / "holidays.json").unlink()  # required and absent -> GenerationError
+
+    exit_code = main(data_dir=data_dir, web_dir=web_dir)
+
+    assert exit_code == 1
+    assert not (web_dir / "index.html").exists()
+    captured = capsys.readouterr()
+    assert "holidays.json" in captured.err
+    assert captured.out == ""

@@ -98,3 +98,4 @@ unaffected by the split.
 | 2026-09-05 | completed | ARCH-004 | codex_sol_high | round 1 codex_sol_high, rounds 2-3 codex_sol (correction-delta table; no de-escalation below sol — each delta reopened the design/contract) |
 | 2026-09-06 | completed | IMP-015 | claude_only | no hard trigger fired; pre-gate ran twice (invocation 1 GATE_FAIL, corrected; invocation 2 GATE_PASS) |
 | 2026-09-06 | completed | IMP-016 | claude_only | no hard trigger fired; pre-gate GATE_PASS on invocation 1 |
+| 2026-09-06 | completed | IMP-017 | claude_only | no hard trigger fired; pre-gate GATE_PASS on invocation 1, independently reran full test suite + make generate |

@@ -2769,3 +2769,27 @@ code. Gate passed on invocation 1 (`reviews/IMP-016-gate.md`). User approved clo
 the standing "follow protocol, commit, proceed" instruction for this session.
 
 **Next**: `PLAN.md`'s slice order, starting with slice 0 (`make generate`).
+
+## 2026-09-06 — IMP-017 closed: Slice 0, `make generate` shipped
+
+`build/generate.py` gained `main(*, data_dir=None, web_dir=None)` — a thin CLI wrapper around the
+already-tested `generate_index_html()` (unmodified), defaulting to the real repo's `data/`/`web/`
+paths and accepting overrides for testability, mirroring `build/refresh.py`'s `refresh()` signature.
+On `GenerationError` it prints to stderr and returns 1 rather than raising, so `make generate` fails
+cleanly instead of with a Python traceback. `Makefile` gained a `.PHONY` `generate` target invoking
+it, styled like the existing `refresh` target. Two new `tests/python/` cases cover the success and
+failure paths via `tmp_path` fixtures, touching no real repo files.
+
+**Verified**: 190 Python tests and 184 JS tests pass, no regressions. `make generate` run against
+the real repo (network deliberately blocked via an unreachable proxy, to prove a failed attempt
+would surface loudly rather than silently succeed) exited 0 and reproduced `web/index.html`
+byte-identical to what was already committed — proof the regenerator is deterministic and spends
+zero network calls, which is Slice 0's whole point.
+
+**Route**: `claude_sonnet` primary, `claude_only` verification — single-module implementation
+against an already-settled contract (the function being wrapped was already built and tested under
+`IMP-012`), no architecture, schema or public-contract decision made. Gate passed on invocation 1
+(`reviews/IMP-017-gate.md`), which independently reran every check rather than trusting the primary's
+report. User approved close and commit under the standing session instruction.
+
+**Next**: Slice 0b — a dependency-free DOM stub in `tests/js/`, and making `app.js` importable.

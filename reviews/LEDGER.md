@@ -35,3 +35,4 @@ event history the sampling audit reads instead.
 | `ARCH-004` | 2026-09-05 | architecture/high-level | Repo-grounded validation of the approved recommendation-eligibility / achievable-time / evidence-visibility / publication design |
 | `IMP-015` | 2026-09-06 | implementation | Transcribe the approved ARCH-004 revision-5 design into PLAN.md/CLAUDE.md |
 | `IMP-016` | 2026-09-06 | implementation | BL-003: reconcile the frontend design's §5 data contract against the ARCH-004 revision-5 pipeline shape |
+| `IMP-017` | 2026-09-06 | implementation | Slice 0: `make generate` — offline regeneration of web/index.html, zero API calls |

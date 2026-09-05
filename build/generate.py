@@ -7,13 +7,16 @@ the seat log alongside `ranking.js` + `app.js` (concatenated into one module
 script, per "The module inlining contract") and `style.css` into
 `web/index.template.html`, producing the self-contained `web/index.html`.
 
-Orchestrated only by `build/refresh.py` (step 7, not yet built);
-independently testable against fixtures, and touches no network.
+Orchestrated by `build/refresh.py` (step 8, after the atomic replace) and,
+independently, by `make generate` below — a no-network target that
+regenerates the page from whatever `data/venues.json` already holds on disk.
+Independently testable against fixtures either way; touches no network.
 """
 
 import csv
 import json
 import re
+import sys
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -332,3 +335,42 @@ def generate_index_html(
     )
     validate_generated_artifact(html_text)
     output_path.write_text(html_text)
+
+
+def main(*, data_dir=None, web_dir=None):
+    """`make generate`'s entry point — regenerates `web/index.html` from
+    whatever `data/venues.json` already holds on disk, spending zero API
+    calls (`PLAN.md`, "Decision 18" / "Phase 1 review-response slice order",
+    slice 0). Accepts `data_dir`/`web_dir` overrides for testability,
+    mirroring `build/refresh.py`'s `refresh()` signature; a real invocation
+    supplies neither and uses this repo's actual `data/` and `web/`.
+
+    Returns an exit code rather than raising, so `__main__` below can be a
+    one-line `sys.exit(main())` — the CLI failure mode is a clean stderr
+    message and a nonzero exit, not a Python traceback.
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    data_dir = Path(data_dir) if data_dir is not None else repo_root / "data"
+    web_dir = Path(web_dir) if web_dir is not None else repo_root / "web"
+
+    try:
+        generate_index_html(
+            venues_path=data_dir / "venues.json",
+            venues_meta_path=data_dir / "venues_meta.json",
+            holidays_path=data_dir / "holidays.json",
+            seatlog_path=data_dir / "seatlog.csv",
+            template_path=web_dir / "index.template.html",
+            ranking_js_path=web_dir / "ranking.js",
+            app_js_path=web_dir / "app.js",
+            style_css_path=web_dir / "style.css",
+            output_path=web_dir / "index.html",
+        )
+    except GenerationError as exc:
+        print(f"generate: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wrote {web_dir / 'index.html'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

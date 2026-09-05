@@ -6,20 +6,20 @@ rules; when a field would exceed it, point to `PLAN.md` or the review record ins
 
 ## Current assignment
 
-- **ID**: `IMP-016`
-- **Work type**: implementation (bounded documentation)
+- **ID**: `IMP-017`
+- **Work type**: implementation
 - **State**: `completed`
-- **Primary route**: `claude_sonnet` — Sonnet, effort high
+- **Primary route**: `claude_sonnet` — Sonnet, effort high — single-module implementation against a settled contract
 - **Verification route**: `claude_only`
-- **Route triggers**: none fired — reconciling one already-existing design doc's data-field table against another design's already-approved, already-reviewed shape; no new architecture decision, no code
-- **Baseline commit**: `1a45c31`
-- **Artifact under review**: `docs/superpowers/specs/2026-09-05-study-plan-frontend-design.md` §5 — the diff to that file is this assignment's reviewable artifact
-- **Objective**: `BL-003` — reconcile §5's data-field table and its "Assumed — needs confirming" list against `ARCH-004` revision 5's returned-shape changes (now in `PLAN.md`'s "The returned presentation shape" and "Result states" sections, transcribed by `IMP-015`)
-- **Scope exclusions**: no code changes; no re-opening `ARCH-004`'s or the frontend design's own settled decisions (§6 policy decisions, Decisions 1-2); genuinely new gaps found while reconciling (not already backlogged) are flagged in the design doc and in `DECISIONS.md`, not silently resolved
-- **Acceptance criteria**: §5's field table names only fields that exist in the migrated shape, under their migrated names (`resultState` groups, not `refusals.*`); each of the six "Assumed" items is either resolved (with the resolving fact cited) or explicitly marked still open with a pointer to where it's tracked
-- **Required verification**: diff §5 against `PLAN.md`'s "Result states", "Requested end vs achievable end", "Evidence freshness", and "The returned presentation shape" sections field by field; confirm the "Assumed" list's fallback-walk-minutes item is resolved via `planB.travelMinutesMid` per the design's own §10; confirm no item is fabricated an answer the source material doesn't support
-- **Claude gate result**: `GATE_PASS` (invocation 1) — `reviews/IMP-016-gate.md`
+- **Route triggers**: none fired — a thin CLI wrapper around `generate_index_html()`, already built and tested under `IMP-012`; no architecture, schema, auth, public-contract or concurrency/idempotency question is newly decided here
+- **Baseline commit**: `6e68b27`
+- **Artifact under review**: `build/generate.py` (new `main()` + `__main__` guard), `Makefile` (new `generate` target), `tests/python/test_generate.py` (new tests) — the diff to these three files
+- **Objective**: Slice 0 (`PLAN.md`, "Phase 1 review-response slice order") — `make generate`, a no-network target regenerating `web/index.html` from whatever `data/venues.json` already holds on disk
+- **Scope exclusions**: no change to `generate_index_html()`, `render_page()`, or any already-tested function in `build/generate.py`; no change to `build/refresh.py`'s publish ordering (that's slice 5, separately scoped)
+- **Acceptance criteria**: `make generate` runs with zero network calls and regenerates a valid `web/index.html` from on-disk data; a `GenerationError` (e.g. missing `holidays.json`) yields a clean nonzero exit and stderr message, never a traceback, and writes nothing; `tests/python/` covers both paths via `tmp_path` fixtures, no real repo files touched by the tests themselves
+- **Required verification**: run `.venv/bin/pytest tests/python/ -q` and `node --test tests/js/*.test.js` (no regressions); run `make generate` against the real repo and confirm it succeeds with no network access and reproduces `web/index.html` byte-identical to its last committed generation (proving determinism); confirm the new tests use `tmp_path`, never real `data/`/`web/` paths
+- **Claude gate result**: `GATE_PASS` (invocation 1) — `reviews/IMP-017-gate.md`. Gate independently ran `pytest` (190 passed), `node --test` (184 passed), and `make generate` against real data with a deliberately unreachable proxy to force any real network attempt to fail loudly — exited 0, `web/index.html` byte-identical to committed
 - **Independent review**: `not_required` — `claude_only` route, no hard trigger fired
 - **Review record**: none — `claude_only` route has no Codex review record
 - **User decision**: approved — close and commit, per the standing "follow protocol, commit, proceed" instruction for this session (2026-09-06)
-- **Next action**: none — assignment closed. Next in `PLAN.md`'s slice order: Slice 0 (`make generate` — offline regeneration). Open a new ID when ready to proceed
+- **Next action**: none — assignment closed. Next in `PLAN.md`'s slice order: Slice 0b (dependency-free DOM stub; make `app.js` importable). Open a new ID when ready to proceed
