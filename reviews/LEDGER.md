@@ -32,3 +32,4 @@ event history the sampling audit reads instead.
 | `IMP-013` | 2026-09-03 | implementation | Phase 1 step 7: build/refresh.py orchestration (coarsen -> fetch -> validate -> merge -> generate), holidays.json, Makefile target |
 | `IMP-014` | 2026-09-03 | implementation | Phase 1 step 8: live refresh (real API spend) and manual acceptance |
 | `ARCH-003` | 2026-09-04 | architecture/high-level | Outbound-mirror transport: hard-filter feasibility for whether transport runs *to* a venue at `leave_at`, mirroring `ARCH-001`'s return-leg design |
+| `ARCH-004` | 2026-09-05 | architecture/high-level | Repo-grounded validation of the approved recommendation-eligibility / achievable-time / evidence-visibility / publication design |

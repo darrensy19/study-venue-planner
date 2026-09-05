@@ -2572,3 +2572,70 @@ taxonomy never accounted for the new outbound removals, and that an early fix st
 internal reason with the user-facing label — both corrected across rounds 2–3; see `reviews/ARCH-003.md`
 for the full finding history. No code changed — `ranking.js`/`build/refresh.py` implementation and
 `data/venues_meta.json` hand-curation remain future `IMP-###` work.
+
+## 2026-09-05 — `ARCH-004` closed: the review-response design validated against the repository
+
+Closed, approved after 3 review rounds (`codex_sol_high` → `codex_sol` → `codex_sol`; no
+de-escalation, because each correction delta reopened the design or its contract). The artifact is
+`docs/superpowers/specs/2026-09-05-review-response-design.md`, **revision 5**, SHA-256
+`1805cfd9433b21db564d16582a700f7b2e6031219d38ff845a1c2b3156ceda50`. This assignment validated the
+design against the tree; it **transcribed nothing and implemented nothing**. `PLAN.md`, `CLAUDE.md`
+and all code are untouched, and the transcription is its own future assignment.
+
+**Nine findings' worth of correction across three rounds, from five IDs.** Round 1 raised
+`ARCH-004-R1-F01`-`F05`; round 2 resolved only `F05` and held `F01`-`F04` open; round 3 resolved the
+rest. Every finding was `accepted` with a `confirmed` factual assessment — **none was rebutted, in
+any round**, and each was independently reproduced against the repository before acceptance rather
+than taken on the reviewer's word.
+
+What the rounds actually changed, and why each matters beyond its own wording:
+
+- **`F01` — a false reachability claim, twice.** Revision 3 asserted the identity-plus-`failed` hours
+  state was "not reachable from any record `build/refresh.py` can actually emit." It is reachable:
+  `_resolve_freshness` derives `failed` solely from a missing `last_success_at`, while
+  `_merge_hours_source` copies each identity field from the prior record on a bare presence test, and
+  `_load_existing_venues` semantically validates nothing — so any hand-edited, migrated or restored
+  `data/venues.json` is re-emitted as operational identity plus `failed`, which then throws in
+  `resolveHours`. Revision 4 corrected the analysis but **left the withdrawn sentence standing in live
+  §6.4 prose**, which is why round 2 held the finding open. Revision 5 deleted it — and a consistency
+  sweep found the **same claim surviving a second time** in §2's revision-3 changelog row, uncited by
+  either review round; it is now struck in place. Decision 38's guard is a live fail-closed boundary
+  on accepted prior state, not defence in depth. The general lesson is recorded because it recurred:
+  correcting the analysis is not the same as removing every live restatement of the withdrawn claim.
+- **`F02` — a test that could not fail.** `metricsBasis` is emitted as `"hours_only"` inside
+  `ranking.js`'s `returnResult.tier === "unverified"` branch and `"combined"` only outside it, so over
+  real pipeline output the two fields are **biconditional**. Any two ordinary fixtures therefore also
+  differ in `returnTier`, and a renderer keying on `returnTier` passes both. The criterion now demands
+  two hand-built renderer inputs identical in every field except `metricsBasis` — deliberately a shape
+  the pipeline would not itself emit, because it is a renderer-boundary test of Decision 32, not a
+  pipeline test.
+- **`F03` — Decision 40 was not yet a contract.** Added in revision 4 to close round 1's hole (the
+  renderer had no interface to build a valid form from), it still had three gaps: it carried a
+  duration `step` while Decision 35 accepted every integer in `[180, 360]`, with nothing saying which
+  governed; its export was externally mutable, so `app.js` could silently change what the
+  DOM-free, I/O-free `rankVenues()` validates against; and its form-derivation test compared the form
+  against values `app.js` already duplicates, so a renderer that never read the contract passed.
+  Revision 5 declares `step` a **UI affordance, not a validation rule** (the correction that preserves
+  Decision 35 rather than reopening it — `181` is explicitly asserted valid), requires the export
+  **deeply immutable**, and replaces the test with a **sentinel contract** injected through a
+  dependency seam.
+- **`F04` — the slice plan hid a dependency.** Revision 3's "the shape changes exactly once, in slice
+  1b" was impossible; revision 4 withdrew it for a two-step migration but moved only the failed-source
+  removal's naming into 1a, leaving Decision 36's requirement — that `nothing_evaluable`, a 1a state,
+  carry naming on **every** `removed` and `travelUnknown` diagnostic — assigned to no step at all, and
+  leaving one naming criterion that read both 1a diagnostic names and 1b candidate names and so could
+  run in neither slice. Revision 5 moves all non-candidate diagnostic naming into 1a, **splits** the
+  naming criterion into a 1a half and a 1b half, and reclassifies Decision 40 as a **static module
+  export** rather than a returned-shape field.
+- **`F05`** (resolved in round 2) made the interrupted-write criterion non-vacuous by requiring the
+  fault **after a partial prefix reaches the staging target**, since a double raising before the first
+  byte passes against today's direct `output_path.write_text(html_text)`.
+
+Decisions remain contiguous **1-40**; revision 5 added, renumbered and withdrew none — every round-3
+correction is to supporting prose, §10's migration table, or §12's acceptance criteria. Both suites
+passed unchanged at every round (188 Python, 184 JS), as expected for an assignment that changed no
+code.
+
+**Process note.** `WORKFLOW.md`'s "commit at each lifecycle transition" was **not** followed during
+this assignment, by explicit user choice; the five artifact paths were carried uncommitted across all
+three rounds and committed once at close.

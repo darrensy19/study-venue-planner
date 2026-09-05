@@ -95,3 +95,4 @@ unaffected by the split.
 | 2026-09-03 | completed | IMP-013 | codex_terra | backfilled 2026-09-04 — missed at original close |
 | 2026-09-04 | completed | IMP-014 | codex_terra | |
 | 2026-09-04 | completed | ARCH-003 | codex_sol | round 1 codex_sol, round 2 codex_terra, round 3 codex_terra_low (de-escalated per correction-delta table) |
+| 2026-09-05 | completed | ARCH-004 | codex_sol_high | round 1 codex_sol_high, rounds 2-3 codex_sol (correction-delta table; no de-escalation below sol — each delta reopened the design/contract) |
