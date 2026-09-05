@@ -2639,3 +2639,83 @@ code.
 **Process note.** `WORKFLOW.md`'s "commit at each lifecycle transition" was **not** followed during
 this assignment, by explicit user choice; the five artifact paths were carried uncommitted across all
 three rounds and committed once at close.
+
+## 2026-09-05 — Frontend design v1.0 imported, and the two policy calls it forced
+
+`web/`'s UI has never had a design pass (`BL-002`). One now exists: a **Warm Dusk** direction —
+Manrope, iPhone-only, dark warm palette — covering the asking screen, the result screen and a
+"What's checked" reference page, with six demonstration states matching the pipeline's real outcomes
+(full session, shorter-only, no useful session, unverified return, stale evidence, no viable
+fallback). Imported 2026-09-05 from the Claude Design project "Study Venue Planner Redesign"
+(`00b69199-f550-4711-b988-f904576e1b79`) and committed as `b5420e2`:
+`docs/superpowers/specs/2026-09-05-study-plan-frontend-design.md` (spec, §5 data contract, §9's
+21-item acceptance checklist) and `...-study-plan-frontend-handoff.md` (per-component measurements,
+copy, animations, state model). The `.dc.html` prototypes and their generated `support.js` React
+runtime were not vendored — design references, not code.
+
+The design changes presentation only. `web/ranking.js` is untouched: no tier, ordering, refusal or
+`backup_strength` logic is altered, and rendered output must stay byte-identical between an `ok` and
+a `stale` run over the same last-known-good data.
+
+**What it replaces.** The uniform six-line candidate card (`renderCandidateCard`) goes. It gave
+twelve facts one weight, which is what made the output read as a diagnostic report rather than a
+plan. In its place: the venue name is the largest type on the screen, the *achievable* duration is
+the largest number with the *requested* duration demoted to a tag beside it, and seat and return each
+state a verdict word plus one sentence of grounds. Every ranking diagnostic the old card printed is
+retained verbatim behind a disclosure — nothing deleted, only demoted.
+
+### Decision 1 — late-session policy: refuse, do not cap
+
+A 9h request from a late-afternoon departure ends past `RETURN_CORE_UNTIL_MINUTES` (21:30), so it
+needs a per-venue late timetable that few venues have. With `9h` offered as a one-tap preset, the
+easiest taps routinely produce a refusal. The alternative considered was capping the request at what
+the network can get you home from.
+
+**Decided: refusals stand; the user shortens the ask themselves.** Capping is kinder in the moment
+but silently changes what the user asked for, and requested-versus-achievable is the distinction the
+entire design is built on preserving — the result screen's whole metric block exists to hold those
+two figures apart. A cap would make the "requested" figure a number the user never typed.
+
+*Consequence for the UI.* The asking screen's pre-flight warning is the only mitigation and stays
+advisory, never blocking: it fires when `leave + fastest travel + duration` passes 21:30 and says so
+in one line. The requested figure shown on the result screen is always the figure the user actually
+chose.
+
+### Decision 2 — minimum useful Plan A: reuse 90 minutes
+
+`PLAN_B_MIN_SESSION_MINUTES` (90) is a Plan B viability floor. No equivalent floor existed for Plan
+A, so a 40-minute Plan A was a valid pipeline output that the design would have presented as a
+genuine recommendation. Options were reusing 90, choosing a different figure, or declaring any
+positive duration recommendable.
+
+**Decided: reuse 90 minutes.** It is consistent with the Plan B floor and with the copy, which
+already uses "90 minutes" as the threshold for "useful". It is also the only option consistent with
+the design's own acceptance checklist, which already reads "below the useful floor the screen is a
+refusal with no metric block" — wording that presupposes a floor above zero exists.
+
+*Consequence for the UI.* The zero-minute rule already forbids a recommendation with a non-positive
+achievable duration. The floor extends it: below 90 achievable minutes the screen renders the refusal
+layout — which has no metric block at all — rather than a small number. That is what stops a
+technically-positive figure being read as a recommendation.
+
+### Sequencing, and a correction to the imported handoff
+
+The handoff states this lands at `PLAN.md` Phase 1 **step 6**, "which had no design input". That is
+wrong: step 6 was built and closed as `IMP-012` (2026-09-03). This is a redesign of shipped output.
+
+Its real position is **slice 4** of `ARCH-004`'s §13 order — "UI hierarchy, disclosure,
+always-visible warnings, focus" — gated on slice 2's vocabulary, and behind slices 0 (`make
+generate`), 0b (DOM stub), 1a and 1b. Two reasons it cannot be built earlier: slices 1b, 2 and 4 each
+need `web/index.html` regenerated to verify, and today only `make refresh` does that, which spends
+live API calls; and without slice 0b's DOM stub `app.js` is not importable, so none of §9's
+assertions can run.
+
+Per `WORKFLOW.md`, a candidate design enters the protocol as an `ARCH-###` for repo-grounded
+validation, not as an `IMP-###`. That assignment (`ARCH-005`) is **deliberately not opened yet** — it
+follows the pending transcription of `ARCH-004` revision 5 into `PLAN.md`/`CLAUDE.md`. Both decisions
+above are inputs to it, not conclusions from it.
+
+One inconsistency in the imported bundle, recorded so it is not rediscovered: the spec's §6 claims
+"the two blocking ones are P1 in `backlog-additions.md`" but then lists unverified-return visibility
+in place of late-session policy. `decisions-entry-stub.md` is authoritative; the two blocking
+decisions are the two settled above.
