@@ -45,6 +45,8 @@ import {
   CLOSING_BUFFER_DEFAULT_MINUTES,
   CONTROL_CONTRACT,
   validateControls,
+  deriveLatestLeaveAtState,
+  stripFreshnessFields,
 } from "../../web/ranking.js";
 
 // --- fixture builders ------------------------------------------------------
@@ -1990,7 +1992,9 @@ test("taxonomy: overall_tier unverified is ranked in its own group, but barred f
 test("taxonomy: an access entry of explicit null is unranked in its own travel-time-unknown group", () => {
   const venues = [fullVenue({ id: "v1", access: { home: { walk: null } } })];
   const r = rankVenues({ venues, holidays: {} }, BASE_CONTROLS);
-  assert.deepEqual(r.travelUnknown, [{ venueId: "v1", name: "v1" }]);
+  assert.deepEqual(r.travelUnknown, [
+    { venueId: "v1", displayName: "v1", disambiguatedLabel: "v1", hoursStatus: undefined, histogramStatus: undefined },
+  ]);
   assert.equal(findCandidate(r, "v1"), undefined);
   assert.equal(r.removed.find((x) => x.venueId === "v1"), undefined);
 });
@@ -2540,15 +2544,17 @@ test("rankVenues: a venue with no hours data at all is removed as hours_source_f
   assert.equal(removed.kind, "hours_source_failed"); // not not_operational, despite the bad business_status
 });
 
-test("rankVenues: removed entries name the venue, falling back to its id when no name field exists", () => {
+test("rankVenues: removed entries carry displayName, falling back to the venue id when no name field exists", () => {
   const named = fullVenue({ id: "v1", businessStatus: "CLOSED_PERMANENTLY" });
   named.name = "Test Venue Name";
   const r = rankVenues({ venues: [named], holidays: {} }, BASE_CONTROLS);
-  assert.equal(r.removed.find((x) => x.venueId === "v1").name, "Test Venue Name");
+  const removedNamed = r.removed.find((x) => x.venueId === "v1");
+  assert.equal(removedNamed.displayName, "Test Venue Name");
+  assert.equal(removedNamed.disambiguatedLabel, "Test Venue Name"); // unique name -> no area suffix
 
   const unnamed = fullVenue({ id: "v2", businessStatus: "CLOSED_PERMANENTLY" }); // fullVenue sets no .name
   const r2 = rankVenues({ venues: [unnamed], holidays: {} }, BASE_CONTROLS);
-  assert.equal(r2.removed.find((x) => x.venueId === "v2").name, "v2");
+  assert.equal(r2.removed.find((x) => x.venueId === "v2").displayName, "v2");
 });
 
 // --- rankVenues: area grouping -----------------------------------------------
@@ -2667,4 +2673,308 @@ test("rankVenues candidate: an unverified return over a finite-hours venue corre
   assert.notEqual(c.latestLeaveAt, "UNDETERMINED");
   assert.equal(typeof c.latestLeaveAt, "number"); // a genuine finite closing-derived leave-by time
   assert.equal(c.bindingConstraint, "venue_close"); // the real constraint here, correctly distinguished from the COVERED case above
+});
+
+// --- IMP-020 / Slice 1b: the presentation shape -----------------------------
+// plan.md's "The returned presentation shape" — achievable end, binding
+// limit, latest-leave state, candidate/removal/Plan B freshness and naming,
+// Plan B transfer time, bestAlternative and the refusal instant. Public-shape
+// migration step 2 of 2 (slice 1a covered resultState/eligibility/the control
+// contract/tolerance ownership/failed-source diagnosis).
+
+// --- achievableSessionEndMid --------------------------------------------
+
+test("achievableSessionEndMid: for a robust candidate, achievable and requested ends coincide", () => {
+  const venue = fullVenue({ id: "v1" }); // always-open Monday, walk access
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.tier, "robust");
+  assert.equal(c.achievableSessionEndMid, c.sessionEndMidAbs);
+});
+
+test("achievableSessionEndMid: a shorter-tier candidate's achievable end is the close-derived instant, distinct from the requested end", () => {
+  const venue = fullVenue({ id: "v1", regular: { mon: known([{ open: 480, close: 660 }]) } }); // 08:00-11:00
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.tier, "shorter");
+  const arrivalMidAbs = c.sessionEndMidAbs - BASE_CONTROLS.durationMinutes;
+  assert.equal(c.achievableSessionEndMid, arrivalMidAbs + c.usableMinutesMid);
+  assert.notEqual(c.achievableSessionEndMid, c.sessionEndMidAbs);
+});
+
+test("achievableSessionEndMid: undefined exactly when usableMinutesMid is (closed at arrival)", () => {
+  const venue = fullVenue({ id: "v1", regular: { mon: known([{ open: 0, close: 60 }]) } }); // closed long before the 10am arrival
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.usableMinutesMid, undefined);
+  assert.equal(c.achievableSessionEndMid, undefined);
+});
+
+// --- bindingLimitMid ------------------------------------------------------
+
+test("bindingLimitMid: COVERED hours + AT_LEAST(0) return (schedule-free) has no binding limit at all", () => {
+  const venue = fullVenue({ id: "v1" }); // always-open, walk access -> schedule-free positive evidence
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.bindingConstraint, "none");
+  assert.equal(c.bindingLimitMid, "UNDETERMINED");
+});
+
+test("bindingLimitMid: COVERED hours + a finite last departure is the raw last-departure instant, distinct from the derived latestLeaveAt", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } },
+    returnTransport: { home: { transit: { default: { last_departure_band: "23:20-23:25" } } } },
+  });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200, durationMinutes: 180 };
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.bindingConstraint, "last_departure");
+  const expectedLastDepartureAbs = absMinutes(controls.departureDate, lastDepartureEdge({ kind: "present", lo: 1400, hi: 1405 }, "mid"));
+  assert.equal(c.bindingLimitMid, expectedLastDepartureAbs);
+  assert.notEqual(c.bindingLimitMid, c.latestLeaveAt); // bindingLimitMid is the venue-side instant, latestLeaveAt the departure-side deadline derived from it
+});
+
+test("bindingLimitMid: a finite venue close is the close-adjusted instant, on the hours-only (unverified-return) branch too", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } }, // schedule-bound, no return_transport data at all
+    regular: { mon: known([{ open: 480, close: 1400 }]) }, // 08:00-23:20
+  });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200, durationMinutes: 180 };
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.metricsBasis, "hours_only");
+  assert.equal(c.bindingConstraint, "venue_close");
+  assert.equal(c.bindingLimitMid, absMinutes(controls.departureDate, 1400));
+});
+
+test("bindingLimitMid: COVERED hours on the hours-only branch is UNDETERMINED, matching latestLeaveAt", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } }, // schedule-bound, no return_transport data at all
+    // regular hours default to always-open Monday -> COVERED
+  });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200, durationMinutes: 180 };
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.metricsBasis, "hours_only");
+  assert.equal(c.bindingConstraint, "none");
+  assert.equal(c.bindingLimitMid, "UNDETERMINED");
+  assert.equal(c.latestLeaveAt, "UNDETERMINED");
+});
+
+test("bindingLimitMid: undefined when the midpoint has no active period at all (closed at arrival)", () => {
+  const venue = fullVenue({ id: "v1", regular: { mon: known([{ open: 0, close: 60 }]) } });
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.latestLeaveAt, undefined);
+  assert.equal(c.bindingLimitMid, undefined);
+});
+
+// --- deriveLatestLeaveAtState / latestLeaveAtState -------------------------
+
+test("deriveLatestLeaveAtState: a deadline still ahead of the selected departure is future", () => {
+  assert.equal(deriveLatestLeaveAtState(700, 600), "future"); // 700 >= 600
+});
+
+test("deriveLatestLeaveAtState: a deadline already behind the selected departure is past", () => {
+  assert.equal(deriveLatestLeaveAtState(500, 600), "past"); // 500 < 600
+});
+
+test("deriveLatestLeaveAtState: the tagged UNDETERMINED string is undetermined, never compared numerically", () => {
+  assert.equal(deriveLatestLeaveAtState("UNDETERMINED", 600), "undetermined");
+});
+
+test("deriveLatestLeaveAtState: an undefined latestLeaveAt (midpoint NONE) is closed_at_arrival", () => {
+  assert.equal(deriveLatestLeaveAtState(undefined, 600), "closed_at_arrival");
+});
+
+test("rankVenues candidate: latestLeaveAtState is derived consistently for a real finite deadline still ahead of departure", () => {
+  const venue = fullVenue({ id: "v1", regular: { mon: known([{ open: 480, close: 660 }]) } }); // 08:00-11:00
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS); // leaveAt 10:00
+  const c = findCandidate(r, "v1");
+  assert.equal(typeof c.latestLeaveAt, "number");
+  assert.equal(c.latestLeaveAtState, deriveLatestLeaveAtState(c.latestLeaveAt, absMinutes(BASE_CONTROLS.departureDate, BASE_CONTROLS.leaveAtMinutes)));
+});
+
+test("rankVenues candidate: latestLeaveAtState is closed_at_arrival when the midpoint has no active period", () => {
+  const venue = fullVenue({ id: "v1", regular: { mon: known([{ open: 0, close: 60 }]) } });
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.latestLeaveAtState, "closed_at_arrival");
+});
+
+test("rankVenues candidate: latestLeaveAtState is undetermined for a COVERED venue with no binding limit", () => {
+  const venue = fullVenue({ id: "v1" }); // always-open, schedule-free return
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.latestLeaveAtState, "undetermined");
+});
+
+// --- Evidence freshness: hoursStatus / histogramStatus ----------------------
+
+test("rankVenues candidate: hoursStatus and histogramStatus are read straight from the venue's own source records", () => {
+  const venue = fullVenue({ id: "v1" });
+  venue.hours.status = "stale";
+  venue.histogram = { status: "ok" };
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "v1");
+  assert.equal(c.hoursStatus, "stale");
+  assert.equal(c.histogramStatus, "ok");
+});
+
+test("removed entries carry hoursStatus/histogramStatus wherever the venue's own records exist to read them from", () => {
+  const venue = fullVenue({ id: "v1", businessStatus: "CLOSED_PERMANENTLY" });
+  venue.hours.status = "ok";
+  venue.histogram = { status: "failed" };
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.equal(removed.hoursStatus, "ok");
+  assert.equal(removed.histogramStatus, "failed");
+});
+
+test("travelUnknown entries carry hoursStatus/histogramStatus", () => {
+  const venue = fullVenue({ id: "v1", access: { home: { walk: null } } });
+  venue.hours.status = "ok";
+  venue.histogram = { status: "stale" };
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  const entry = r.travelUnknown.find((x) => x.venueId === "v1");
+  assert.equal(entry.hoursStatus, "ok");
+  assert.equal(entry.histogramStatus, "stale");
+});
+
+test("stripFreshnessFields: deletes hoursStatus/histogramStatus at every depth, including inside arrays, and leaves everything else untouched", () => {
+  const input = {
+    hoursStatus: "ok",
+    keep: "yes",
+    nested: { histogramStatus: "stale", keep: "yes" },
+    list: [
+      { hoursStatus: "ok", keep: "yes" },
+      { histogramStatus: "failed", deeper: { hoursStatus: "ok", keep: "yes" } },
+    ],
+    scalar: 42,
+  };
+  const result = stripFreshnessFields(input);
+  assert.deepEqual(result, {
+    keep: "yes",
+    nested: { keep: "yes" },
+    list: [{ keep: "yes" }, { deeper: { keep: "yes" } }],
+    scalar: 42,
+  });
+  // non-vacuity: the input itself really did carry the fields being stripped
+  assert.notDeepEqual(input, result);
+});
+
+test("the stale-data invariant: flipping only hoursStatus/histogramStatus to stale changes nothing once both are stripped", () => {
+  const makeVenues = (status) => {
+    const v = fullVenue({
+      id: "v1",
+      access: { home: { transit: { band: "5-10m", rank: 1 } } },
+      fallbacks: [{ venue_id: "fallback", mode: "walk", travel_band: "1-3m" }],
+    });
+    v.hours.status = status;
+    v.histogram = { status };
+    const fallback = fullVenue({ id: "fallback", baseline: "dependable" });
+    fallback.hours.status = status;
+    fallback.histogram = { status };
+    return [v, fallback];
+  };
+
+  const okResult = rankVenues({ venues: makeVenues("ok"), holidays: {} }, BASE_CONTROLS);
+  const staleResult = rankVenues({ venues: makeVenues("stale"), holidays: {} }, BASE_CONTROLS);
+
+  // non-vacuity control: the two raw results really do differ before
+  // stripping, so the comparison below is proving something.
+  assert.notDeepEqual(okResult, staleResult);
+
+  assert.deepEqual(stripFreshnessFields(okResult), stripFreshnessFields(staleResult));
+});
+
+// --- Naming: displayName / disambiguatedLabel -------------------------------
+
+test("rankVenues candidate: displayName reads the venue's name, falling back to its id", () => {
+  const named = fullVenue({ id: "v1" });
+  named.name = "Coffee Bean Somewhere";
+  const r = rankVenues({ venues: [named], holidays: {} }, BASE_CONTROLS);
+  assert.equal(findCandidate(r, "v1").displayName, "Coffee Bean Somewhere");
+
+  const unnamed = fullVenue({ id: "v2" });
+  const r2 = rankVenues({ venues: [unnamed], holidays: {} }, BASE_CONTROLS);
+  assert.equal(findCandidate(r2, "v2").displayName, "v2");
+});
+
+test("disambiguatedLabel: adds area only when displayName is not unique across the whole snapshot", () => {
+  const unique = fullVenue({ id: "v1", area: "North", preference: 1 });
+  unique.name = "Only One";
+  const dupA = fullVenue({ id: "v2", area: "North", preference: 2 });
+  dupA.name = "Shared Name";
+  const dupB = fullVenue({ id: "v3", area: "South", preference: 3 });
+  dupB.name = "Shared Name";
+  const r = rankVenues({ venues: [unique, dupA, dupB], holidays: {} }, BASE_CONTROLS);
+  assert.equal(findCandidate(r, "v1").disambiguatedLabel, "Only One");
+  assert.equal(findCandidate(r, "v2").disambiguatedLabel, "Shared Name (North)");
+  assert.equal(findCandidate(r, "v3").disambiguatedLabel, "Shared Name (South)");
+});
+
+// --- Plan B: naming, freshness, and travelMinutesMid ------------------------
+
+test("rankVenues candidate: planB carries the fallback's own displayName, disambiguatedLabel, freshness, and travelMinutesMid", () => {
+  const primary = fullVenue({
+    id: "primary",
+    preference: 1,
+    fallbacks: [{ venue_id: "fallback", mode: "walk", travel_band: "1-3m" }],
+  });
+  const fallback = fullVenue({ id: "fallback", preference: 2, baseline: "dependable", area: "Fallback Area" });
+  fallback.name = "Fallback Venue Name";
+  fallback.hours.status = "stale";
+  fallback.histogram = { status: "ok" };
+  const r = rankVenues({ venues: [primary, fallback], holidays: {} }, BASE_CONTROLS);
+  const c = findCandidate(r, "primary");
+  assert.equal(c.backupStrength, "strong");
+  assert.equal(c.planB.travelMinutesMid, 2); // "1-3m" -> floor((1+3)/2)
+  assert.equal(c.planB.displayName, "Fallback Venue Name");
+  assert.equal(c.planB.disambiguatedLabel, "Fallback Venue Name"); // unique name -> no area suffix
+  assert.equal(c.planB.hoursStatus, "stale");
+  assert.equal(c.planB.histogramStatus, "ok");
+});
+
+// --- bestAlternative ---------------------------------------------------------
+
+test("bestAlternative: under session_does_not_fit, names the first (best-ranked) shorter candidate", () => {
+  const venue = fullVenue({ id: "v1", regular: { mon: known([{ open: 480, close: 660 }]) } }); // 08:00-11:00, a real shortfall
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.resultState, "session_does_not_fit");
+  assert.equal(r.bestAlternative, r.groups.shorter[0]);
+  assert.equal(r.bestAlternative.venueId, "v1");
+});
+
+test("bestAlternative: null under every other resultState", () => {
+  const robustVenue = fullVenue({ id: "v1" }); // -> plan_a
+  const plan_a = rankVenues({ venues: [robustVenue], holidays: {} }, BASE_CONTROLS);
+  assert.equal(plan_a.resultState, "plan_a");
+  assert.equal(plan_a.bestAlternative, null);
+
+  const unverifiedVenue = fullVenue({ id: "v1", access: { home: { transit: { band: "5-10m", rank: 1 } } } });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200 };
+  const noVerifiedReturn = rankVenues({ venues: [unverifiedVenue], holidays: {} }, controls);
+  assert.equal(noVerifiedReturn.resultState, "no_verified_return");
+  assert.equal(noVerifiedReturn.bestAlternative, null);
+});
+
+// --- refusalInstant -----------------------------------------------------------
+
+test("refusalInstant: carried, as an absolute instant, only under no_verified_return", () => {
+  const venue = fullVenue({ id: "v1", access: { home: { transit: { band: "5-10m", rank: 1 } } } });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1200, durationMinutes: 180 };
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  assert.equal(r.resultState, "no_verified_return");
+  assert.equal(r.refusalInstant, absMinutes(controls.departureDate, controls.leaveAtMinutes) + controls.durationMinutes);
+});
+
+test("refusalInstant: undefined under plan_a", () => {
+  const venue = fullVenue({ id: "v1" });
+  const r = rankVenues({ venues: [venue], holidays: {} }, BASE_CONTROLS);
+  assert.equal(r.resultState, "plan_a");
+  assert.equal(r.refusalInstant, undefined);
 });

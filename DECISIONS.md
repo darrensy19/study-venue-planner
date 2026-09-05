@@ -2858,3 +2858,51 @@ currently falls back to `venue.id` in that case.
 **Next**: Slice 1b — the presentation shape (achievable end, binding limit, latest-leave state,
 candidate freshness/`hoursStatus`/`histogramStatus`, candidate/Plan B naming, `metricsBasis`, Plan B
 transfer, `bestAlternative`) in `web/ranking.js`. Public-shape migration step 2 of 2.
+
+## 2026-09-06 — IMP-020 closed: Slice 1b, public-shape migration step 2 of 2
+
+`web/ranking.js` gained the presentation-shape fields `PLAN.md`'s "The returned presentation shape"
+requires: `achievableSessionEndMid` (distinct from the existing requested-end `sessionEndMidAbs`,
+`undefined` exactly when `usableMinutesMid` is); `bindingLimitMid` (the raw binding instant, threaded
+through `resolveBound`/`boundBindingMetrics`/`resolveOverallFeasibilityAtArrivals` on both the
+combined and hours-only branches, tagged `"UNDETERMINED"` when COVERED with no last departure);
+`latestLeaveAtState` (`deriveLatestLeaveAtState`'s four-way discriminant — `future`/`past`/
+`undetermined`/`closed_at_arrival`); `displayName`/`disambiguatedLabel` (`resolveVenueNaming`,
+computed once per `rankVenues()` call from the whole snapshot, area-suffixed only when a name is not
+unique — propagated to candidates, `removed`, `travelUnknown` and the nested `planB` view alike;
+`removed`/`travelUnknown` entries' old `name` field was renamed to match); `hoursStatus`/
+`histogramStatus` (read straight from each venue's own `hours.status`/`histogram.status`, on every
+surface a venue can be named on); `planB.travelMinutesMid` (the fallback's own already-parsed travel
+band, previously discarded after selection); `bestAlternative` (the pipeline's own choice of the best
+`groups.shorter` candidate, non-null only under `session_does_not_fit`); and `refusalInstant` (the
+request's nominal end — `departureAbs + durationMinutes`, travel excluded — non-`undefined` only
+under `no_verified_return`, since every candidate there has an unverified return and there is no
+single venue to hang a per-candidate instant off).
+
+`stripFreshnessFields` — the structural stale-data invariant's recursive deletion helper — is
+exported and given its own direct test against a synthetic nested object, independent of the
+behavioural before/after comparison: reverting it to a vacuous `return {}` was confirmed to still
+pass the structural round-trip test (both sides collapse to `{}`) while failing the direct test,
+which is exactly the gap `PLAN.md`'s non-vacuity requirement exists to close.
+
+**Route**: `claude_sonnet` primary, `codex_terra` verification — two hard triggers fired (public
+interface/compatibility-contract change to `ranking.js`'s returned shape; a decision-bearing
+non-vacuity claim on the stale-data invariant). Gate passed invocation 1 (`reviews/IMP-020-gate.md`),
+which independently re-derived every required-verification claim first-hand (pytest, node tests,
+`make generate` ×2 offline, and its own revert-and-restore non-vacuity spot-checks) rather than
+trusting the primary's summary. Round 1 `codex_terra` found no findings and recommended `APPROVE`
+directly — no correction round needed.
+
+**Judgement call, flagged and not contested**: `refusalInstant`'s definition (travel-excluded
+request end) was flagged in both the gate record and `HANDOFF.md`'s scope exclusions as an
+interpretation `PLAN.md` doesn't pin down with a formula, only an illustrative example. Neither the
+gate nor the reviewer treated it as blocking; recorded here so a future revision of the wording
+starts from a stated rationale rather than rediscovering the ambiguity.
+
+**`app.js` untouched**: every new field is additive — `app.js` reads none of them yet (confirmed
+independently by both the gate and the reviewer against its actual source), so slice 2 inherits a
+clean, unused set of fields to wire into rendering.
+
+**Next**: Slice 2 — the renderer (`web/app.js`): wording, day markers, label vocabulary, and naming,
+consuming 1a+1b's fields without deciding anything itself. Then, per `PLAN.md`'s slice order: 3
+(outbound feasibility), 4/`BL-002`, 5 — before `ARCH-005` can open.

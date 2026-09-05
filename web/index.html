@@ -666,13 +666,19 @@ function boundBindingMetrics(venue, holidays, arrivalAbs, travelMinutes, duratio
   const combined = combineBindingLimit(ec, closingBufferMinutes, returnOutcome);
 
   if (combined.bindingConstraint === "none") {
-    return { usableMinutes: durationMinutes, surplus: AT_LEAST_0, latestLeaveAt: "UNDETERMINED", bindingConstraint: "none" };
+    return {
+      usableMinutes: durationMinutes,
+      surplus: AT_LEAST_0,
+      latestLeaveAt: "UNDETERMINED",
+      bindingConstraint: "none",
+      bindingLimitAbs: "UNDETERMINED",
+    };
   }
   const bindingLimitAbs = combined.bindingLimitAbs;
   const usableMinutes = Math.max(0, Math.min(bindingLimitAbs, arrivalAbs + durationMinutes) - arrivalAbs);
   const surplus = finiteSurplus(bindingLimitAbs - (arrivalAbs + durationMinutes));
   const latestLeaveAt = bindingLimitAbs - durationMinutes - travelMinutes;
-  return { usableMinutes, surplus, latestLeaveAt, bindingConstraint: combined.bindingConstraint };
+  return { usableMinutes, surplus, latestLeaveAt, bindingConstraint: combined.bindingConstraint, bindingLimitAbs };
 }
 
 /**
@@ -778,6 +784,7 @@ export function resolveOverallFeasibilityAtArrivals(venue, holidays, params) {
       usableMinutesMid: hoursResult.usableMinutesMid,
       surplusMid: hoursResult.surplusMid,
       latestLeaveAt: hoursResult.latestLeaveAt,
+      bindingLimitMid: hoursResult.bindingLimitMid,
       surplusUpper: hoursResult.surplusUpper,
       metricsBasis: "hours_only",
       hoursTier: hoursResult.tier,
@@ -800,6 +807,7 @@ export function resolveOverallFeasibilityAtArrivals(venue, holidays, params) {
     usableMinutesMid: midMetrics?.usableMinutes,
     surplusMid: midMetrics?.surplus,
     latestLeaveAt: midMetrics?.latestLeaveAt,
+    bindingLimitMid: midMetrics?.bindingLimitAbs,
     surplusUpper: upperMetrics?.surplus,
     metricsBasis: "combined",
     hoursTier: hoursResult.tier,
@@ -1515,6 +1523,7 @@ export function resolveBound(
       usableMinutes: durationMinutes,
       surplus: AT_LEAST_0,
       latestLeaveAt: "UNDETERMINED",
+      bindingLimitAbs: "UNDETERMINED",
     };
   }
 
@@ -1522,7 +1531,7 @@ export function resolveBound(
   const usableMinutes = Math.max(0, Math.min(closeAdjusted, arrivalAbs + durationMinutes) - arrivalAbs);
   const surplus = finiteSurplus(closeAdjusted - (arrivalAbs + durationMinutes));
   const latestLeaveAt = closeAdjusted - durationMinutes - travelMinutes;
-  return { kind: "resolved", usableMinutes, surplus, latestLeaveAt };
+  return { kind: "resolved", usableMinutes, surplus, latestLeaveAt, bindingLimitAbs: closeAdjusted };
 }
 
 /**
@@ -1609,6 +1618,7 @@ export function resolveFeasibilityAtArrivals(venue, holidays, params) {
     usableMinutesMid: midNone ? undefined : mid.usableMinutes,
     surplusMid: midNone ? undefined : mid.surplus,
     latestLeaveAt: midNone ? undefined : mid.latestLeaveAt,
+    bindingLimitMid: midNone ? undefined : mid.bindingLimitAbs,
     surplusUpper: upperNone ? undefined : upper.surplus,
   };
 }
@@ -1803,6 +1813,77 @@ function selectPlanBFallback(venue, holidays, params, venueById, invalidPreferen
 }
 
 /**
+ * deriveLatestLeaveAtState(latestLeaveAt, departureAbs) -> "future" | "past" |
+ * "undetermined" | "closed_at_arrival" (plan.md's "Requested end vs
+ * achievable end"). `latestLeaveAt` is `undefined` exactly when the midpoint
+ * bound has no active period at all — there is no deadline to state, so that
+ * case is `closed_at_arrival` rather than a comparison against `departureAbs`.
+ * The tagged `"UNDETERMINED"` string (COVERED hours, unbounded return) is
+ * `undetermined`; everything else is a real absolute minute, compared against
+ * the selected departure to say whether the deadline is still ahead of it.
+ */
+export function deriveLatestLeaveAtState(latestLeaveAt, departureAbs) {
+  if (latestLeaveAt === undefined) return "closed_at_arrival";
+  if (latestLeaveAt === "UNDETERMINED") return "undetermined";
+  return latestLeaveAt >= departureAbs ? "future" : "past";
+}
+
+const FRESHNESS_FIELD_NAMES = new Set(["hoursStatus", "histogramStatus"]);
+
+/**
+ * stripFreshnessFields(value) -> a deep copy of `value` with every
+ * `hoursStatus` / `histogramStatus` occurrence deleted, at every depth,
+ * including inside arrays and nested objects such as `planB` and
+ * `bestAlternative` (plan.md's "The stale-data invariant is structural, not a
+ * maintained field list"). Exported so its own non-vacuity can be tested
+ * directly against a synthetic object — a projector that just returns `{}`
+ * would satisfy a behavioural before/after comparison alone without actually
+ * doing this.
+ */
+export function stripFreshnessFields(value) {
+  if (Array.isArray(value)) return value.map(stripFreshnessFields);
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const [key, v] of Object.entries(value)) {
+      if (FRESHNESS_FIELD_NAMES.has(key)) continue;
+      out[key] = stripFreshnessFields(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * resolveVenueNaming(venues) -> Map<venueId, {displayName, disambiguatedLabel}>
+ *
+ * plan.md's "Naming is resolved once, from the whole snapshot, and propagated
+ * to every object that names a venue" — computed once per rankVenues() call
+ * so candidates, removed/travelUnknown entries and the nested Plan B view all
+ * read the same two fields rather than each reconstructing a name.
+ * `displayName` falls back to `venue.id` when `name` is absent; the
+ * venue-source registry's `resolved_name` fallback for that case is `BL-013`,
+ * deferred — no Python-side merge yet puts `resolved_name` on the JS-visible
+ * venue object. `disambiguatedLabel` adds `area` only when `displayName` is
+ * not unique across the whole snapshot, so `area` is never printed twice on
+ * a surface that already shows it on its own line.
+ */
+function resolveVenueNaming(venues) {
+  const displayNameOf = (venue) => venue.name ?? venue.id;
+  const counts = new Map();
+  for (const venue of venues) {
+    const n = displayNameOf(venue);
+    counts.set(n, (counts.get(n) ?? 0) + 1);
+  }
+  const naming = new Map();
+  for (const venue of venues) {
+    const displayName = displayNameOf(venue);
+    const disambiguatedLabel = counts.get(displayName) > 1 ? `${displayName} (${venue.area})` : displayName;
+    naming.set(venue.id, { displayName, disambiguatedLabel });
+  }
+  return naming;
+}
+
+/**
  * rankVenues(snapshot, controls) -> the whole ranking pipeline entry point.
  *
  * snapshot: `{ venues: [...], holidays: {...} }` — the whole embedded
@@ -1836,7 +1917,23 @@ function selectPlanBFallback(venue, holidays, params, venueById, invalidPreferen
  *   7. grouping, resultState and final ordering
  *
  * Returns `{ resultState, violations, planA, groups, alternatives,
- * travelUnknown, removed, snapshotEmpty, hardFilteredCount }`:
+ * bestAlternative, refusalInstant, travelUnknown, removed, snapshotEmpty,
+ * hardFilteredCount }`. Every candidate (in `groups`, `alternatives`, `planA`
+ * and `bestAlternative` alike) additionally carries `displayName` /
+ * `disambiguatedLabel` (from `resolveVenueNaming`), `hoursStatus` /
+ * `histogramStatus` (from the venue's own source records — plan.md's
+ * "Evidence freshness"), `achievableSessionEndMid` (`arrivalMidAbs +
+ * usableMinutesMid`, `undefined` exactly when `usableMinutesMid` is),
+ * `latestLeaveAtState` (`deriveLatestLeaveAtState`'s four-way discriminant),
+ * and `bindingLimitMid` (the raw instant the binding constraint bites, distinct
+ * from the derived `latestLeaveAt` departure deadline) — plan.md's "The
+ * returned presentation shape". A non-null `planB` carries the same naming
+ * and freshness fields plus `travelMinutesMid` (the fallback's own parsed
+ * travel band, otherwise discarded after Plan B selection). `removed` and
+ * `travelUnknown` entries carry `displayName` / `disambiguatedLabel` and the
+ * two freshness fields too, wherever the removed venue's own records exist to
+ * read them from — hard-filtered venues stay aggregate-only, per
+ * `hardFilteredCount` below:
  *   - `resultState` — exactly one of `invalid_request` / `plan_a` /
  *     `no_low_risk_option` / `session_does_not_fit` / `no_verified_return` /
  *     `nothing_evaluable` (plan.md's "Result states: one discriminated
@@ -1865,12 +1962,22 @@ function selectPlanBFallback(venue, holidays, params, venueById, invalidPreferen
  *   - `alternatives` — every candidate except `planA`, grouped by `area`,
  *     order preserved within each group (plan.md: "Alternatives are grouped
  *     by area").
+ *   - `bestAlternative` — non-null only under `session_does_not_fit`: the
+ *     first (best-ranked) `groups.shorter` candidate, named by the pipeline
+ *     rather than left for `app.js` to pick — plan.md: "`bestAlternative` is
+ *     named by the pipeline; the renderer only renders it."
+ *   - `refusalInstant` — non-`undefined` only under `no_verified_return`: the
+ *     request's own nominal session end (`departureAbs + durationMinutes`,
+ *     travel excluded, since every candidate's return is unverified and there
+ *     is no single venue to hang a per-candidate instant off). An absolute
+ *     instant, never pre-stringified — plan.md's "Refusal instant, day-marked".
  *   - `travelUnknown` — venues with an explicit-`null` access entry: `[{
- *     venueId, name }]`.
+ *     venueId, displayName, disambiguatedLabel, hoursStatus, histogramStatus }]`.
  *   - `removed` — every unranked-removal row of the taxonomy table, each
- *     `{ venueId, name, reason, kind }`. Access-key-missing venues
- *     (hard-filtered) are absent even from here — plan.md: "not a candidate
- *     at all" — and are counted in `hardFilteredCount` instead.
+ *     `{ venueId, displayName, disambiguatedLabel, hoursStatus, histogramStatus,
+ *     reason, kind }`. Access-key-missing venues (hard-filtered) are absent
+ *     even from here — plan.md: "not a candidate at all" — and are counted in
+ *     `hardFilteredCount` instead.
  *   - `snapshotEmpty` — `true` when the snapshot itself contained zero
  *     venues (one of `nothing_evaluable`'s four diagnostics).
  *   - `hardFilteredCount` — an aggregate count only, never a per-venue
@@ -1888,6 +1995,8 @@ export function rankVenues(snapshot, controls) {
       planA: null,
       groups: { ranked: [], shorter: [], unverified: [] },
       alternatives: {},
+      bestAlternative: null,
+      refusalInstant: undefined,
       travelUnknown: [],
       removed: [],
       snapshotEmpty: venues.length === 0,
@@ -1903,6 +2012,7 @@ export function rankVenues(snapshot, controls) {
   } = controls;
 
   const venueById = new Map(venues.map((v) => [v.id, v]));
+  const naming = resolveVenueNaming(venues);
   const invalidPreference = validatePreferenceSnapshot(venues);
   const departureAbs = absMinutes(departureDate, leaveAtMinutes);
 
@@ -1912,10 +2022,12 @@ export function rankVenues(snapshot, controls) {
   let hardFilteredCount = 0;
 
   for (const venue of venues) {
-    const name = venue.name ?? venue.id;
+    const { displayName: name, disambiguatedLabel } = naming.get(venue.id);
+    const hoursStatus = venue.hours?.status;
+    const histogramStatus = venue.histogram?.status;
 
     if (invalidPreference.has(venue.id)) {
-      removed.push({ venueId: venue.id, name, reason: invalidPreference.get(venue.id), kind: "preference_invalid" });
+      removed.push({ venueId: venue.id, displayName: name, disambiguatedLabel, hoursStatus, histogramStatus, reason: invalidPreference.get(venue.id), kind: "preference_invalid" });
       continue;
     }
     // Failed-source diagnosis runs before business_status: a missing
@@ -1925,11 +2037,11 @@ export function rankVenues(snapshot, controls) {
     // `hours_unknown` (data present but indeterminate for this arrival) —
     // this means no hours data was ever obtained at all.
     if (!venue.hours || !venue.hours.regular_hours) {
-      removed.push({ venueId: venue.id, name, reason: "hours data was never obtained for this venue", kind: "hours_source_failed" });
+      removed.push({ venueId: venue.id, displayName: name, disambiguatedLabel, hoursStatus, histogramStatus, reason: "hours data was never obtained for this venue", kind: "hours_source_failed" });
       continue;
     }
     if (venue.business_status !== "OPERATIONAL") {
-      removed.push({ venueId: venue.id, name, reason: `business_status is ${venue.business_status}`, kind: "not_operational" });
+      removed.push({ venueId: venue.id, displayName: name, disambiguatedLabel, hoursStatus, histogramStatus, reason: `business_status is ${venue.business_status}`, kind: "not_operational" });
       continue;
     }
 
@@ -1941,13 +2053,13 @@ export function rankVenues(snapshot, controls) {
     }
     const accessEntry = destAccess[resolvedMode];
     if (accessEntry == null) {
-      travelUnknown.push({ venueId: venue.id, name });
+      travelUnknown.push({ venueId: venue.id, displayName: name, disambiguatedLabel, hoursStatus, histogramStatus });
       continue;
     }
 
     const travelBand = normaliseTravelBand(accessEntry.band);
     if (travelBand.kind !== "present") {
-      removed.push({ venueId: venue.id, name, reason: `access band: ${travelBand.reason ?? "not measured"}`, kind: "access_band_invalid" });
+      removed.push({ venueId: venue.id, displayName: name, disambiguatedLabel, hoursStatus, histogramStatus, reason: `access band: ${travelBand.reason ?? "not measured"}`, kind: "access_band_invalid" });
       continue;
     }
 
@@ -1955,7 +2067,10 @@ export function rankVenues(snapshot, controls) {
     if (!returnStatus || returnStatus.state !== "ok") {
       removed.push({
         venueId: venue.id,
-        name,
+        displayName: name,
+        disambiguatedLabel,
+        hoursStatus,
+        histogramStatus,
         reason: returnStatus ? `return_transport_status is ${returnStatus.state}` : "return_transport_status is absent — never validated",
         kind: "return_data_broken",
       });
@@ -1971,11 +2086,11 @@ export function rankVenues(snapshot, controls) {
     });
 
     if (overall.tier === "invalid") {
-      removed.push({ venueId: venue.id, name, reason: overall.reason, kind: "contradictory_hours" });
+      removed.push({ venueId: venue.id, displayName: name, disambiguatedLabel, hoursStatus, histogramStatus, reason: overall.reason, kind: "contradictory_hours" });
       continue;
     }
     if (overall.tier === "hours-unknown") {
-      removed.push({ venueId: venue.id, name, reason: "hours could not be resolved for this arrival", kind: "hours_unknown" });
+      removed.push({ venueId: venue.id, displayName: name, disambiguatedLabel, hoursStatus, histogramStatus, reason: "hours could not be resolved for this arrival", kind: "hours_unknown" });
       continue;
     }
 
@@ -1991,9 +2106,31 @@ export function rankVenues(snapshot, controls) {
       seatCheckBufferMinutes, minSessionMinutes, minConfidence,
     }, venueById, invalidPreference);
 
+    // Plan B naming/freshness read from the same whole-snapshot map and the
+    // same venue record every other surface reads — never reconstructed
+    // (plan.md's "Naming is resolved once... propagated to every object that
+    // names a venue"; "Plan B transfer time" — plan.md's "The returned
+    // presentation shape").
+    const planBFallbackVenue = planB ? venueById.get(planB.fallbackVenueId) : undefined;
+    const planBView = planB && planB.result.strength !== "none" ? {
+      venueId: planB.fallbackVenueId,
+      mode: planB.mode,
+      overallTier: planB.result.overallTier,
+      strength: planB.result.strength,
+      usableMinutesMid: planB.result.usableMinutesMid,
+      travelMinutesMid: planB.travelMinutesMid,
+      ...naming.get(planB.fallbackVenueId),
+      hoursStatus: planBFallbackVenue?.hours?.status,
+      histogramStatus: planBFallbackVenue?.histogram?.status,
+    } : null;
+
     candidates.push({
       venueId: venue.id,
       area: venue.area,
+      displayName: name,
+      disambiguatedLabel,
+      hoursStatus,
+      histogramStatus,
       tier: overall.tier,
       seatConfidence,
       baselineSeatability: venue.baseline_seatability,
@@ -2003,7 +2140,10 @@ export function rankVenues(snapshot, controls) {
       preference: venue.preference,
       surplusMid: overall.surplusMid,
       usableMinutesMid: overall.usableMinutesMid,
+      achievableSessionEndMid: overall.usableMinutesMid === undefined ? undefined : arrivalMidAbs + overall.usableMinutesMid,
       latestLeaveAt: overall.latestLeaveAt,
+      latestLeaveAtState: deriveLatestLeaveAtState(overall.latestLeaveAt, departureAbs),
+      bindingLimitMid: overall.bindingLimitMid,
       metricsBasis: overall.metricsBasis,
       hoursTier: overall.hoursTier,
       returnTier: overall.returnTier,
@@ -2011,13 +2151,7 @@ export function rankVenues(snapshot, controls) {
       returnBasis: overall.returnBasisMid,
       returnModes: overall.returnModesMid,
       sessionEndMidAbs: arrivalMidAbs + durationMinutes,
-      planB: planB && planB.result.strength !== "none" ? {
-        venueId: planB.fallbackVenueId,
-        mode: planB.mode,
-        overallTier: planB.result.overallTier,
-        strength: planB.result.strength,
-        usableMinutesMid: planB.result.usableMinutesMid,
-      } : null,
+      planB: planBView,
     });
   }
 
@@ -2062,12 +2196,30 @@ export function rankVenues(snapshot, controls) {
     resultState = "nothing_evaluable";
   }
 
+  // plan.md's "shorter stays a visible degraded alternative": named by the
+  // pipeline, not reconstructed by app.js from group order (which would make
+  // the renderer choose what to recommend). Scoped to `session_does_not_fit`
+  // per "The returned presentation shape" — the only resultState where
+  // groups.ranked is empty and a `shorter` candidate can stand in for it.
+  const bestAlternative = resultState === "session_does_not_fit" ? groups.shorter[0] ?? null : null;
+
+  // plan.md's "Refusal instant, day-marked": no_verified_return has no single
+  // candidate to hang an instant off — every candidate's return is
+  // unverified, but each keeps its own hours-only achievable end. The one
+  // venue-independent instant available is the request's own nominal end
+  // (departure + duration, travel excluded), carried as an absolute instant
+  // rather than pre-stringified so a session crossing midnight still carries
+  // its day.
+  const refusalInstant = resultState === "no_verified_return" ? departureAbs + durationMinutes : undefined;
+
   return {
     resultState,
     violations: null,
     planA,
     groups,
     alternatives,
+    bestAlternative,
+    refusalInstant,
     travelUnknown,
     removed,
     snapshotEmpty: venues.length === 0,
