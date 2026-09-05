@@ -1788,7 +1788,17 @@ Feasibility comes first because a venue that can't hold the session isn't a cand
 
 A **thin-margin warning** appears on any `tight` venue, naming which constraint is thin — the venue's closing time or the last departure home.
 
-**A venue whose `overall_tier` is `unverified` is ranked, but can never be Plan A.** See "Getting home: session-end return transport" — this is the same rule that forbids promoting a `poor` or `unknown` `seat_confidence` into a confident-looking recommendation.
+### Plan A eligibility
+
+**Plan A eligibility is stricter than ranking membership.** A venue whose `overall_tier` is `unverified` is ranked, but can never be Plan A — the same rule that forbids promoting a `poor` or `unknown` `seat_confidence` into a confident-looking recommendation. Also barred: **`overall_tier` `shorter`** and **`seat_confidence` below `mixed`** — a gap an independent review found (2026-09-05, `ARCH-004`): with no floor on either axis, a candidate could reach Plan A with `usable_minutes` of `0`, or with no seat-confidence evidence at all.
+
+**Plan A requires `overall_tier ∈ {robust, tight}` and `seat_confidence ≥ mixed`.** No duration floor, no new constant — `robust`/`tight` already mean "the requested session fits", exactly as `PLAN_B_MIN_SESSION_MINUTES` already fixes the value of a partial session for Plan B (≥ 90 minutes makes a fallback `salvage`, explicitly "not a substitute for the session"). Calling 90 minutes "not a substitute" for a rescue and "good enough to be the primary recommendation" when it's the best on offer would hold two incompatible positions on one number — the tier already encodes the answer.
+
+**Plan A is the first candidate in the existing sorted `ranked` population that clears this floor — filtered, never re-sorted.** Because tier outranks confidence in the ranking order above, a `robust`/`poor` candidate can sort ahead of a `tight`/`dependable` one, so Plan A is not necessarily `ranked[0]`. Re-sorting eligible candidates by confidence would install a second ranking order beside this one.
+
+**`shorter` stays a visible degraded alternative, never Plan A.** It remains ranked, in its own group. When nothing clears the Plan A floor but a `shorter` candidate exists, the pipeline names one **best degraded alternative** to show below the refusal (`bestAlternative` — see "The returned presentation shape"), explicitly labelled as not a recommendation.
+
+**Closed-at-arrival is a distinct fact, not an unknown.** A candidate whose `usable_minutes_mid` is `undefined` renders as **"closed when you'd arrive"**, never `Usable: unknown`.
 
 ### Venues that cannot be ranked
 
@@ -1800,19 +1810,66 @@ If the histogram is missing or below `MIN_HISTOGRAM_HOURS`, `relative_busyness` 
 
 **It is not treated as `typical`.** Absence of evidence is recorded as absence, not as an average.
 
-### The tool is allowed to say no
+### Result states: one discriminated outcome, not independent refusal flags
 
-When no venue reaches at least `mixed` confidence, the correct output is:
+**Exactly one `resultState` holds, always** — not a set of independent booleans. An earlier design tried three independent refusal flags and produced a request where two fired simultaneously while the message asserted something false; a discriminated union makes exhaustiveness and mutual exclusion properties of the type, not a precedence rule a reader has to reconstruct by hand.
 
-> **No low-risk option found for the requested session.**
+**Control validation runs first**, before any population state is even computed — see "Invalid requests" below.
 
-...shown with the reasons and the best of a bad set, rather than promoting something weak into Plan A. A confident-looking recommendation built on nothing is worse than an honest refusal.
+| Order | Condition | `resultState` | Means | Fix |
+| --- | --- | --- | --- | --- |
+| 0 | Controls invalid | `invalid_request` | The request is outside the supported range | Correct the request |
+| 1 | `ranked` non-empty, ≥1 clears the Plan A floor | `plan_a` | A recommendation exists | — |
+| 1b | `ranked` non-empty, none clears the floor | `no_low_risk_option` | Somewhere fits your session, but nowhere is likely to seat you | Different time, or accept the risk |
+| 2 | `ranked` empty, `shorter` non-empty | `session_does_not_fit` | Everywhere shuts too soon, or needs you to leave for the last way home | Leave earlier, or shorten the session |
+| 3 | `ranked` and `shorter` empty, `unverified` non-empty | `no_verified_return` | Nobody has recorded whether you can get back | Fill in `return_transport` data |
+| 4 | All three groups empty | `nothing_evaluable` | Nothing could be assessed | Depends on the diagnostics below |
 
-There is a **second refusal**, for the return leg, and it must not borrow the first one's wording — the two say different things and have different fixes:
+**Why this is total and disjoint by construction, not by convention.** `overallTier()` returns the worse of the hours and return tiers, and `unverified` ranks lowest, so a candidate with an `unverified` return **always** has `overall_tier === "unverified"` — the `shorter` group can therefore never contain an unverified return, and states 2 and 3 need no extra filtering to stay disjoint. States 1/1b partition the `ranked` population; 2, 3 and 4 partition the remainder by successive emptiness; and every candidate lands in exactly one of the three groups because `overall_tier` is a total function into four values. **No refusal message is reachable from more than one state, and no two render together — `plan_a` renders no refusal at all.**
 
-> **No option with a verified way home for a session ending at 00:30.**
+`no_low_risk_option` and `session_does_not_fit` are what the earlier two-refusal wording called the first refusal ("No low-risk option found for the requested session") and, respectively, the everywhere-too-short case; `no_verified_return` is the earlier second refusal ("No option with a verified way home for a session ending at HH:MM"), shown with the candidates, their venue-side tiers, and exactly which `return_transport` entries are missing.
 
-...shown with the candidates, their venue-side tiers, and exactly which `return_transport` entries are missing. The first refusal means "nowhere is likely to seat you"; the second means "nobody has recorded whether you can get back", and the fix for it is filling in data rather than choosing a different day.
+**`nothing_evaluable` must be diagnostically total.** A single evaluation can empty the board for several unrelated reasons at once — an unrecognised origin/mode combination, every venue hard-filtered for a missing `access` entry, an outbound timetable gap — and assuming only one cause can ever apply is wrong. The state carries **four diagnostics, all preserved simultaneously**; the renderer may summarize, but may never infer which cause emptied the board:
+
+| Diagnostic | Meaning |
+| --- | --- |
+| `snapshotEmpty` | the snapshot itself contained zero venues |
+| `hardFilteredCount` | venues rejected before candidacy for a missing `access[origin][mode]` entry — an **aggregate count only**, never a per-venue listing; hard-filtered venues do not enter any ranking group and do not appear in `removed` |
+| `travelUnknown` | the existing travel-time-unknown list, with naming fields attached (see "Naming and presentation hierarchy") |
+| `removed` | the existing removal list, with naming, reason, kind and source-status fields attached |
+
+**Invalid requests.** The pure entry point validates the whole user-facing control contract **before** any population state is computed, so a malformed request is never misdiagnosed as a legitimate empty board — an unsupported `mode` and a genuine "no recorded routes for this mode" case would otherwise be indistinguishable, since both hard-filter every venue. Validated: `origin` and `mode` against the supported sets below; `departureDate` a well-formed calendar date; `leaveAtMinutes` an integer in `[0, 1439]`; `durationMinutes` an integer in `[180, 360]` — **every** integer in that range, on-step or not; a UI increment is a usability restriction, never a correctness boundary. This is not general schema validation and does not redesign snapshot validation, which keeps its separate job (`preference`'s total order, naming uniqueness); control validation concerns the request, snapshot validation concerns the data. `invalid_request` carries, for each violated control, which control, what was supplied, and the permitted range or set — the renderer must not independently know the supported origins or the duration bounds.
+
+**One ranking-owned control contract is the single source for both the form and the validator.** `ranking.js` exports a static description of what it will accept — supported origins, supported modes, duration bounds (plus the UI increment `step`, read only by the form, never by validation), and the leave-at minute range. `rankVenues()`'s own validation and the `invalid_request` payload both read it, and `app.js` builds every control from it — no supported value or numeric bound is declared in more than one place, so the form and the validator cannot drift apart. It carries value tokens and numeric bounds only; human-readable labels stay renderer-owned. It is a static export, available before any result exists, so the very first render can build a valid form from it. **The export is deeply immutable** — frozen at every level at module load (the top-level object, each nested bounds object, each supported-value array), or an accessor returning a fresh deep copy — so a function documented pure cannot have its validation behaviour silently changed by a renderer bug that mutated the export earlier.
+
+### Requested end vs achievable end
+
+**Three named instants, none substitutable:**
+
+| Name | Definition | Meaning |
+| --- | --- | --- |
+| `requested_session_end_mid` | `arrival_mid + duration` | when you would stand up if the request were granted in full — **internal** to the return-leg evaluation, never displayed as the session's end |
+| `achievable_session_end_mid` | `arrival_mid + usable_minutes_mid` | when you would actually stand up |
+| `binding_limit_mid` | already computed by `combineBindingLimit` | the instant the binding constraint bites |
+
+`requested_session_end_*` may appear only inside an explicit comparison — "gives 3h18m of the 4h you asked for" — never printed as the session's end on its own. `achievable_session_end_mid` is `undefined` exactly when `usable_minutes_mid` is. For a `robust` candidate both ends coincide and the UI prints the achievable end once. When `binding_limit_mid` is `UNDETERMINED` (`COVERED` hours, unbounded return), `achievable_session_end_mid` is `arrival + duration` and the binding line renders the existing "no known closing constraint within the verified span" wording — never a fabricated clock time; `AT_LEAST(0)` and `usable_minutes = duration` are preserved exactly.
+
+**`latest_leave_at` carries an explicit state**, since the raw arithmetic reads as a typo beside a much later departure otherwise:
+
+| State | Meaning |
+| --- | --- |
+| `future` | a real deadline still ahead of the selected departure |
+| `past` | already behind it — you would have had to leave earlier |
+| `undetermined` | `COVERED`, no known closing constraint in the verified span |
+| `closed_at_arrival` | the midpoint bound is `NONE`; there is no deadline to state |
+
+### Evidence freshness and a first-ever failed source
+
+**The two freshness signals are exposed separately and never merged** — stale hours means the opening times may be wrong; stale busyness means the crowd estimate is old. Freshness is carried on the candidate as `hoursStatus` and `histogramStatus`, and on `removed`/`travelUnknown` entries wherever the pipeline path can actually produce one (hard-filtered venues stay aggregate-only). **`hoursStatus` and `histogramStatus` are reserved freshness-field names in the returned shape** — no other field may take either name at any depth, which is what lets the stale-data invariant below delete them recursively by name alone.
+
+**The stale-data invariant is structural, not a maintained field list.** Compute the full result twice — both sources `ok`, then only the freshness statuses flipped to `stale` — deep-copy both, **recursively delete** every occurrence of `hoursStatus` and `histogramStatus` at every depth (including inside nested Plan B objects, `bestAlternative`, and every entry of `removed`, `travelUnknown` and the group arrays), then deep-compare what remains: any difference is a failure. A hand-maintained field whitelist silently stops covering any field added later; deleting by reserved name, recursively, does not. A `stale` source retains last-known-good and ranks on it exactly as today — only presentation changes.
+
+**A `failed` hours source is data to diagnose, not an exception to catch.** Two distinct malformed shapes reach `rankVenues()` and must not crash it: `hours` present but lacking `regular_hours`, and `hours` absent entirely — hours resolution is made total over both, returning a tagged non-schedule outcome rather than dereferencing. A venue whose hours source is `failed` with no last-known-good is removed with its **own** reason and kind, distinct from both `not_operational` and `hours_unknown` — `hours_unknown` means the data is present but indeterminate for that arrival; this means no data was ever obtained. This check runs **before** the `business_status` gate, since a missing `business_status` on this path is a consequence of the failed fetch, not independent evidence the venue has closed down. **A venue with no Places identity is still labelled**: naming falls back to the venue-source registry's `resolved_name` — the Phase 0 resolved identity recorded when the venue was admitted — when the stored `name` is absent, with the same `area`-disambiguation rule applied unchanged.
 
 ### One entry point, pure, whole-dataset
 
@@ -1865,6 +1922,28 @@ Explicit `null` and a missing key are **different facts**. `null` says "not meas
 A removal for broken return data is a **removal notice**, worded differently from the `unverified` group: one says "this venue's return data is broken and needs fixing", the other says "we could not establish a way home". **Both refusal states are outputs of this function too** — "No low-risk option found for the requested session" when nothing reaches `mixed`, and "No option with a verified way home for a session ending at HH:MM" when nothing has a verified return. Separate messages, separate fixes, never substituted for one another.
 
 Alternatives are grouped by `area`. The returned shape is presentation-ready: `app.js` renders it and re-derives none of it.
+
+### The returned presentation shape
+
+**The shape carries everything `app.js` renders, with no business-rule derivation left in the renderer.** Beyond the fields already established elsewhere in this document (tiers, binding constraint, return basis/modes, `seat_confidence` and its components, travel time, `backupStrength`, `preference`, `surplusMid`), the shape additionally carries:
+
+| Rendered value | Source |
+| --- | --- |
+| Achievable duration and end | `usableMinutesMid`, `achievableSessionEndMid` |
+| Hours-only qualifier ("return unverified") | `metricsBasis` — already emitted by `rankVenues()`, but was missing from an earlier audit of this table |
+| "Leave the venue by" | `bindingLimitMid` |
+| Latest leave, with meaning | `latestLeaveAt` + `latestLeaveAtState` |
+| Freshness | `hoursStatus`, `histogramStatus` |
+| Plan B transfer time | `planB.travelMinutesMid` — the fallback's own travel band is parsed during Plan B selection and otherwise discarded; re-parsing it in the renderer would be a business rule |
+| Best degraded alternative | `bestAlternative` — see below |
+| Refusal / state | `resultState` |
+| Empty-board diagnostics | `snapshotEmpty`, `hardFilteredCount`, `travelUnknown`, `removed` |
+| Invalid-control explanation | violated control, supplied value, permitted range |
+| Refusal instant, day-marked | the absolute instant carried by `no_verified_return`, never pre-stringified — see "Naming and presentation hierarchy" for why a stringified instant cannot recover its day |
+
+**`bestAlternative` is named by the pipeline; the renderer only renders it.** Under `session_does_not_fit` it references the one `shorter` candidate to show below the refusal, carrying the same presentation-ready fields as any candidate. Letting `app.js` reach for the first `shorter` entry itself would make the renderer choose what to recommend — a policy decision — and would hard-code the assumption that group order is selection order.
+
+**Naming is resolved once, from the whole snapshot, and propagated to every object that names a venue** — candidates, the nested Plan B, `bestAlternative`, `travelUnknown` entries and `removed` entries alike — so `app.js` never reconstructs a name from a venue ID. Two naming fields, so `area` is never printed twice: `displayName` (the stored `name`, or the registry fallback above, unmodified) for surfaces that also show `area` on its own line, and `disambiguatedLabel` (`displayName` plus `area`, only when `displayName` is not unique in the snapshot) for inline contexts with no separate area line — Plan B, removal notices, the travel-unknown list.
 
 ### Choosing among several fallbacks
 
@@ -2003,6 +2082,26 @@ The generation step is **not** a build system in this sense — a Python script 
 **Controls:** date, leave-at time, session duration, origin, travel mode, raining toggle.
 
 **Result:** Plan A and Plan B, then "More alternatives" expanding to the full ranked list grouped by area — each row showing `seat_confidence` with its two components, both feasibility tiers and the `overall_tier`, the **binding constraint** and the return mode being counted on, `usable_minutes`, `latest_leave_at`, travel, `backup_strength`, preference, and my own visit history (Phase 2). Tap a venue for its day curve with the session window shaded.
+
+### Naming and presentation hierarchy
+
+**"Every row shows every value" is superseded by progressive disclosure across three surfaces** — the original wording produced a wall of text and was already in tension with this document's own mock-ups. Every value the old contract mandated stays reachable without leaving the page; disclosure moves values, it never drops them.
+
+| Surface | Carries |
+| --- | --- |
+| **Plan A** | display name, area, travel time, **achievable** duration, qualitative seat confidence, binding constraint, Plan B as "if full, go here" with its transfer time and `strong`/`salvage` wording |
+| **Row** | display name, area, travel, achievable duration, qualitative confidence, tier |
+| **Disclosure** | baseline seatability, busyness adjustment and its reason, both tiers and the overall tier, return basis and modes, `latest_leave_at` with its state, preference, `surplus` |
+
+**The always-visible set, which disclosure may never absorb:** stale or failed hours evidence; stale or failed busyness evidence; a `tight` tier's thin-margin warning; an `unverified` way home; the active refusal; every removal notice already required by "the diagnostic is required, not optional".
+
+**A stated label vocabulary** maps `seat_confidence`, `baseline_seatability`, busyness bands and return bases to user-facing text (`High`/`Good`/`Medium`/`Low`/`Unknown` and friendlier equivalents) — friendlier labels were always permitted, but the mapping itself is now a contract table, since printing a raw identifier like `usually_available` is what happens without one.
+
+**Every displayed instant that can cross midnight carries a day marker, refusals included.** A refusal's instant is carried through as the **absolute instant**, never pre-stringified into a bare clock time — stringifying before returning destroys the day relationship, and the renderer cannot recover it afterward. A session ending at 04:07 must read as day-marked, not as an unqualified "04:07".
+
+**Focus preservation without reading the DOM.** Saving `document.activeElement` would violate "One state object. Never read state back out of the DOM." below. Instead the controls form is built once and never destroyed — its values already come from `state.controls` — and `render(state)` replaces only the results region.
+
+**No framework, and no npm runtime dependency**, unchanged by any of the above.
 
 ### Constraints — write vanilla in a React-shaped way
 
@@ -2240,6 +2339,7 @@ fetch_busyness(source) -> Histogram   # SerpApi search on resolved_name + resolv
 
 **Neither fetcher writes `venues.json`.** `build/refresh.py` solely owns it, and **order matters**:
 
+0. **Preflight everything local, before the first API call:** the return-validator bridge's availability (Node present, the script importable), and generation's local inputs (`holidays.json` exists and parses; the template carries every placeholder; `ranking.js`/`app.js` have no top-level name collision). None of this touches the network, so failing here costs nothing.
 1. **Coarsen new raw visits from iCloud first**, joining each against the **currently deployed** histogram — the one about to be replaced. This is the only step that can capture "busyness in effect at visit time"; running it after the fetch would stamp every new visit with the *new* histogram value and silently destroy the lineage the Phase 3 join depends on.
 2. Call both fetch interfaces for all venues, catching failures per source and per venue.
 3. **Validate** against the contract.
@@ -2253,16 +2353,18 @@ fetch_busyness(source) -> Histogram   # SerpApi search on resolved_name + resolv
    read `return_transport` at all. **It classifies; it never aborts.** An `invalid` status is a
    result, not an error, and it does not withhold the write — one venue's typo must not cost every
    other venue its refresh.
-7. Write to a temp file and **replace atomically** only after step 3's contract validation of the
-   **fetched** data passes. Step 6's per-venue statuses are written *with* that data, never against
-   it: they are outputs of the generation, not a precondition for it.
-8. Regenerate `web/index.html` — inline the data (unicode-escaping every `<`), `ranking.js` then `app.js` into one module script with `app.js`'s import stripped, and `style.css`.
+7. **Produce the prospective venue data, then generate and validate the prospective HTML from that same prospective data** — write the merged data to a staging path, generate against that staged path (the existing `venues_path`/`output_path` parameters already support this; no generator signature change), then run the existing HTML validation against the staged output.
+8. **Only once both prospective artifacts validate, replace the deployed pair** — each via its own temp file + atomic rename, `data/venues.json` first, then `web/index.html`.
+
+**Validate both prospective artifacts before replacing either — this reorders steps 7-8 from an earlier design.** The prior order replaced the JSON atomically, then generated the HTML by reading the **newly-deployed** JSON back from disk — so a generation failure left newer JSON published beside older HTML. Staging both first and validating both before either deploy removes that failure-driven skew, which is the case that actually occurs. **This is not cross-file atomicity**, which a plain filesystem cannot provide: both renames still happen in sequence, so a crash between them can still leave a mismatched pair. What this removes is the failure-driven skew, not that residual two-rename window.
 
 A busyness failure still refreshes hours, and vice versa. Degradation must be visible.
 
-**`build/refresh.py` is the sole writer of `data/venues.json` and `web/index.html`.** Nothing else writes either, in any phase. Two of the eight orderings above carry silent data loss if broken, which is why the order is a contract and not a convenience: **step 1 before the fetch**, or the busyness lineage Phase 3 depends on is destroyed; and **step 7 after step 3**, or a page is published from fetched data that never passed contract validation.
+**`build/refresh.py` is the sole writer of `data/venues.json` and `web/index.html`.** Nothing else writes either, in any phase. Three of the orderings above carry silent data loss or a publication skew if broken, which is why the order is a contract and not a convenience: **step 1 before the fetch**, or the busyness lineage Phase 3 depends on is destroyed; **step 7 after step 3**, or HTML is generated from fetched data that never passed contract validation; and **step 8 after step 7**, or a deploy can expose new data beside an old page if generation fails.
 
-`make refresh` runs the whole pipeline and **never commits** — inspecting the diff, committing and pushing stay separate manual actions. **The target is not added to the `Makefile` until the complete contract below is wired**: registry, both fetchers, coarsening, the return-validator bridge, validation, atomic replace and generation. A `make refresh` that runs half the pipeline would write a `data/venues.json` that looks generated and is not, which is worse than having no target.
+`make refresh` runs the whole pipeline and **never commits** — inspecting the diff, committing and pushing stay separate manual actions. **The target is not added to the `Makefile` until the complete contract below is wired**: registry, both fetchers, coarsening, the return-validator bridge, validation, staged generation, atomic replace. A `make refresh` that runs half the pipeline would write a `data/venues.json` that looks generated and is not, which is worse than having no target.
+
+**`make generate` is a separate, no-network target** that regenerates `web/index.html` from the on-disk `data/venues.json` alone — the recovery command when only the page needs rebuilding, and a prerequisite for verifying every presentation slice without spending an API call.
 
 **A venue vanishing from a source is not a closure.** That is `status: failed` (or `stale`) with last-known-good retained and a loud warning. Only an explicit `businessStatus` may mark a venue closed.
 
@@ -2564,6 +2666,23 @@ Steps 1–6 are independently testable against fixtures and touch no network. St
 
 **Phase 1 is independently useful.** If Phases 2 and 3 never happen, this was still worth building.
 
+### Phase 1 review-response slice order
+
+Once the eight steps above shipped, an independent review found the gaps this document's "Result states", "Requested end vs achievable end", "Evidence freshness", publication-robustness and "Naming and presentation hierarchy" sections above now describe. Closing them is sequenced as its own slice order — **no assignment IDs are allocated here either**, for the same reason as above:
+
+| Slice | Touches | Why here |
+| --- | --- | --- |
+| 0 | `make generate` — offline regeneration | `build/generate.py`, `Makefile`. Unblocks verifying every later slice at zero API cost |
+| 0b | Dependency-free DOM stub; `app.js` made importable | `tests/js/`, `web/app.js` bootstrap. Later presentation slices are otherwise untestable |
+| 1a | Result-state machine, Plan A eligibility, control-contract export + validation, tolerance ownership, failed-source diagnosis, naming on every `removed`/`travelUnknown` entry | `web/ranking.js`. Public-shape migration step 1 of 2 |
+| 1b | Presentation shape: achievable end, binding limit, latest-leave state, candidate freshness, candidate/Plan B naming, `metricsBasis`, Plan B transfer, `bestAlternative` | `web/ranking.js`. Public-shape migration step 2 of 2 |
+| 2 | Presentation: wording, day markers, vocabulary, naming | `web/app.js`. Consumes 1a+1b; decides nothing itself |
+| 3 | Outbound feasibility (`outbound_admissible` + `resolve_outbound_service`, `validate_outbound_transport`) + `outbound_transport` hand-curation | `ranking.js`, `refresh.py`, `venues_meta.json`. Independent of 1-2 |
+| 4 | UI hierarchy, disclosure, always-visible warnings, focus | `web/app.js`, `web/style.css`. Needs 2's vocabulary settled |
+| 5 | Refresh preflight + staged paired publish | `build/refresh.py`. Independent; uses the generator's existing path seam |
+
+Slice 0 goes first because slices 1b, 2 and 4 each need `web/index.html` regenerated to verify, and before slice 0 the only command that regenerates it is `make refresh`, which spends live API calls. Slice 1a and 1b together are the two-step public-shape migration: 1a carries every field a `resultState` or a removal cannot be well-formed without, 1b carries presentation values that need nothing else. **Outbound feasibility (slice 3) is not a fix for the zero-usable-minutes defect** — the reproduced case failed on hours (a buffered close before arrival), and `outbound_admissible` only governs whether transport runs *to* a venue, with no view of whether it is open on arrival.
+
 ### Phase 2 — Seat logging
 
 - Apple Shortcut: two-tap entry, appends to the raw CSV in iCloud Drive.
@@ -2655,6 +2774,7 @@ Deliberately small. No mocking frameworks, no live-network tests.
 - **`admissible_return_modes` reads only its parameters** — the two bounds producing different admissible sets when `session_end_mid` and `session_end_upper` straddle the cycle cutoff, which is impossible if the function closes over a single shared `session_end`
 - **`MAX` over admissible modes, not `MIN`** — two schedule-bound modes with different last departures resolving against the later one
 - **`unverified` never unranks, and `UNKNOWN` always does** — a venue with hours `robust` and return `unverified` still appearing in the ranked output (last, in its own group) while a venue with `effective_close == UNKNOWN` does not appear at all. These two must not collapse
+- **Plan A eligibility is `overall_tier ∈ {robust, tight}` and `seat_confidence ≥ mixed`, both required** — a `shorter` candidate is never Plan A at any `usable_minutes_mid` (asserted at 0, 89, 90 and 200, pinning that no duration floor survives anywhere); an `unverified` candidate is never Plan A regardless of its metrics; a `robust` candidate below `mixed` yields `no_low_risk_option`; and a discriminating fixture where a `robust`/below-floor candidate sorts **before** a `tight`/eligible one proves Plan A is the filtered-not-resorted latter, with `groups.ranked`'s order untouched
 - **`unverified` is barred from Plan A** — a set where the only `robust`-on-hours venue has an `unverified` return produces the **second refusal**, with its own wording, not the seat-confidence one
 - **either bound unverified makes the tier unverified** — the boundary case where `session_end_mid` lands inside the core span and `session_end_upper` lands outside it
 - **`overall_tier` is the worse of the two** — including that a known `shorter` outranks an `unverified`, which is the ordering decision this design turns on
@@ -2676,6 +2796,17 @@ Deliberately small. No mocking frameworks, no live-network tests.
 - **the two exclusion labels stay distinct** — `pre_dawn_gap`, `missing_data` and `after_last_departure` all surfacing as `"outbound_gap"`; `invalid_metadata` surfacing as its own `"outbound_data_error"`, never collapsed into the other three
 - **holiday-field reuse** — `resolve_outbound_service` and `resolve_return_service` agreeing on which day-type schedule applies for the same venue/date via the shared `holiday_return_policy`, while their selected `last_departure_band` values are independent and may differ
 - **the renamed service-window constants are genuinely shared** — a single `SERVICE_CORE_FROM_MINUTES`/`SERVICE_CORE_UNTIL_MINUTES`/`SERVICE_DAY_START_MINUTES` change affecting both `resolve_return_service` and `resolve_outbound_service` identically, proving there is no second, silently-diverged copy
+
+**Review-response coverage** — closing the gaps an independent review found (2026-09-05, `ARCH-004`); each of the six `resultState` values gets its own fixture and exactly one must ever be returned, with no result expressing two refusals at once:
+- **tolerance ownership, as a placement contract, not a behaviour** — `rankVenues()` called with **no** `toleranceMinutes` produces the same tiers as an explicit `15`; **no `FEASIBILITY_TOLERANCE_MINUTES` declaration remains in `app.js`**, asserted against the source itself rather than against behaviour; and an explicit override still takes effect, so test control is retained
+- **result states** — the overlap case an earlier design got wrong: an all-`unverified` population yields `no_verified_return`, never `session_does_not_fit`; a candidate with `unverified` return and `robust` hours lands in `unverified`, never `shorter`; the `office`/`cycle` case (every venue hard-filtered) yields `nothing_evaluable`, never `no_low_risk_option`; and exactly one ranked candidate clearing the Plan A floor yields `plan_a`
+- **`nothing_evaluable` diagnostics** — a zero-venue snapshot yielding `snapshotEmpty` with the other three diagnostics empty; one fixture producing hard-filtered venues, `removed` entries **and** `travelUnknown` entries simultaneously, with all three asserted non-empty at once; and hard-filtered venues appearing in no group and in `removed` not at all
+- **`invalid_request` and the control contract** — the rendered form's options and bounds proved against a **sentinel contract** injected through a dependency seam, whose supported origins, modes and duration bounds all differ from the real ones, so a renderer that locally re-declares its own sets or bounds fails; the contract's deep immutability, asserted after a mutation attempt against the top-level object, a nested bounds object and a supported-value array, and again by a following `rankVenues()` call behaving identically; `durationMinutes: 181` (off-step, in-range) evaluated normally with no `invalid_request`; each out-of-range control yielding `invalid_request` rather than throwing; and `mode: "teleport"` yielding `invalid_request` while the `office`/`cycle` fixture still yields `nothing_evaluable`
+- **requested vs achievable end** — `achievableSessionEndMid` pinned distinct from `requested_session_end_mid` on a candidate where they differ; `achievableSessionEndMid` `undefined` exactly when `usableMinutesMid` is; a `COVERED` candidate's binding line rendering the "no known closing constraint" wording with no clock time; and `latestLeaveAtState` asserted for all four values
+- **the stale-data invariant, structurally** — two full results compared after recursively deleting `hoursStatus`/`histogramStatus` at every depth; a **non-vacuity control** proving the two differ before deletion; and the deletion helper tested **directly** against a synthetic nested object — freshness fields removed at several depths and inside arrays, unrelated scalars/objects/array contents surviving intact, asserted positively against an expected structure so a projector returning `{}` fails
+- **failed-source handling** — the inconsistent-prior-state fixture (`business_status: OPERATIONAL` with `hours.status: failed`) must produce the dedicated removal without throwing; the realistic first-ever-failure fixture (no identity fields at all) must be removed with its own reason and kind, distinct from `not_operational` and `hours_unknown`, and labelled from the venue-source registry's `resolved_name`; and `resolveHours` totality asserted separately for both malformed shapes, since they throw on different properties
+- **a dependency-free DOM stub in `tests/js/`**, exercised by `node --test`, bounded explicitly: it may assert node creation, structure, text content, classes/attributes and event-driven rendering; it may **not** stand in for CSS/layout, real browser form validity, focus/IME behaviour or the accessibility tree — those stay manual browser acceptance. `app.js` is made importable by guarding its module-scope bootstrap. Runtime rendering assertions run on nodes `render()` actually produces, never on a grep over the generated HTML file, since the embedded JSON already contains every status string literally
+- **publication robustness** — a generation failure leaves **both** deployed artifacts at their previous contents; the prospective HTML is generated from the **prospective** venue data, not the deployed file, proved by staging data that differs from what is on disk; an interrupted HTML write (fault injected **after** a partial prefix reaches the staging path) leaves the deployed HTML and JSON both byte-identical to before, with no rename onto either deploy path; and `make generate` regenerates from on-disk data with zero network calls
 
 **`tests/python/` — pytest, fixture-based**, using small trimmed real responses:
 - hours parsing — cross-midnight, 24-hour (no `close`), split periods, missing fields, **multi-day periods** (`day_gap` 2 and 6), **truncated endpoints** (both ends, one end, and interior truncation failing validation), and the **materialised seven-date current-hours map**
@@ -2718,6 +2849,9 @@ Anything touching the network is excluded.
 - [ ] Holiday handling stated in the UI
 - [ ] A venue removed for broken return data is visibly named, with its reason, and is not confused with the `unverified` group
 - [ ] A candidate excluded for an outbound-timetable gap shows `"outbound_gap"`, and one excluded for broken outbound metadata shows the distinct `"outbound_data_error"`
+- [ ] Narrow-phone layout holds up with a long warning line
+- [ ] The empty-results state reads correctly under each refusal
+- [ ] A Plan A card with every optional line absent still reads correctly
 
 ---
 

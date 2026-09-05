@@ -2719,3 +2719,30 @@ One inconsistency in the imported bundle, recorded so it is not rediscovered: th
 "the two blocking ones are P1 in `backlog-additions.md`" but then lists unverified-return visibility
 in place of late-session policy. `decisions-entry-stub.md` is authoritative; the two blocking
 decisions are the two settled above.
+
+## 2026-09-06 — IMP-015 closed: ARCH-004 revision 5 transcribed into PLAN.md/CLAUDE.md
+
+`ARCH-004`'s approved revision-5 design (`docs/superpowers/specs/2026-09-05-review-response-design.md`,
+`1805cfd9…`) was validated but never transcribed — that was explicitly scoped out of `ARCH-004` itself.
+`IMP-015` (allocated `reviews/LEDGER.md`, 2026-09-06) closed that gap: `PLAN.md` gained the Plan A
+eligibility floor (§3), the six-state discriminated `resultState` model replacing the old three-boolean
+`refusals` shape (§4), requested-vs-achievable-end semantics (§5), structural stale-data and
+failed-source diagnosis (§6), the validate-both-before-replacing-either publication reorder plus
+`make generate` (§7), the three-surface presentation hierarchy (§8-9), the returned presentation shape
+audit (§10), and the full slice order (§13); `CLAUDE.md` gained the corresponding non-negotiables.
+No code changed and no architecture decision was made — this assignment applied `ARCH-004`'s already-
+reviewed design verbatim.
+
+**Route**: `claude_sonnet` primary, `claude_only` verification — no hard Codex trigger fired, since
+nothing here decides architecture or a public contract; `ARCH-004` itself absorbed that review across
+its three rounds. The pre-gate ran twice: invocation 1 (`GATE_FAIL`) caught one real omission — the
+design's §12 "tolerance ownership" acceptance-criteria group was missing from both files' `## Testing`
+sections; corrected, and invocation 2 returned `GATE_PASS`. Full record in `reviews/IMP-015-gate.md`.
+User approved close and commit without escalating to Codex despite the option being available.
+
+**Note**: this reassigns `IMP-015` away from its earlier forward-reference to slice 3 (outbound
+feasibility), named in the design's own §13 and in `reviews/ARCH-004-gate.md`. That work takes the
+next `IMP` number when it is actually opened — the design's `IMP-015` label for it is now stale.
+
+**Next**: `BL-003` (reconcile the frontend design's §5 data contract against this transcription's
+changed pipeline shape) is next in `BACKLOG.md`'s own stated order, ahead of the `§13` slice order.
