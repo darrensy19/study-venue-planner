@@ -1,3 +1,68 @@
+# Shared Claude + ChatGPT + Codex workflow
+
+This is a short orientation; `WORKFLOW.md` remains the complete authority for
+collaboration. The Codex adapter below retains its existing role boundaries.
+
+## Roles and authority
+
+- **ChatGPT:** explore requirements, critique options, and prepare candidate designs.
+  Chat discussions are proposals until checked against the repo and accepted through
+  the workflow; they do not approve changes or advance assignment state.
+- **Claude:** normally formalizes designs and implements the assigned scope.
+- **Codex:** normally validates designs against the repo and independently reviews
+  implementation diffs; may be architecture primary when explicitly assigned.
+- **User:** sequences agents, selects routes, and approves work. Actual assignments
+  and write ownership come from `HANDOFF.md` and `WORKFLOW.md`, not these defaults.
+
+## Sources and project layout
+
+- `PLAN.md`: product specification, architecture, and data contracts.
+- `WORKFLOW.md`: roles, routing, gates, lifecycle, and handoff prompt requirements.
+- `HANDOFF.md`: current assignment, baseline, review target, and next action.
+- `DECISIONS.md`: accepted decisions and rationale; `BACKLOG.md`: deferred work.
+- `CLAUDE.md`: project conventions and non-negotiables; `reviews/<id>.md`:
+  append-only review evidence; `reviews/LEDGER.md`: assignment ID authority.
+- Python fetchers live in `scraper/`, orchestration/generation in `build/`, static
+  UI sources in `web/`, snapshots and metadata in `data/`, and checks in `tests/`.
+  Edit source templates/JS/CSS and regenerate `web/index.html` when required.
+- Verify chat claims and draft specs against current files. Surface contradictions
+  with approved contracts before changing behavior; do not silently redefine policy.
+
+## Working and handing off
+
+Follow the preflight below: handoff first, exact diff second, relevant contracts
+third. Use targeted searches and bounded reads; reuse unchanged context. Review
+callers and dependencies affected by the diff, and keep correction reviews focused
+on the correction delta. Report concrete findings and evidence, not full-file replay.
+
+Use `WORKFLOW.md`'s user-mediated handoff flow and exact prompt requirements. Include
+the assignment, baseline/target, bounded scope, required checks, results, unresolved
+findings, and next owner. The primary reconciles reviewer recommendations; review
+approval, user approval, commit, and push remain separate actions.
+
+Keep one active assignment and one writer. Freeze primary edits during gate/review;
+reviewers write only their designated records. Never overlap edits, commits, or
+pushes across agents, or discard someone else's changes. Commit/push only with
+user authorization and after checking current status and the intended diff.
+
+## Validation ownership
+
+The primary adds meaningful regression coverage for behavior changes and runs the
+assignment's required checks. The reviewer independently reruns required checks
+and probes relevant failure paths; a green gate is evidence, not proof of correctness.
+Record exact commands/results and anything not verified. Typical offline checks,
+run from the repository root, are:
+
+```sh
+.venv/bin/pytest tests/python/ -q
+node --test tests/js/*.test.js
+git diff --check
+```
+
+For UI/generation changes, verify the generated page as required by the assignment.
+`make refresh` fetches live data and rewrites artifacts; it is not an offline test
+and never commits. Keep live refresh work within the user's authorized scope.
+
 # Codex participation
 
 `WORKFLOW.md` is authoritative and complete — it contains every rule needed for daily operation,
