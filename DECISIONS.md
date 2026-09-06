@@ -2935,3 +2935,44 @@ verification fresh: `GATE_PASS`.
 **Next**: Slice 3 (outbound feasibility — independent of 1/2), the `outbound_transport` hand-curation,
 Slice 4/`BL-002` (UI hierarchy, progressive disclosure, focus preservation — needs slice 2's vocabulary,
 now settled), Slice 5 — before `ARCH-005` can open.
+
+## 2026-09-06 — IMP-022 closed: Slice 3, outbound-mirror transport
+
+Implemented `ARCH-003`/`ARCH-004`'s outbound-mirror contract (`PLAN.md`'s "Getting there:
+outbound-mirror transport"): `outboundAdmissible` is a hard filter run once the selected
+origin/mode/`leave_at` and travel band are confirmed, before any hours or return-leg evaluation —
+schedule-free modes and the core service span pass with zero `outbound_transport` reads, the
+pre-dawn gap excludes unconditionally, and only then does `resolveOutboundService` (mirroring
+`resolveReturnService` exactly, keyed by origin instead of destination) consult the hand-curated
+timetable. Excluded venues get a visible removal notice naming both the internal reason
+(`pre_dawn_gap`/`missing_data`/`invalid_metadata`/`after_last_departure`) and the coarser
+user-facing label (`"outbound_gap"` or `"outbound_data_error"`), never collapsed into one string.
+`validateOutboundTransport` walks every reachable entry per origin/mode and is diagnostics-only —
+`outbound_transport_status` is stamped by a new `build/outbound_validator_bridge.py` bridge
+(mirroring the return-leg bridge) but never read by ranking at any granularity, per the design's
+explicit rejection of a coarser per-venue or per-origin/mode gating stamp. `RETURN_CORE_FROM_MINUTES`/
+`RETURN_CORE_UNTIL_MINUTES`/`RETURN_SERVICE_DAY_START_MINUTES` renamed to shared `SERVICE_*`, as
+`PLAN.md` specified once the outbound leg needed them too.
+
+**Route**: `claude_sonnet` primary, `codex_terra` verification — hard trigger fired (negative/
+fail-closed-path correctness; non-vacuous test evidence). Pre-gate `GATE_FAIL` twice, both times a
+real test-coverage gap with no functional defect underneath: invocation 1 found `pre_dawn_gap`/
+`after_last_departure` exclusions reached the pipeline correctly but no test asserted their
+`removed[].reason` text (a spot-check deleting both left the suite green); invocation 2, after that
+fix was independently re-verified, found the Python bridge's rollup/per-entry consistency check had
+an untested direction (`rollup: "ok"` with an actually-invalid entry). Both fixed, RED-verified
+against reproductions of the exact deletions, restored to green (209 pytest / 286 node --test).
+Gate retries exhausted per `WORKFLOW.md`'s 2-attempt limit, routed directly to Codex: round 1
+`codex_terra` `APPROVE`, no findings, independently reran all required verification and confirmed
+`make generate`'s output byte-identical offline.
+
+Nominated as `cross-agent-workflow`'s Slice 3 (scoped verification) shadow-trial subject — the
+round-1 scope declaration is recorded in `reviews/IMP-022.md`'s assignment header.
+
+**Blocked, tracked separately**: `data/venues_meta.json`'s `outbound_transport` hand-curation needs
+the user's real transit data (bands only, per the privacy rule) — everything else in this slice is
+complete.
+
+**Next**: the `outbound_transport` hand-curation (blocked on the user), Slice 4/`BL-002` (UI
+hierarchy, progressive disclosure, focus preservation — needs Slice 2's vocabulary, already
+settled), Slice 5 — before `ARCH-005` can open.

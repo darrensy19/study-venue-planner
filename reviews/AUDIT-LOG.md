@@ -103,3 +103,4 @@ unaffected by the split.
 | 2026-09-06 | completed | IMP-019 | codex_terra | round 1 codex_terra CHANGES_REQUESTED (2 findings), round 2 codex_terra APPROVE (correction re-review, both resolved) |
 | 2026-09-06 | completed | IMP-020 | codex_terra | round 1 codex_terra APPROVE, no findings |
 | 2026-09-06 | completed | IMP-021 | claude_only | no hard trigger fired; pre-gate ran twice (invocation 1 GATE_FAIL — 3 test-coverage gaps, no functional defect; corrected; invocation 2 GATE_PASS, independently re-verified) |
+| 2026-09-06 | completed | IMP-022 | codex_terra | pre-gate GATE_FAIL x2 (test-coverage findings only, both fixed), retries exhausted, routed to Codex per WORKFLOW.md's 2-attempt limit; round 1 codex_terra APPROVE, no findings; nominated as cross-agent-workflow's Slice 3 shadow-trial subject |
