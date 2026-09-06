@@ -144,9 +144,9 @@ const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 // so they stay bare module constants; the tolerance and cycle cutoff are
 // provisional per plan.md's own table and are threaded as overridable
 // parameters wherever they're used, defaulting to these values.
-const RETURN_CORE_FROM_MINUTES = 420; // 07:00 — maintained assumption
-const RETURN_CORE_UNTIL_MINUTES = 1290; // 21:30 — maintained assumption
-const RETURN_SERVICE_DAY_START_MINUTES = 240; // 04:00 — structural
+const SERVICE_CORE_FROM_MINUTES = 420; // 07:00 — maintained assumption
+const SERVICE_CORE_UNTIL_MINUTES = 1290; // 21:30 — maintained assumption
+const SERVICE_DAY_START_MINUTES = 240; // 04:00 — structural
 const RETURN_TOLERANCE_MINUTES = 10; // provisional; distinct from resolveFeasibility's toleranceMinutes
 const RETURN_CYCLE_LATEST_MINUTES = null; // provisional; null = no limit (open policy question)
 
@@ -289,12 +289,12 @@ export function periodEndAbs(dateStr, period) {
   return period.always_open ? Infinity : absMinutes(dateStr, period.close);
 }
 
-/** service_date(t) = date(t - RETURN_SERVICE_DAY_START_MINUTES). A night's
+/** service_date(t) = date(t - SERVICE_DAY_START_MINUTES). A night's
  * return-transport belongs to the calendar date it started on, not the one it
  * ends on — a 03:30 Saturday session tests against Friday night's last
  * departure. See plan.md's "Getting home" section. */
 export function serviceDateFromAbs(abs) {
-  return dateFromAbs(abs - RETURN_SERVICE_DAY_START_MINUTES);
+  return dateFromAbs(abs - SERVICE_DAY_START_MINUTES);
 }
 
 /** The offset-from-midnight component of an absolute minute — always in
@@ -310,7 +310,7 @@ export function clockMinutesOfDay(abs) {
  * normaliseEdge("HH:MM") -> offset|null. Parses a clock string into
  * minutes-from-midnight, then shifts anything before the service-day start
  * into the next day's numbering, so "00:30" -> 1470, never 30. Every valid
- * clock string lands in [RETURN_SERVICE_DAY_START_MINUTES, 1680).
+ * clock string lands in [SERVICE_DAY_START_MINUTES, 1680).
  */
 export function normaliseEdge(hhmm) {
   const m = /^([0-9]{2}):([0-9]{2})$/.exec(hhmm);
@@ -319,7 +319,7 @@ export function normaliseEdge(hhmm) {
   const mm = Number(m[2]);
   if (hh > 23 || mm > 59) return null;
   const raw = hh * 60 + mm;
-  return raw < RETURN_SERVICE_DAY_START_MINUTES ? raw + MINUTES_PER_DAY : raw;
+  return raw < SERVICE_DAY_START_MINUTES ? raw + MINUTES_PER_DAY : raw;
 }
 
 /**
@@ -521,13 +521,13 @@ export function resolveReturnBound(
     return { kind: "pass", basis: "schedule_free", margin: AT_LEAST_0, modes: scheduleFreeModes };
   }
 
-  if (clock >= RETURN_CORE_FROM_MINUTES && clock <= RETURN_CORE_UNTIL_MINUTES) {
+  if (clock >= SERVICE_CORE_FROM_MINUTES && clock <= SERVICE_CORE_UNTIL_MINUTES) {
     // Every admissible mode works equally here — the span waives the
     // timetable lookup regardless of which one is used.
     return { kind: "pass", basis: "core_span", margin: AT_LEAST_0, modes: [...modes] };
   }
 
-  if (clock >= RETURN_SERVICE_DAY_START_MINUTES && clock < RETURN_CORE_FROM_MINUTES) {
+  if (clock >= SERVICE_DAY_START_MINUTES && clock < SERVICE_CORE_FROM_MINUTES) {
     return { kind: "unverified", basis: "pre_dawn_gap", modes: [...modes] };
   }
 
@@ -1653,6 +1653,143 @@ export function resolveOutboundMode(venue, origin, mode, raining) {
   return venue.wet_weather_mode?.[origin]?.[mode] ?? mode;
 }
 
+// --- Outbound-mirror transport (ARCH-003/ARCH-004, "Getting there") --------
+
+/**
+ * resolveOutboundService(venue, holidays, origin, mode, serviceDate)
+ *   -> {kind:"missing"} | {kind:"malformed", reason} | {kind:"present", lo, hi}
+ *
+ * Mirrors resolveReturnService exactly in structure — same holiday ->
+ * by_weekday -> default -> MISSING precedence, same PRESENT/MISSING/MALFORMED
+ * result — reading outbound_transport[origin][mode] and the shared
+ * holiday_return_policy (there is no holiday_outbound_policy) instead of
+ * return_transport[destination][mode]. The sole runtime authority on whether
+ * a specific record is usable; outboundAdmissible reads only this return
+ * value, never outbound_transport or outbound_transport_status directly.
+ */
+export function resolveOutboundService(venue, holidays, origin, mode, serviceDate) {
+  const block = venue.outbound_transport?.[origin]?.[mode];
+  if (!block) return { kind: "missing" };
+
+  let entry;
+  if (holidays && Object.prototype.hasOwnProperty.call(holidays, serviceDate)) {
+    if (venue.holiday_return_policy === "substitute_sun") {
+      entry = block.by_weekday?.sun ?? block.default;
+    } else {
+      return { kind: "missing" };
+    }
+  } else {
+    const targetWeekday = weekdayAbbrev(serviceDate);
+    entry =
+      block.by_weekday && Object.prototype.hasOwnProperty.call(block.by_weekday, targetWeekday)
+        ? block.by_weekday[targetWeekday]
+        : block.default;
+  }
+
+  if (!entry || !entry.last_departure_band) return { kind: "missing" };
+
+  const r = normaliseBand(entry.last_departure_band);
+  return r.kind === "malformed" ? { kind: "malformed", reason: r.reason } : { kind: "present", lo: r.lo, hi: r.hi };
+}
+
+/**
+ * outboundAdmissible(venue, holidays, origin, mode, leaveAtAbs, serviceDate)
+ *   -> {kind:"pass", basis} | {kind:"excluded", reason, label}
+ *
+ * A total function, evaluated once — no dual bounds, unlike the return leg:
+ * leave_at is the raw input, not a derived value carrying travel-band
+ * uncertainty, so there is no pessimistic bound to resolve independently.
+ * Precondition, established by the caller and not re-checked here:
+ * access[origin][mode] is present — this function only ever answers WHEN
+ * service runs for a mode already known to have a recorded route, never
+ * WHETHER a route exists.
+ *
+ * Step order is load-bearing, mirroring resolveReturnBound:
+ *   1. A schedule-free mode (walk, or cycle given the access precondition)
+ *      settles it immediately — positive evidence, no timetable read.
+ *   2. Inside the core service span, the timetable lookup is waived (the
+ *      route is already established by the precondition).
+ *   3. The pre-dawn gap is hard-filtered unconditionally, before any
+ *      outbound_transport read.
+ *   4. Only now is outbound_transport consulted, and only via
+ *      resolveOutboundService, which performs its own precedence selection
+ *      fresh for this (origin, mode, serviceDate) — outbound_transport_status
+ *      is never read at any step; a malformed entry can only ever affect the
+ *      one selected record it belongs to.
+ *
+ * The pessimistic edge for a last departure is the band's lower (lo) edge,
+ * regardless of leg direction — "service actually ended sooner than the
+ * midpoint suggests."
+ */
+export function outboundAdmissible(venue, holidays, origin, mode, leaveAtAbs, serviceDate) {
+  if (SCHEDULE_FREE_MODES.has(mode)) {
+    return { kind: "pass", basis: "schedule_free" };
+  }
+
+  const clock = leaveAtAbs - absMinutes(serviceDate, 0);
+
+  if (clock >= SERVICE_CORE_FROM_MINUTES && clock <= SERVICE_CORE_UNTIL_MINUTES) {
+    return { kind: "pass", basis: "core_span" };
+  }
+  if (clock >= SERVICE_DAY_START_MINUTES && clock < SERVICE_CORE_FROM_MINUTES) {
+    return { kind: "excluded", reason: "pre_dawn_gap", label: "outbound_gap" };
+  }
+
+  const resolved = resolveOutboundService(venue, holidays, origin, mode, serviceDate);
+  if (resolved.kind === "malformed") {
+    return { kind: "excluded", reason: "invalid_metadata", label: "outbound_data_error" };
+  }
+  if (resolved.kind === "missing") {
+    return { kind: "excluded", reason: "missing_data", label: "outbound_gap" };
+  }
+  if (leaveAtAbs > absMinutes(serviceDate, resolved.lo)) {
+    return { kind: "excluded", reason: "after_last_departure", label: "outbound_gap" };
+  }
+  return { kind: "pass", basis: "last_departure" };
+}
+
+/**
+ * validateOutboundTransport(venuesMeta) -> { [venueId]: { rollup, perOriginMode } }
+ *
+ * Diagnostics only — never consulted by ranking, at any granularity (unlike
+ * validateReturnTransport, whose per-venue stamp does gate ranking). Walks
+ * every reachable outbound_transport entry (default and every by_weekday key,
+ * every origin, every mode) and reports per-(origin, mode), since a coarser
+ * per-venue or per-origin/mode stamp would let a malformed record outside a
+ * query's actual scope override that query's answer. The one and only
+ * runtime check lives inside resolveOutboundService, which re-derives
+ * validity fresh for the one entry a given query actually selects.
+ */
+export function validateOutboundTransport(venuesMeta) {
+  const status = {};
+  for (const venueId of Object.keys(venuesMeta)) {
+    const perOriginMode = {};
+    let anyInvalid = false;
+    const outboundTransport = venuesMeta[venueId].outbound_transport;
+    if (outboundTransport) {
+      for (const origin of Object.keys(outboundTransport)) {
+        perOriginMode[origin] = {};
+        for (const mode of Object.keys(outboundTransport[origin])) {
+          const block = outboundTransport[origin][mode];
+          const failures = [];
+          const entries = [["default", block.default], ...Object.entries(block.by_weekday ?? {})];
+          for (const [dayKey, entry] of entries) {
+            if (!entry || !entry.last_departure_band) continue; // MISSING
+            const r = normaliseBand(entry.last_departure_band);
+            if (r.kind === "malformed") failures.push(`${dayKey}: ${r.reason}`);
+          }
+          perOriginMode[origin][mode] = failures.length
+            ? { state: "invalid", reason: failures.join("; ") }
+            : { state: "ok" };
+          if (failures.length) anyInvalid = true;
+        }
+      }
+    }
+    status[venueId] = { rollup: anyInvalid ? "invalid" : "ok", perOriginMode };
+  }
+  return status;
+}
+
 /**
  * validatePreferenceSnapshot(venues) -> Map<venueId, reason>
  *
@@ -2060,6 +2197,25 @@ export function rankVenues(snapshot, controls) {
     const travelBand = normaliseTravelBand(accessEntry.band);
     if (travelBand.kind !== "present") {
       removed.push({ venueId: venue.id, displayName: name, disambiguatedLabel, hoursStatus, histogramStatus, reason: `access band: ${travelBand.reason ?? "not measured"}`, kind: "access_band_invalid" });
+      continue;
+    }
+
+    // Outbound admissibility (plan.md's "Getting there: outbound-mirror
+    // transport" — a hard filter, run once the selected origin/mode/leave_at
+    // and travel band are confirmed, before any hours or return-leg
+    // evaluation). Excluded the same way a missing access entry is, but
+    // visibly, per a removal notice naming both the exact internal reason and
+    // the coarser user-facing label.
+    const serviceDate = serviceDateFromAbs(departureAbs);
+    const outbound = outboundAdmissible(venue, holidays, origin, resolvedMode, departureAbs, serviceDate);
+    if (outbound.kind === "excluded") {
+      const reasonText = {
+        pre_dawn_gap: "outbound: pre-dawn gap — no timetable is modelled before the core service span",
+        missing_data: "outbound_transport: no departure recorded for this mode from this origin on this date",
+        invalid_metadata: "outbound_transport: the recorded departure band is malformed",
+        after_last_departure: "outbound_transport: leave time is after the last recorded departure",
+      }[outbound.reason];
+      removed.push({ venueId: venue.id, displayName: name, disambiguatedLabel, hoursStatus, histogramStatus, reason: reasonText, kind: outbound.label });
       continue;
     }
 

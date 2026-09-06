@@ -317,6 +317,42 @@ def test_per_venue_invalid_return_status_lets_generation_continue(tmp_path, monk
     assert (web_dir / "index.html").exists()
 
 
+def test_outbound_transport_status_stamped_and_diagnostics_only_never_blocking_generation(tmp_path, monkeypatch):
+    data_dir, web_dir = setup_project(tmp_path)
+    succeed_snapshots(monkeypatch, {"v1": make_snapshot("place-v1"), "v2": make_snapshot("place-v2")})
+    succeed_busyness(monkeypatch, {"v1": {}, "v2": {}})
+    monkeypatch.setattr(
+        refresh_module,
+        "validate_outbound_transport",
+        lambda *a, **k: {
+            "v1": {"rollup": "ok", "perOriginMode": {}},
+            "v2": {"rollup": "invalid", "perOriginMode": {"home": {"transit": {"state": "invalid", "reason": "malformed band"}}}},
+        },
+    )
+
+    report = refresh(data_dir=data_dir, web_dir=web_dir, hours_api_key="hk", busyness_api_key="bk", now=NOW)
+
+    assert report["outbound_transport_status"] == {"v1": "ok", "v2": "invalid"}
+    venues = {v["id"]: v for v in json.loads((data_dir / "venues.json").read_text())["venues"]}
+    assert venues["v2"]["outbound_transport_status"]["rollup"] == "invalid"
+    assert (web_dir / "index.html").exists()  # diagnostics-only: never blocks generation
+
+
+def test_broken_outbound_bridge_stops_refresh_before_atomic_replace(tmp_path, monkeypatch):
+    data_dir, web_dir = setup_project(tmp_path)
+    succeed_snapshots(monkeypatch, {"v1": make_snapshot("place-v1"), "v2": make_snapshot("place-v2")})
+    succeed_busyness(monkeypatch, {"v1": {}, "v2": {}})
+    monkeypatch.setattr(
+        refresh_module, "validate_outbound_transport", lambda *a, **k: (_ for _ in ()).throw(BridgeError("boom"))
+    )
+
+    with pytest.raises(BridgeError):
+        refresh(data_dir=data_dir, web_dir=web_dir, hours_api_key="hk", busyness_api_key="bk", now=NOW)
+
+    assert not (data_dir / "venues.json").exists()
+    assert not (web_dir / "index.html").exists()
+
+
 def test_holidays_json_absent_fails_generation_but_venues_json_is_already_written(tmp_path, monkeypatch):
     data_dir, web_dir = setup_project(tmp_path, holidays=None)
     succeed_snapshots(monkeypatch, {"v1": make_snapshot("place-v1"), "v2": make_snapshot("place-v2")})

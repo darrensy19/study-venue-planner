@@ -347,6 +347,10 @@ test("resultState session_does_not_fit: renders the refusal and the pipeline-nam
 
 test("resultState no_verified_return: renders refusalInstant as a day-marked absolute instant, never a bare clock time", () => {
   const venue = fullVenue({ id: "v1", access: { home: { transit: { band: "5-10m", rank: 1 } } } });
+  // A confirmed outbound departure at 22:30 clears the Slice 3 outbound hard
+  // filter, so this fixture reaches the return-leg check it actually targets
+  // rather than being excluded outright as an outbound_gap.
+  venue.outbound_transport = { home: { transit: { default: { last_departure_band: "23:00-23:05" } } } };
   // arrival 22:30 + 3h duration -> nominal end 01:30 the next calendar day.
   const controls = { ...CONTROLS, mode: "transit", leaveAtMinutes: 1350, durationMinutes: 180 };
   const root = renderWith([venue], controls);

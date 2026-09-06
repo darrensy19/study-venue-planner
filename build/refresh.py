@@ -19,6 +19,11 @@ contract, not a convenience (`PLAN.md`):
      mandatory even when every fetch failed this run. It classifies and
      never aborts a per-venue result, but a broken bridge (`BridgeError`)
      stops the whole refresh before the next step.
+  6b. Run `validate_outbound_transport` alongside step 6, stamping
+      `outbound_transport_status` — diagnostics only, never read by ranking
+      at any granularity (`PLAN.md`'s "Getting there: outbound-mirror
+      transport"). A broken bridge still stops the refresh; a per-venue
+      "invalid" is an ordinary stamped result nobody downstream consults.
   7. Write to a temp file and replace atomically.
   8. Regenerate `web/index.html`.
 
@@ -37,6 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from build.coarsen import coarsen  # noqa: E402
 from build.generate import generate_index_html  # noqa: E402
+from build.outbound_validator_bridge import validate_outbound_transport  # noqa: E402
 from build.return_validator_bridge import validate_return_transport  # noqa: E402
 from scraper.busyness import BusynessValidationError  # noqa: E402
 from scraper.fetchers import IdentityValidationError, fetch_busyness, fetch_place_snapshot  # noqa: E402
@@ -277,6 +283,15 @@ def refresh(
     for venue in venues:
         venue["return_transport_status"] = return_status[venue["id"]]
 
+    # Step 6b: mandatory, unconditional, alongside step 6 — but diagnostics
+    # only (`PLAN.md`'s "Getting there: outbound-mirror transport"). Unlike
+    # return_transport_status, this stamp is never read by ranking at any
+    # granularity; it exists purely to surface a broken outbound_transport
+    # record to a maintainer, even if no query ever exercises it.
+    outbound_status = validate_outbound_transport(venues_meta_path, node_path=node_path)
+    for venue in venues:
+        venue["outbound_transport_status"] = outbound_status[venue["id"]]
+
     # Step 7: write to a temp file and replace atomically.
     _write_venues_json_atomic(venues_json_path, venues)
 
@@ -298,6 +313,7 @@ def refresh(
         "hours_status": {v["id"]: v["hours"]["status"] for v in venues},
         "histogram_status": {v["id"]: v["histogram"]["status"] for v in venues},
         "return_transport_status": {v["id"]: v["return_transport_status"]["state"] for v in venues},
+        "outbound_transport_status": {v["id"]: v["outbound_transport_status"]["rollup"] for v in venues},
     }
 
 
@@ -319,6 +335,7 @@ def main():
         ("hours", report["hours_status"]),
         ("histogram", report["histogram_status"]),
         ("return_transport", report["return_transport_status"]),
+        ("outbound_transport", report["outbound_transport_status"]),
     ):
         degraded = {venue_id: status for venue_id, status in statuses.items() if status != "ok"}
         if degraded:

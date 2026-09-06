@@ -40,6 +40,9 @@ import {
   resolveBackupStrength,
   evaluatePlanBFallback,
   resolveOutboundMode,
+  resolveOutboundService,
+  outboundAdmissible,
+  validateOutboundTransport,
   validatePreferenceSnapshot,
   rankVenues,
   CLOSING_BUFFER_DEFAULT_MINUTES,
@@ -115,6 +118,41 @@ function venueWithAccess(home) {
   const v = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
   v.access = { home };
   return v;
+}
+
+/** A venue carrying only outbound_transport (+ optional holiday_return_policy
+ * — there is no separate holiday_outbound_policy), for resolveOutboundService
+ * tests that don't need hours or access data. */
+function venueWithOutboundTransport(outboundTransport, holidayReturnPolicy) {
+  const v = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
+  v.outbound_transport = outboundTransport;
+  if (holidayReturnPolicy !== undefined) v.holiday_return_policy = holidayReturnPolicy;
+  return v;
+}
+
+/** A venue carrying access[origin][mode] (the precondition outboundAdmissible
+ * assumes already holds) plus outbound_transport, for outboundAdmissible
+ * tests. */
+function venueWithAccessAndOutbound(access, outboundTransport, holidayReturnPolicy) {
+  const v = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
+  v.access = access;
+  if (outboundTransport !== undefined) v.outbound_transport = outboundTransport;
+  if (holidayReturnPolicy !== undefined) v.holiday_return_policy = holidayReturnPolicy;
+  return v;
+}
+
+/** An outbound_transport value that throws if ever read — used to prove
+ * outboundAdmissible never reads outbound_transport in the schedule-free,
+ * core-span, or pre-dawn branches. */
+function tripwireOutboundTransport() {
+  return {
+    get home() {
+      throw new Error("tripwire: outbound_transport should never be read here");
+    },
+    get office() {
+      throw new Error("tripwire: outbound_transport should never be read here");
+    },
+  };
 }
 
 /** A venue carrying only regular_hours[weekday] (a single period) and
@@ -514,7 +552,7 @@ test("clockMinutesOfDay: recovers the offset-from-midnight component of an absol
 
 test("normaliseEdge: worked values, including the pre-service-day-start wraparound", () => {
   assert.equal(normaliseEdge("23:20"), 1400);
-  assert.equal(normaliseEdge("00:30"), 1470); // NOT 30 — wraps past RETURN_SERVICE_DAY_START_MINUTES
+  assert.equal(normaliseEdge("00:30"), 1470); // NOT 30 — wraps past SERVICE_DAY_START_MINUTES
   assert.equal(normaliseEdge("04:00"), 240); // inclusive low edge of [240,1680)
   assert.equal(normaliseEdge("03:59"), 1679); // one below the exclusive high edge
 });
@@ -1917,6 +1955,300 @@ test("resolveOutboundMode: a mode with no recorded substitute is returned unchan
   assert.equal(resolveOutboundMode(venue, "home", "walk", true), "walk");
 });
 
+// --- Outbound-mirror transport (Slice 3, ARCH-003/ARCH-004): resolveOutboundService ---
+
+test("resolveOutboundService: no outbound_transport block at all is missing", () => {
+  const venue = makeVenue({ validFrom: "2099-01-01", validThrough: "2099-01-07" });
+  const r = resolveOutboundService(venue, {}, "home", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing");
+});
+
+test("resolveOutboundService: block present but this origin/mode absent is missing", () => {
+  const venue = venueWithOutboundTransport({ home: { walk: {} } });
+  const r = resolveOutboundService(venue, {}, "home", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing");
+});
+
+test("resolveOutboundService: is keyed by origin, not destination — an entry under office does not satisfy a home query", () => {
+  const venue = venueWithOutboundTransport({
+    office: { transit: { default: { last_departure_band: "22:40-22:45" } } },
+  });
+  const r = resolveOutboundService(venue, {}, "home", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing");
+});
+
+test("resolveOutboundService: a selected entry with no last_departure_band is missing, never malformed", () => {
+  const venue = venueWithOutboundTransport({ home: { transit: { default: {} } } });
+  const r = resolveOutboundService(venue, {}, "home", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing");
+});
+
+test("resolveOutboundService: falls back to default when no by_weekday override matches", () => {
+  const venue = venueWithOutboundTransport({
+    home: { transit: { default: { last_departure_band: "23:20-23:25" } } },
+  });
+  const r = resolveOutboundService(venue, {}, "home", "transit", "2026-09-04"); // a Friday
+  assert.deepEqual(r, { kind: "present", lo: 1400, hi: 1405 });
+});
+
+test("resolveOutboundService: a by_weekday override wins over default for the matching service date", () => {
+  const venue = venueWithOutboundTransport({
+    home: {
+      transit: {
+        default: { last_departure_band: "23:20-23:25" },
+        by_weekday: { fri: { last_departure_band: "23:50-23:55" } },
+      },
+    },
+  });
+  const r = resolveOutboundService(venue, {}, "home", "transit", "2026-09-04"); // a Friday
+  assert.deepEqual(r, { kind: "present", lo: 1430, hi: 1435 });
+});
+
+test("resolveOutboundService: a malformed selected band is malformed, with a reason", () => {
+  const venue = venueWithOutboundTransport({
+    home: { transit: { default: { last_departure_band: "23:20-23:20" } } }, // equal after norm
+  });
+  const r = resolveOutboundService(venue, {}, "home", "transit", "2026-09-04");
+  assert.equal(r.kind, "malformed");
+  assert.ok(r.reason);
+});
+
+test("resolveOutboundService: a malformed by_weekday.fri entry never affects a Monday query, which resolves against the untouched default", () => {
+  const venue = venueWithOutboundTransport({
+    home: {
+      transit: {
+        default: { last_departure_band: "23:20-23:25" },
+        by_weekday: { fri: { last_departure_band: "23:20-23:20" } }, // malformed
+      },
+    },
+  });
+  const r = resolveOutboundService(venue, {}, "home", "transit", "2026-09-07"); // a Monday
+  assert.deepEqual(r, { kind: "present", lo: 1400, hi: 1405 }); // default's band, unaffected
+});
+
+test("resolveOutboundService: holiday_return_policy substitute_sun uses the sun by_weekday override on a holiday", () => {
+  const venue = venueWithOutboundTransport(
+    {
+      home: {
+        transit: {
+          default: { last_departure_band: "23:00-23:05" },
+          by_weekday: { sun: { last_departure_band: "22:00-22:05" } },
+        },
+      },
+    },
+    "substitute_sun"
+  );
+  const holidays = { "2026-09-04": { name: "Test Holiday" } };
+  const r = resolveOutboundService(venue, holidays, "home", "transit", "2026-09-04");
+  assert.deepEqual(r, { kind: "present", lo: 1320, hi: 1325 }); // sun's band, not default's
+});
+
+test("resolveOutboundService: holiday_return_policy unknown (the default) on a holiday is missing, even though a default entry exists", () => {
+  const venue = venueWithOutboundTransport({
+    home: { transit: { default: { last_departure_band: "23:00-23:05" } } },
+  }); // holiday_return_policy left unset -> "unknown"
+  const holidays = { "2026-09-04": { name: "Test Holiday" } };
+  const r = resolveOutboundService(venue, holidays, "home", "transit", "2026-09-04");
+  assert.equal(r.kind, "missing");
+});
+
+test("resolveOutboundService: there is no holiday_outbound_policy — holiday_return_policy governs both legs", () => {
+  const venue = venueWithOutboundTransport(
+    {
+      home: {
+        transit: {
+          default: { last_departure_band: "23:00-23:05" },
+          by_weekday: { sun: { last_departure_band: "22:00-22:05" } },
+        },
+      },
+    },
+    "substitute_sun"
+  );
+  assert.equal(venue.holiday_outbound_policy, undefined);
+  const holidays = { "2026-09-04": { name: "Test Holiday" } };
+  const r = resolveOutboundService(venue, holidays, "home", "transit", "2026-09-04");
+  assert.deepEqual(r, { kind: "present", lo: 1320, hi: 1325 });
+});
+
+// --- Outbound-mirror transport: outboundAdmissible --------------------------
+
+test("outboundAdmissible: walk is schedule-free — PASS with zero outbound_transport reads", () => {
+  const venue = venueWithAccessAndOutbound({ home: { walk: { band: "5-10m", rank: 1 } } });
+  venue.outbound_transport = tripwireOutboundTransport();
+  const leaveAt = absMinutes("2026-09-04", 300); // 05:00, would otherwise be pre-dawn
+  const r = outboundAdmissible(venue, {}, "home", "walk", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "pass", basis: "schedule_free" });
+});
+
+test("outboundAdmissible: cycle is schedule-free given the access[origin] precondition already holds — PASS with zero reads", () => {
+  const venue = venueWithAccessAndOutbound({ home: { cycle: { band: "10-15m", rank: 1 } } });
+  venue.outbound_transport = tripwireOutboundTransport();
+  const leaveAt = absMinutes("2026-09-04", 300); // 05:00
+  const r = outboundAdmissible(venue, {}, "home", "cycle", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "pass", basis: "schedule_free" });
+});
+
+test("outboundAdmissible: inside the core span, zero outbound_transport reads and a PASS", () => {
+  const venue = venueWithAccessAndOutbound({ home: { transit: { band: "20-25m", rank: 1 } } });
+  venue.outbound_transport = tripwireOutboundTransport();
+  const leaveAt = absMinutes("2026-09-04", 780); // 13:00
+  const r = outboundAdmissible(venue, {}, "home", "transit", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "pass", basis: "core_span" });
+});
+
+test("outboundAdmissible: the core span is inclusive at both ends", () => {
+  const venue = venueWithAccessAndOutbound({ home: { transit: { band: "20-25m", rank: 1 } } });
+  venue.outbound_transport = tripwireOutboundTransport();
+  const lowerEdge = absMinutes("2026-09-04", 420); // 07:00
+  const upperEdge = absMinutes("2026-09-04", 1290); // 21:30
+  assert.deepEqual(outboundAdmissible(venue, {}, "home", "transit", lowerEdge, "2026-09-04"), { kind: "pass", basis: "core_span" });
+  assert.deepEqual(outboundAdmissible(venue, {}, "home", "transit", upperEdge, "2026-09-04"), { kind: "pass", basis: "core_span" });
+});
+
+test("outboundAdmissible: the pre-dawn gap is excluded unconditionally, with zero outbound_transport reads", () => {
+  const venue = venueWithAccessAndOutbound({ home: { transit: { band: "20-25m", rank: 1 } } });
+  venue.outbound_transport = tripwireOutboundTransport();
+  const leaveAt = absMinutes("2026-09-04", 300); // 05:00
+  const r = outboundAdmissible(venue, {}, "home", "transit", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "excluded", reason: "pre_dawn_gap", label: "outbound_gap" });
+});
+
+test("outboundAdmissible: no outbound_transport recorded at all, outside the core span, is missing_data", () => {
+  const venue = venueWithAccessAndOutbound({ home: { transit: { band: "20-25m", rank: 1 } } });
+  const leaveAt = absMinutes("2026-09-04", 1320); // 22:00
+  const r = outboundAdmissible(venue, {}, "home", "transit", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "excluded", reason: "missing_data", label: "outbound_gap" });
+});
+
+test("outboundAdmissible: a malformed selected band is invalid_metadata, labelled outbound_data_error", () => {
+  const venue = venueWithAccessAndOutbound(
+    { home: { transit: { band: "20-25m", rank: 1 } } },
+    { home: { transit: { default: { last_departure_band: "23:20-23:20" } } } } // malformed
+  );
+  const leaveAt = absMinutes("2026-09-04", 1320); // 22:00
+  const r = outboundAdmissible(venue, {}, "home", "transit", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "excluded", reason: "invalid_metadata", label: "outbound_data_error" });
+});
+
+test("outboundAdmissible: leaving after the last recorded departure (pessimistic lower edge) is after_last_departure", () => {
+  const venue = venueWithAccessAndOutbound(
+    { home: { transit: { band: "20-25m", rank: 1 } } },
+    { home: { transit: { default: { last_departure_band: "23:20-23:25" } } } }
+  );
+  const leaveAt = absMinutes("2026-09-04", 1401); // 23:21, one minute past the lo edge (1400)
+  const r = outboundAdmissible(venue, {}, "home", "transit", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "excluded", reason: "after_last_departure", label: "outbound_gap" });
+});
+
+test("outboundAdmissible: leaving exactly at the last departure's lo edge still PASSes — the exclusion is strictly-after", () => {
+  const venue = venueWithAccessAndOutbound(
+    { home: { transit: { band: "20-25m", rank: 1 } } },
+    { home: { transit: { default: { last_departure_band: "23:20-23:25" } } } }
+  );
+  const leaveAt = absMinutes("2026-09-04", 1400); // 23:20, exactly the lo edge
+  const r = outboundAdmissible(venue, {}, "home", "transit", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "pass", basis: "last_departure" });
+});
+
+test("outboundAdmissible: outbound_transport_status is never read — an invalid stamp on the venue does not gate a schedule-free candidate", () => {
+  const venue = venueWithAccessAndOutbound({ home: { walk: { band: "5-10m", rank: 1 } } });
+  venue.outbound_transport_status = { home: { walk: { state: "invalid", reason: "synthetic" } } };
+  const leaveAt = absMinutes("2026-09-04", 300); // 05:00
+  const r = outboundAdmissible(venue, {}, "home", "walk", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "pass", basis: "schedule_free" });
+});
+
+test("outboundAdmissible: outbound_transport_status is never read — an invalid stamp does not gate a core-span candidate", () => {
+  const venue = venueWithAccessAndOutbound({ home: { transit: { band: "20-25m", rank: 1 } } });
+  venue.outbound_transport_status = { home: { transit: { state: "invalid", reason: "synthetic" } } };
+  const leaveAt = absMinutes("2026-09-04", 780); // 13:00
+  const r = outboundAdmissible(venue, {}, "home", "transit", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "pass", basis: "core_span" });
+});
+
+test("outboundAdmissible: a malformed by_weekday.fri entry never affects a Monday query at the same venue/origin/mode", () => {
+  const venue = venueWithAccessAndOutbound(
+    { home: { transit: { band: "20-25m", rank: 1 } } },
+    {
+      home: {
+        transit: {
+          default: { last_departure_band: "23:20-23:25" },
+          by_weekday: { fri: { last_departure_band: "23:20-23:20" } }, // malformed, Friday only
+        },
+      },
+    }
+  );
+  const mondayLeaveAt = absMinutes("2026-09-07", 1320); // Monday, 22:00, past the core span
+  const r = outboundAdmissible(venue, {}, "home", "transit", mondayLeaveAt, "2026-09-07");
+  assert.deepEqual(r, { kind: "pass", basis: "last_departure" }); // resolves against the untouched default
+});
+
+test("outboundAdmissible: a malformed outbound_transport.office.transit entry never affects a home-origin query", () => {
+  const venue = venueWithAccessAndOutbound(
+    { home: { transit: { band: "20-25m", rank: 1 } } },
+    {
+      home: { transit: { default: { last_departure_band: "23:20-23:25" } } },
+      office: { transit: { default: { last_departure_band: "23:20-23:20" } } }, // malformed, office only
+    }
+  );
+  const leaveAt = absMinutes("2026-09-04", 1320); // 22:00
+  const r = outboundAdmissible(venue, {}, "home", "transit", leaveAt, "2026-09-04");
+  assert.deepEqual(r, { kind: "pass", basis: "last_departure" });
+});
+
+// --- Outbound-mirror transport: validateOutboundTransport (whole-file, standalone) ---
+
+test("validateOutboundTransport: no outbound_transport block at all stamps a rollup of ok", () => {
+  const status = validateOutboundTransport({ v1: {} });
+  assert.deepEqual(status.v1, { rollup: "ok", perOriginMode: {} });
+});
+
+test("validateOutboundTransport: a present-but-bandless entry stamps ok, never calling normaliseBand on an absent value", () => {
+  const status = validateOutboundTransport({ v1: { outbound_transport: { home: { transit: { default: {} } } } } });
+  assert.equal(status.v1.rollup, "ok");
+  assert.equal(status.v1.perOriginMode.home.transit.state, "ok");
+});
+
+test("validateOutboundTransport: a malformed band anywhere (including under by_weekday) marks that origin/mode invalid and rolls up invalid", () => {
+  const status = validateOutboundTransport({
+    v1: {
+      outbound_transport: {
+        home: {
+          transit: {
+            default: { last_departure_band: "23:20-23:25" },
+            by_weekday: { fri: { last_departure_band: "23:20-23:20" } }, // malformed
+          },
+        },
+      },
+    },
+  });
+  assert.equal(status.v1.rollup, "invalid");
+  assert.equal(status.v1.perOriginMode.home.transit.state, "invalid");
+  assert.ok(status.v1.perOriginMode.home.transit.reason);
+});
+
+test("validateOutboundTransport: failures are scoped to their own origin/mode — an unrelated combination stays ok", () => {
+  const status = validateOutboundTransport({
+    v1: {
+      outbound_transport: {
+        home: { transit: { default: { last_departure_band: "23:20-23:20" } } }, // malformed
+        office: { transit: { default: { last_departure_band: "22:40-22:45" } } }, // fine
+      },
+    },
+  });
+  assert.equal(status.v1.perOriginMode.home.transit.state, "invalid");
+  assert.equal(status.v1.perOriginMode.office.transit.state, "ok");
+});
+
+test("validateOutboundTransport: failures are per-venue — one malformed venue never affects another", () => {
+  const status = validateOutboundTransport({
+    v1: { outbound_transport: { home: { transit: { default: { last_departure_band: "23:20-23:20" } } } } },
+    v2: { outbound_transport: { home: { transit: { default: { last_departure_band: "23:20-23:25" } } } } },
+  });
+  assert.equal(status.v1.rollup, "invalid");
+  assert.equal(status.v2.rollup, "ok");
+});
+
 // --- validatePreferenceSnapshot ------------------------------------------
 
 test("validatePreferenceSnapshot: every venue with a valid, unique preference is absent from the result", () => {
@@ -2005,6 +2337,122 @@ test("taxonomy: a missing access[origin][mode] key is hard-filtered — not a ca
   assert.equal(r.travelUnknown.length, 0);
   assert.equal(r.removed.length, 0);
   assert.equal(findCandidate(r, "v1"), undefined);
+});
+
+test("taxonomy: an outbound_gap exclusion (missing_data) is an unranked removal with a visible diagnostic", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } }, // schedule-bound only, no outbound_transport at all
+  });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1320 }; // 22:00, past the core span (21:30)
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed);
+  assert.equal(removed.kind, "outbound_gap");
+  assert.match(removed.reason, /no departure recorded/);
+  assert.equal(findCandidate(r, "v1"), undefined);
+});
+
+test("taxonomy: an outbound_data_error exclusion (invalid_metadata) is distinctly labelled from outbound_gap", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } },
+  });
+  venue.outbound_transport = { home: { transit: { default: { last_departure_band: "23:20-23:20" } } } }; // malformed
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1320 }; // 22:00, past the core span
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed);
+  assert.equal(removed.kind, "outbound_data_error");
+  assert.match(removed.reason, /malformed/);
+});
+
+// IMP-022-gate-F01: the pre-gate found that pre_dawn_gap and after_last_departure
+// were excluded correctly (proven by the direct outboundAdmissible unit tests)
+// but never proven to carry a visible diagnostic *through the actual pipeline* —
+// a spot-check that deleted their reasonText map entries left the full suite
+// green. These two close that gap at the rankVenues level, mirroring the two
+// tests above.
+test("taxonomy: a pre_dawn_gap exclusion is an unranked removal with a visible diagnostic, reached through the actual pipeline", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } }, // schedule-bound only
+  });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 300 }; // 05:00, pre-dawn
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed);
+  assert.equal(removed.kind, "outbound_gap");
+  assert.match(removed.reason, /pre-dawn/);
+  assert.equal(findCandidate(r, "v1"), undefined);
+});
+
+test("taxonomy: an after_last_departure exclusion is an unranked removal with a visible diagnostic, reached through the actual pipeline", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } },
+  });
+  venue.outbound_transport = { home: { transit: { default: { last_departure_band: "20:00-20:05" } } } }; // lo edge 1200
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1320 }; // 22:00, past the last departure
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed);
+  assert.equal(removed.kind, "outbound_gap");
+  assert.match(removed.reason, /after the last recorded departure/);
+  assert.equal(findCandidate(r, "v1"), undefined);
+});
+
+// PLAN.md's "Pipeline integration and exclusion reasons": outbound_admissible
+// runs before any hours or return-leg evaluation, so its diagnostic must win
+// even when return_transport_status is also broken — mirrors the existing
+// access-band-before-return-status ordering test above.
+test("taxonomy: an outbound exclusion is diagnosed even when return_transport_status is also broken, per the stated step order", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } },
+    returnStatus: { state: "invalid", reason: "malformed band" },
+  });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 1320 }; // 22:00, no outbound_transport -> missing_data
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  const removed = r.removed.find((x) => x.venueId === "v1");
+  assert.ok(removed);
+  assert.equal(removed.kind, "outbound_gap");
+});
+
+test("taxonomy: a schedule-bound mode inside the core span ranks normally with outbound_transport entirely absent", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } }, // no outbound_transport recorded
+  });
+  const controls = { ...BASE_CONTROLS, mode: "transit", leaveAtMinutes: 600 }; // 10:00, inside the core span
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  assert.equal(r.groups.ranked.length, 1);
+  assert.equal(r.groups.ranked[0].venueId, "v1");
+  assert.equal(r.removed.length, 0);
+});
+
+test("taxonomy: a schedule-free candidate ranks normally pre-dawn, with outbound_transport entirely absent", () => {
+  const venue = fullVenue({ id: "v1" }); // default walk access, no outbound_transport
+  const controls = { ...BASE_CONTROLS, mode: "walk", leaveAtMinutes: 300 }; // 05:00, pre-dawn
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  assert.equal(r.groups.ranked.length, 1);
+  assert.equal(r.groups.ranked[0].venueId, "v1");
+  assert.equal(r.removed.length, 0);
+});
+
+test("taxonomy: a malformed outbound_transport.office.transit entry never affects a home-origin candidate", () => {
+  const venue = fullVenue({
+    id: "v1",
+    access: { home: { transit: { band: "5-10m", rank: 1 } } },
+  });
+  venue.outbound_transport = {
+    home: { transit: { default: { last_departure_band: "23:20-23:25" } } },
+    office: { transit: { default: { last_departure_band: "23:20-23:20" } } }, // malformed, office only
+  };
+  const controls = { ...BASE_CONTROLS, origin: "home", mode: "transit", leaveAtMinutes: 1200 };
+  const r = rankVenues({ venues: [venue], holidays: {} }, controls);
+  assert.equal(r.removed.length, 0);
+  assert.ok(findCandidate(r, "v1"));
 });
 
 test("taxonomy: return_transport_status absent or not ok is an unranked removal with a visible diagnostic", () => {
