@@ -2906,3 +2906,32 @@ clean, unused set of fields to wire into rendering.
 **Next**: Slice 2 — the renderer (`web/app.js`): wording, day markers, label vocabulary, and naming,
 consuming 1a+1b's fields without deciding anything itself. Then, per `PLAN.md`'s slice order: 3
 (outbound feasibility), 4/`BL-002`, 5 — before `ARCH-005` can open.
+
+## 2026-09-06 — IMP-021 closed: Slice 2, the renderer
+
+`web/app.js` now consumes 1a's/1b's presentation fields instead of ignoring them: naming reads
+`displayName`/`disambiguatedLabel` off the pipeline's output (the old local `venueId.split("-")`
+title-casing and `venueById()` lookup are both deleted); all six `resultState` values render
+distinct text via a `switch` with no `default` (`invalid_request`'s violations, `session_does_not_fit`'s
+pipeline-named `bestAlternative` labelled "not a recommendation", `no_verified_return`'s
+`refusalInstant`, `nothing_evaluable`'s four diagnostics shown simultaneously); every instant that
+can cross midnight is day-marked via `ranking.js`'s exported `dateFromAbs`; `seat_confidence`/
+`baseline_seatability`/busyness bands render through a label-vocabulary map instead of a raw
+identifier; `hoursStatus`/`histogramStatus` freshness warnings are always-visible on both a
+candidate and its nested Plan B view; and the pre-existing defect where the requested end
+(`sessionEndMidAbs`) was labelled as the session's end is fixed by reading `achievableSessionEndMid`
+instead. `ranking.js` and `style.css` are untouched — this is Slice 2's stated scope exactly.
+
+**Route**: `claude_sonnet` primary, `claude_only` verification — no hard trigger fired (`app.js` has
+no public/shared contract of its own). Gate invocation 1 returned `GATE_FAIL`: not a functional
+defect, but three test-coverage gaps it caught by reverting the underlying mechanism and observing
+no test failure — a vacuous "of the Xh you asked for" assertion that only checked a card existed, an
+entirely untested `no_low_risk_option` branch, and untested Plan B freshness (only the top-level
+candidate's freshness had a test). All three fixed with assertions against the specific literal text
+each mechanism produces. Gate invocation 2, independent of invocation 1's own reasoning, re-verified
+all three closures by reverting the same mechanisms and confirming they now fail, then reran full
+verification fresh: `GATE_PASS`.
+
+**Next**: Slice 3 (outbound feasibility — independent of 1/2), the `outbound_transport` hand-curation,
+Slice 4/`BL-002` (UI hierarchy, progressive disclosure, focus preservation — needs slice 2's vocabulary,
+now settled), Slice 5 — before `ARCH-005` can open.

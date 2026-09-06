@@ -39,3 +39,4 @@ event history the sampling audit reads instead.
 | `IMP-018` | 2026-09-06 | implementation | Slice 0b: dependency-free DOM stub in tests/js/, make web/app.js importable |
 | `IMP-019` | 2026-09-06 | implementation | Slice 1a: result-state machine, Plan A eligibility, control-contract export + validation, tolerance ownership, failed-source diagnosis in web/ranking.js |
 | `IMP-020` | 2026-09-06 | implementation | Slice 1b: presentation shape — achievable end, binding limit, latest-leave state, candidate freshness, candidate/Plan B naming, Plan B transfer, bestAlternative in web/ranking.js |
+| `IMP-021` | 2026-09-06 | implementation | Slice 2: renderer wording, day markers, label vocabulary, naming in web/app.js |

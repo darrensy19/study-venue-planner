@@ -102,3 +102,4 @@ unaffected by the split.
 | 2026-09-06 | completed | IMP-018 | claude_only | no hard trigger fired; pre-gate GATE_PASS on invocation 1, independently reverted the guard to confirm non-vacuity and reran full test suite + make generate |
 | 2026-09-06 | completed | IMP-019 | codex_terra | round 1 codex_terra CHANGES_REQUESTED (2 findings), round 2 codex_terra APPROVE (correction re-review, both resolved) |
 | 2026-09-06 | completed | IMP-020 | codex_terra | round 1 codex_terra APPROVE, no findings |
+| 2026-09-06 | completed | IMP-021 | claude_only | no hard trigger fired; pre-gate ran twice (invocation 1 GATE_FAIL — 3 test-coverage gaps, no functional defect; corrected; invocation 2 GATE_PASS, independently re-verified) |
